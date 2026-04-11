@@ -65,7 +65,7 @@ public class PromotionService(IPriceRuleRepository priceRuleRepository) : IPromo
     {
         var promo = _promotions.FirstOrDefault(p =>
             p.Code == code && p.IsActive &&
-            p.StartDate <= DateTime.UtcNow && p.EndDate >= DateTime.UtcNow &&
+            p.StartDate <= DateTime.UtcNow && p.EndDate > DateTime.UtcNow &&
             (p.UsageLimit == null || p.UsedCount < p.UsageLimit));
 
         if (promo is null) return Task.FromResult(0m);
