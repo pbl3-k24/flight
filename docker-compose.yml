@@ -1,0 +1,113 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ./backend
+      dockerfile: API/Dockerfile
+    container_name: flight_api
+    ports:
+      - "5000:8080"
+      - "5001:8443"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=flightbooking;Username=postgres;Password=postgres_password
+      - Jwt__Secret=change-this-to-a-secure-random-secret-at-least-32-chars!!
+      - Jwt__Issuer=FlightBooking
+      - Jwt__Audience=FlightBookingClient
+      - Email__SmtpHost=mailhog
+      - Email__SmtpPort=1025
+      - Email__UseSsl=false
+      - Email__FromName=Flight Booking
+      - Email__FromAddress=noreply@flightbooking.vn
+      - Redis__ConnectionString=redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - flight_net
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: flight_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: flightbooking
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/Infrastructure/Migrations/seed:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flight_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: flight_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flight_net
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: flight_rabbitmq
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - flight_net
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: flight_mailhog
+    ports:
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI
+    networks:
+      - flight_net
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: flight_pgadmin
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@flightbooking.vn
+      PGADMIN_DEFAULT_PASSWORD: admin
+    depends_on:
+      - postgres
+    networks:
+      - flight_net
+    profiles:
+      - tools
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+
+networks:
+  flight_net:
+    driver: bridge
