@@ -1,0 +1,86 @@
+version: "3.9"
+
+services:
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: flight_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: flightdb
+      POSTGRES_USER: flightuser
+      POSTGRES_PASSWORD: flightpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Run: docker compose up from the docker/ directory.
+      # The SQL script path is relative to this file's directory.
+      - ../database/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flightuser -d flightdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (cache + session + rate-limit) ─────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: flight_redis
+    restart: unless-stopped
+    command: redis-server --requirepass redispassword --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redispassword", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── MailHog (local SMTP + web UI for email testing) ───────────────────────
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: flight_mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8025"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ── API (ASP.NET Core) ────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: API/Dockerfile
+    container_name: flight_api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=flightdb;Username=flightuser;Password=flightpassword"
+      Redis__ConnectionString: "redis:6379,password=redispassword"
+      Email__Host: mailhog
+      Email__Port: 1025
+      Email__EnableSsl: "false"
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/healthz || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  redis_data:
