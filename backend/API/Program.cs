@@ -36,9 +36,31 @@ app.MapGet("/weatherforecast", () =>
 })
 .WithName("GetWeatherForecast");
 
-app.MapPost("/bookings", async (BookingRequest request, IBookingService bookingService, CancellationToken cancellationToken) =>
+app.MapPost("/bookings", (BookingRequest request, IBookingService bookingService) =>
 {
-    var booking = await bookingService.CreateBookingAsync(request, cancellationToken);
+    var validationErrors = new Dictionary<string, string[]>();
+
+    if (request.FlightId <= 0)
+    {
+        validationErrors[nameof(request.FlightId)] = ["FlightId must be greater than 0."];
+    }
+
+    if (request.UserId <= 0)
+    {
+        validationErrors[nameof(request.UserId)] = ["UserId must be greater than 0."];
+    }
+
+    if (request.PassengerCount <= 0)
+    {
+        validationErrors[nameof(request.PassengerCount)] = ["PassengerCount must be greater than 0."];
+    }
+
+    if (validationErrors.Count > 0)
+    {
+        return Results.ValidationProblem(validationErrors);
+    }
+
+    var booking = bookingService.CreateBooking(request);
     return Results.Created($"/bookings/{booking.BookingReference}", booking);
 })
 .WithName("CreateBooking");
