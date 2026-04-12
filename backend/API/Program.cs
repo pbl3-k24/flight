@@ -38,22 +38,7 @@ app.MapGet("/weatherforecast", () =>
 
 app.MapPost("/bookings", (BookingRequest request, IBookingService bookingService) =>
 {
-    var validationErrors = new Dictionary<string, string[]>();
-
-    if (request.FlightId <= 0)
-    {
-        validationErrors[nameof(request.FlightId)] = ["FlightId must be greater than 0."];
-    }
-
-    if (request.UserId <= 0)
-    {
-        validationErrors[nameof(request.UserId)] = ["UserId must be greater than 0."];
-    }
-
-    if (request.PassengerCount <= 0)
-    {
-        validationErrors[nameof(request.PassengerCount)] = ["PassengerCount must be greater than 0."];
-    }
+    var validationErrors = ValidateBookingRequest(request);
 
     if (validationErrors.Count > 0)
     {
@@ -64,6 +49,28 @@ app.MapPost("/bookings", (BookingRequest request, IBookingService bookingService
     return Results.Created($"/bookings/{booking.BookingReference}", booking);
 })
 .WithName("CreateBooking");
+
+static Dictionary<string, string[]> ValidateBookingRequest(BookingRequest request)
+{
+    var errors = new Dictionary<string, string[]>();
+
+    if (request.FlightId <= 0)
+    {
+        errors[nameof(request.FlightId)] = ["FlightId must be greater than 0."];
+    }
+
+    if (request.UserId <= 0)
+    {
+        errors[nameof(request.UserId)] = ["UserId must be greater than 0."];
+    }
+
+    if (request.PassengerCount <= 0)
+    {
+        errors[nameof(request.PassengerCount)] = ["PassengerCount must be greater than 0."];
+    }
+
+    return errors;
+}
 
 app.Run();
 

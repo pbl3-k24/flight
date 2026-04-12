@@ -7,7 +7,7 @@ public interface IBookingService
 
 public sealed class BookingService(ILogger<BookingService> logger) : IBookingService
 {
-    private const int BookingReferenceLength = 8;
+    private const string BookingReferencePrefix = "BKG-";
 
     private readonly ILogger<BookingService> _logger = logger;
 
@@ -16,7 +16,7 @@ public sealed class BookingService(ILogger<BookingService> logger) : IBookingSer
         ArgumentNullException.ThrowIfNull(request);
 
         var booking = new BookingResponse(
-            BookingReference: Guid.NewGuid().ToString("N")[..BookingReferenceLength].ToUpperInvariant(),
+            BookingReference: $"{BookingReferencePrefix}{Guid.NewGuid():N}".ToUpperInvariant(),
             FlightId: request.FlightId,
             UserId: request.UserId,
             PassengerCount: request.PassengerCount,
