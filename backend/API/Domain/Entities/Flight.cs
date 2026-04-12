@@ -81,11 +81,6 @@ public class Flight
 
     public decimal CalculatePrice(decimal demandFactor, decimal bookingTimeFactor, decimal seatClassFactor = 1m)
     {
-        if (BasePrice < 0)
-        {
-            throw new InvalidOperationException("BasePrice cannot be negative.");
-        }
-
         var rawPrice = BasePrice * demandFactor * bookingTimeFactor * seatClassFactor;
         var minPrice = BasePrice * MinPriceMultiplier;
         var maxPrice = BasePrice * MaxPriceMultiplier;

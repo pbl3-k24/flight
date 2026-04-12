@@ -1,11 +1,8 @@
-using API.Services;
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
-builder.Services.AddScoped<IBookingService, BookingService>();
 
 var app = builder.Build();
 
@@ -35,42 +32,6 @@ app.MapGet("/weatherforecast", () =>
     return forecast;
 })
 .WithName("GetWeatherForecast");
-
-app.MapPost("/bookings", (BookingRequest request, IBookingService bookingService) =>
-{
-    var validationErrors = ValidateBookingRequest(request);
-
-    if (validationErrors.Count > 0)
-    {
-        return Results.ValidationProblem(validationErrors);
-    }
-
-    var booking = bookingService.CreateBooking(request);
-    return Results.Created($"/bookings/{booking.BookingReference}", booking);
-})
-.WithName("CreateBooking");
-
-static Dictionary<string, string[]> ValidateBookingRequest(BookingRequest request)
-{
-    var errors = new Dictionary<string, string[]>();
-
-    if (request.FlightId <= 0)
-    {
-        errors[nameof(request.FlightId)] = ["FlightId must be greater than 0."];
-    }
-
-    if (request.UserId <= 0)
-    {
-        errors[nameof(request.UserId)] = ["UserId must be greater than 0."];
-    }
-
-    if (request.PassengerCount <= 0)
-    {
-        errors[nameof(request.PassengerCount)] = ["PassengerCount must be greater than 0."];
-    }
-
-    return errors;
-}
 
 app.Run();
 

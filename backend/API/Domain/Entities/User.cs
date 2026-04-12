@@ -1,3 +1,4 @@
+using System.Net.Mail;
 using API.Domain.Enums;
 
 namespace API.Domain.Entities;
@@ -102,7 +103,7 @@ public class User
 
     public void ValidateInvariants()
     {
-        if (string.IsNullOrWhiteSpace(Email) || !Email.Contains('@'))
+        if (!IsValidEmail(Email))
         {
             throw new InvalidOperationException("Email must be a valid format.");
         }
@@ -115,6 +116,24 @@ public class User
         if (DateOfBirth > DateOnly.FromDateTime(DateTime.UtcNow))
         {
             throw new InvalidOperationException("DateOfBirth cannot be in the future.");
+        }
+    }
+
+    private static bool IsValidEmail(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return false;
+        }
+
+        try
+        {
+            var address = new MailAddress(email.Trim());
+            return address.Address.Equals(email.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (FormatException)
+        {
+            return false;
         }
     }
 }
