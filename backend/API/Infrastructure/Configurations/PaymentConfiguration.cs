@@ -63,7 +63,7 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 
         // Foreign keys
         builder.HasOne(p => p.Booking)
-            .WithOne()
+            .WithOne(b => b.Payment)
             .HasForeignKey<Payment>(p => p.BookingId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("FK_Payments_BookingId");

@@ -16,7 +16,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
     public void Configure(EntityTypeBuilder<User> builder)
     {
         // Table configuration
-        builder.ToTable("Users");
+        builder.ToTable("Users", table =>
+        {
+            table.HasCheckConstraint("CK_Users_Email_NotEmpty", "length(trim(\"Email\")) > 0");
+            table.HasCheckConstraint("CK_Users_FullName_NotEmpty", "length(trim(\"FullName\")) > 0");
+        });
 
         // Primary key
         builder.HasKey(u => u.Id);
@@ -26,6 +30,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired()
             .HasMaxLength(255)
             .HasComment("Unique email address");
+
+        builder.Property(u => u.FullName)
+            .IsRequired()
+            .HasMaxLength(200)
+            .HasComment("Full display name");
 
         builder.Property(u => u.FirstName)
             .IsRequired()
@@ -42,8 +51,13 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .HasComment("Date of birth");
 
         builder.Property(u => u.PhoneNumber)
+            .HasColumnName("Phone")
             .HasMaxLength(20)
             .HasComment("Optional phone number");
+
+        builder.Property(u => u.GoogleId)
+            .HasMaxLength(255)
+            .HasComment("External Google identity ID");
 
         builder.Property(u => u.PasswordHash)
             .IsRequired()
@@ -69,6 +83,11 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasIndex(u => u.Email)
             .IsUnique()
             .HasDatabaseName("IX_Users_Email");
+
+        builder.HasIndex(u => u.GoogleId)
+            .IsUnique()
+            .HasFilter("\"GoogleId\" IS NOT NULL")
+            .HasDatabaseName("IX_Users_GoogleId");
 
         builder.HasIndex(u => u.Status)
             .HasDatabaseName("IX_Users_Status");

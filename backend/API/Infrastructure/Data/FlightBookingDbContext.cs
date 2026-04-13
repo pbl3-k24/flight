@@ -26,6 +26,26 @@ public class FlightBookingDbContext : DbContext
     public DbSet<User> Users { get; set; }
 
     /// <summary>
+    /// Gets or sets the Roles DbSet.
+    /// </summary>
+    public DbSet<Role> Roles { get; set; }
+
+    /// <summary>
+    /// Gets or sets the UserRoles DbSet.
+    /// </summary>
+    public DbSet<UserRole> UserRoles { get; set; }
+
+    /// <summary>
+    /// Gets or sets the EmailVerificationTokens DbSet.
+    /// </summary>
+    public DbSet<EmailVerificationToken> EmailVerificationTokens { get; set; }
+
+    /// <summary>
+    /// Gets or sets the PasswordResetTokens DbSet.
+    /// </summary>
+    public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+
+    /// <summary>
     /// Gets or sets the Payments DbSet.
     /// </summary>
     public DbSet<Payment> Payments { get; set; }

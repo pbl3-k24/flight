@@ -27,6 +27,21 @@ public class DbModelRegressionTests
         Assert.Contains("CK_Flights_BasePrice_NonNegative", script);
     }
 
+    [Fact]
+    public void CreateScript_HasPhase1AuthAccountTablesAndConstraints()
+    {
+        using var context = CreateContext();
+        var script = context.Database.GenerateCreateScript();
+
+        Assert.Contains("\"Roles\"", script);
+        Assert.Contains("\"UserRoles\"", script);
+        Assert.Contains("\"EmailVerificationTokens\"", script);
+        Assert.Contains("\"PasswordResetTokens\"", script);
+        Assert.Contains("IX_Roles_Name", script);
+        Assert.Contains("IX_Users_GoogleId", script);
+        Assert.Contains("CK_Users_FullName_NotEmpty", script);
+    }
+
     private static FlightBookingDbContext CreateContext()
     {
         var connectionString =

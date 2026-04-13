@@ -19,6 +19,9 @@ public class User
     /// <summary>User's email address (unique).</summary>
     public string Email { get; set; } = null!;
 
+    /// <summary>User's full display name.</summary>
+    public string FullName { get; set; } = null!;
+
     /// <summary>User's first name.</summary>
     public string FirstName { get; set; } = null!;
 
@@ -30,6 +33,9 @@ public class User
 
     /// <summary>User's phone number.</summary>
     public string? PhoneNumber { get; set; }
+
+    /// <summary>Google OAuth provider ID if linked.</summary>
+    public string? GoogleId { get; set; }
 
     /// <summary>Hashed password of the user.</summary>
     public string PasswordHash { get; set; } = null!;
@@ -49,6 +55,15 @@ public class User
 
     /// <summary>Payments made by this user.</summary>
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
+
+    /// <summary>Roles assigned to this user.</summary>
+    public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+
+    /// <summary>Email verification tokens issued for this user.</summary>
+    public ICollection<EmailVerificationToken> EmailVerificationTokens { get; set; } = new List<EmailVerificationToken>();
+
+    /// <summary>Password reset tokens issued for this user.</summary>
+    public ICollection<PasswordResetToken> PasswordResetTokens { get; set; } = new List<PasswordResetToken>();
 
     // Domain methods
     /// <summary>
