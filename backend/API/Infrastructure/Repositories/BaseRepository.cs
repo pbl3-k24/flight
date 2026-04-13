@@ -1,6 +1,7 @@
 namespace API.Infrastructure.Repositories;
 
 using Microsoft.EntityFrameworkCore;
+using API.Infrastructure.Data;
 
 /// <summary>
 /// Generic base repository providing standard CRUD operations using Entity Framework Core.
@@ -12,7 +13,7 @@ public abstract class BaseRepository<T> where T : class
     /// <summary>
     /// DbContext instance for database operations.
     /// </summary>
-    protected readonly DbContext Context;
+    protected readonly FlightBookingDbContext Context;
 
     /// <summary>
     /// DbSet for the entity type.
@@ -22,8 +23,8 @@ public abstract class BaseRepository<T> where T : class
     /// <summary>
     /// Initializes a new instance of the BaseRepository class.
     /// </summary>
-    /// <param name="context">The DbContext instance.</param>
-    protected BaseRepository(DbContext context)
+    /// <param name="context">The FlightBookingDbContext instance.</param>
+    protected BaseRepository(FlightBookingDbContext context)
     {
         Context = context;
         DbSet = context.Set<T>();

@@ -34,12 +34,20 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.InstanceName = "flight-booking:";
 });
 
-// DI registrations
+// DI registrations - Repositories
 builder.Services.AddScoped<IFlightRepository, FlightRepository>();
-builder.Services.AddScoped<IFlightService, FlightService>();
-builder.Services.AddScoped<ICacheService, InMemoryCacheService>();
+builder.Services.AddScoped<IBookingRepository, BookingRepository>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IPassengerRepository, PassengerRepository>();
 
+// DI registrations - Services
+builder.Services.AddScoped<IFlightService, FlightService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+
+// DI registrations - Caching
+builder.Services.AddScoped<ICacheService, InMemoryCacheService>();
 
 builder.Services.AddCors(options =>
 {
@@ -53,6 +61,7 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Apply database migrations (optional - can be skipped if database is not available)
 using (var scope = app.Services.CreateScope())
 {
     var scopedProvider = scope.ServiceProvider;
@@ -62,13 +71,24 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var dbContext = scopedProvider.GetRequiredService<FlightBookingDbContext>();
-        dbContext.Database.Migrate();
-        logger.LogInformation("Database migrations applied successfully.");
+        var pendingMigrations = (await dbContext.Database.GetPendingMigrationsAsync()).ToList();
+        
+        if (pendingMigrations.Count > 0)
+        {
+            logger.LogInformation("Found {Count} pending migrations. Applying migrations...", pendingMigrations.Count);
+            await dbContext.Database.MigrateAsync();
+            logger.LogInformation("Database migrations applied successfully.");
+        }
+        else
+        {
+            logger.LogInformation("No pending migrations. Database is up to date.");
+        }
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Failed to apply database migrations.");
-        throw;
+        logger.LogError(ex, "Failed to apply database migrations. Continuing without database...");
+        logger.LogWarning("The application will continue to run, but database operations will fail.");
+        // Don't throw - allow app to start even without database
     }
 }
 

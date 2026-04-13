@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using API.Application.Interfaces;
 using API.Domain.Entities;
 using API.Domain.Enums;
+using API.Infrastructure.Data;
 
 /// <summary>
 /// Repository for flight data access operations.
@@ -20,9 +21,9 @@ public class FlightRepository : BaseRepository<Flight>, IFlightRepository
     /// <summary>
     /// Initializes a new instance of the FlightRepository class.
     /// </summary>
-    /// <param name="context">The DbContext instance.</param>
+    /// <param name="context">The FlightBookingDbContext instance.</param>
     /// <param name="logger">Logger for repository operations.</param>
-    public FlightRepository(DbContext context, ILogger<FlightRepository> logger) : base(context)
+    public FlightRepository(FlightBookingDbContext context, ILogger<FlightRepository> logger) : base(context)
     {
         _logger = logger;
     }

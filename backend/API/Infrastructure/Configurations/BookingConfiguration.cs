@@ -71,6 +71,12 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("FK_Bookings_UserId");
 
+        // 1:1 relationship with Payment
+        builder.HasOne(b => b.Payment)
+            .WithOne(p => p.Booking)
+            .HasForeignKey<Payment>(p => p.BookingId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // Indexes
         builder.HasIndex(b => b.BookingReference)
             .IsUnique()
