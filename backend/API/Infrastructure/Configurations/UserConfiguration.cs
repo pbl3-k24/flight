@@ -57,12 +57,12 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(u => u.CreatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Creation timestamp");
 
         builder.Property(u => u.UpdatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Last update timestamp");
 
         // Indexes

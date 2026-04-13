@@ -16,7 +16,14 @@ public class FlightConfiguration : IEntityTypeConfiguration<Flight>
     public void Configure(EntityTypeBuilder<Flight> builder)
     {
         // Table configuration
-        builder.ToTable("Flights");
+        builder.ToTable("Flights", table =>
+        {
+            table.HasCheckConstraint("CK_Flights_TotalSeats_Positive", "\"TotalSeats\" > 0");
+            table.HasCheckConstraint("CK_Flights_AvailableSeats_Range", "\"AvailableSeats\" >= 0 AND \"AvailableSeats\" <= \"TotalSeats\"");
+            table.HasCheckConstraint("CK_Flights_Time_Order", "\"DepartureTime\" < \"ArrivalTime\"");
+            table.HasCheckConstraint("CK_Flights_Route_DifferentAirports", "\"DepartureAirportId\" <> \"ArrivalAirportId\"");
+            table.HasCheckConstraint("CK_Flights_BasePrice_NonNegative", "\"BasePrice\" >= 0");
+        });
 
         // Primary key
         builder.HasKey(f => f.Id);
@@ -65,12 +72,12 @@ public class FlightConfiguration : IEntityTypeConfiguration<Flight>
 
         builder.Property(f => f.CreatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Creation timestamp");
 
         builder.Property(f => f.UpdatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Last update timestamp");
 
         // Foreign keys

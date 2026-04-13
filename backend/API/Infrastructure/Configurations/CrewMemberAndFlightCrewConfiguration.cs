@@ -44,12 +44,12 @@ public class CrewMemberConfiguration : IEntityTypeConfiguration<CrewMember>
 
         builder.Property(c => c.CreatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Creation timestamp");
 
         builder.Property(c => c.UpdatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Last update timestamp");
 
         // Indexes
@@ -85,7 +85,7 @@ public class FlightCrewConfiguration : IEntityTypeConfiguration<FlightCrew>
         // Property configurations
         builder.Property(fc => fc.AssignedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Assignment timestamp");
 
         // Foreign keys

@@ -27,6 +27,7 @@ builder.Services.AddDbContext<FlightBookingDbContext>(options =>
             errorCodesToAdd: null);
     });
 });
+builder.Services.AddScoped<DbContext, FlightBookingDbContext>();
 
 builder.Services.AddStackExchangeRedisCache(options =>
 {
@@ -37,6 +38,11 @@ builder.Services.AddStackExchangeRedisCache(options =>
 // DI registrations
 builder.Services.AddScoped<IFlightRepository, FlightRepository>();
 builder.Services.AddScoped<IFlightService, FlightService>();
+builder.Services.AddScoped<IBookingRepository, BookingRepository>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IPassengerRepository, PassengerRepository>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ICacheService, InMemoryCacheService>();
 
 builder.Services.AddScoped<IBookingService, BookingService>();

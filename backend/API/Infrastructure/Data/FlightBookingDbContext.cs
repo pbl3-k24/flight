@@ -87,12 +87,12 @@ public class FlightBookingDbContext : DbContext
             // Only add shadow properties if the entity doesn't already have these properties
             if (!entityType.GetProperties().Any(p => p.Name == "CreatedAt"))
             {
-                entityType.AddProperty("CreatedAt", typeof(DateTime)).SetDefaultValueSql("GETUTCDATE()");
+                entityType.AddProperty("CreatedAt", typeof(DateTime)).SetDefaultValueSql("TIMEZONE('UTC', NOW())");
             }
 
             if (!entityType.GetProperties().Any(p => p.Name == "UpdatedAt"))
             {
-                entityType.AddProperty("UpdatedAt", typeof(DateTime)).SetDefaultValueSql("GETUTCDATE()");
+                entityType.AddProperty("UpdatedAt", typeof(DateTime)).SetDefaultValueSql("TIMEZONE('UTC', NOW())");
             }
         }
     }

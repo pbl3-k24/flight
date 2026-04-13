@@ -49,12 +49,12 @@ public class AirportConfiguration : IEntityTypeConfiguration<Airport>
 
         builder.Property(a => a.CreatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Creation timestamp");
 
         builder.Property(a => a.UpdatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Last update timestamp");
 
         // Indexes
@@ -132,12 +132,12 @@ public class PassengerConfiguration : IEntityTypeConfiguration<Passenger>
 
         builder.Property(p => p.CreatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Creation timestamp");
 
         builder.Property(p => p.UpdatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Last update timestamp");
 
         // Foreign keys

@@ -1,6 +1,7 @@
 namespace API.Application.Interfaces;
 
 using API.Domain.Entities;
+using Microsoft.EntityFrameworkCore.Storage;
 
 /// <summary>
 /// Repository interface for booking data access operations.
@@ -69,8 +70,22 @@ public interface IBookingRepository : IRepository<Booking>
     Task<IEnumerable<Booking>> GetByDateRangeAsync(DateTime startDate, DateTime endDate);
 
     /// <summary>
+    /// Gets paged bookings with related details.
+    /// </summary>
+    /// <param name="page">Page number (1-based).</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    /// <returns>Paged bookings.</returns>
+    Task<IEnumerable<Booking>> GetPagedAsync(int page, int pageSize);
+
+    /// <summary>
+    /// Gets total booking count.
+    /// </summary>
+    /// <returns>Total booking count.</returns>
+    Task<int> GetCountAsync();
+
+    /// <summary>
     /// Begins a database transaction for atomic operations.
     /// </summary>
     /// <returns>Transaction handle.</returns>
-    Task<IDisposable> BeginTransactionAsync();
+    Task<IDbContextTransaction> BeginTransactionAsync();
 }

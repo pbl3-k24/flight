@@ -16,7 +16,10 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
     public void Configure(EntityTypeBuilder<Payment> builder)
     {
         // Table configuration
-        builder.ToTable("Payments");
+        builder.ToTable("Payments", table =>
+        {
+            table.HasCheckConstraint("CK_Payments_Amount_Positive", "\"Amount\" > 0");
+        });
 
         // Primary key
         builder.HasKey(p => p.Id);
@@ -52,7 +55,7 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 
         builder.Property(p => p.CreatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Creation timestamp");
 
         builder.Property(p => p.ProcessedAt)

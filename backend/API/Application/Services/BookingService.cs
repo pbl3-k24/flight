@@ -71,14 +71,8 @@ public class BookingService : IBookingService
 
         try
         {
-            // Note: This assumes we have a method to get all bookings
-            // In production, this would be paginated differently
-            var skip = (page - 1) * pageSize;
-            
-            // TODO: Implement repository method for getting all bookings across all users
-            // For now, returning empty result to prevent errors
-            var bookings = new List<Booking>();
-            var total = 0;
+            var bookings = (await _bookingRepository.GetPagedAsync(page, pageSize)).ToList();
+            var total = await _bookingRepository.GetCountAsync();
 
             var dtos = bookings.Select(MapBookingToResponseDto).ToList();
 
@@ -235,7 +229,7 @@ public class BookingService : IBookingService
             }
 
             // Step 4: Start transaction
-            using (var transaction = await _bookingRepository.BeginTransactionAsync())
+            await using (var transaction = await _bookingRepository.BeginTransactionAsync())
             {
                 try
                 {
@@ -288,8 +282,7 @@ public class BookingService : IBookingService
                     await _flightRepository.UpdateAsync(flight);
                     await _flightRepository.SaveChangesAsync();
 
-                    // Step 5e: Commit transaction
-                    // Transaction will auto-commit when using is disposed
+                    await transaction.CommitAsync();
 
                     _logger.LogInformation(
                         "Successfully created booking {BookingId} with reference {BookingReference}",
@@ -331,6 +324,7 @@ public class BookingService : IBookingService
                 }
                 catch (Exception ex)
                 {
+                    await transaction.RollbackAsync();
                     _logger.LogError(ex, "Error during booking creation transaction");
                     throw;
                 }
@@ -452,13 +446,14 @@ public class BookingService : IBookingService
                 bookingId, booking.TotalPrice, refundAmount);
 
             // Step 5: Start transaction
-            using (var transaction = await _bookingRepository.BeginTransactionAsync())
+            await using (var transaction = await _bookingRepository.BeginTransactionAsync())
             {
                 try
                 {
                     // Step 5a: Change status to Cancelled
                     booking.Status = BookingStatus.Cancelled;
                     booking.UpdatedAt = DateTime.UtcNow;
+                    booking.CancelledAt = DateTime.UtcNow;
 
                     // Step 5b: Release seats back
                     flight.AvailableSeats += booking.PassengerCount;
@@ -473,7 +468,7 @@ public class BookingService : IBookingService
                     // Note: This would create a refund record in the database
                     // For now, we'll trigger the async refund process
 
-                    // Step 5d: Commit transaction (auto-commits when using is disposed)
+                    await transaction.CommitAsync();
 
                     _logger.LogInformation(
                         "Successfully cancelled booking {BookingId}. Refund amount: {RefundAmount}",
@@ -528,6 +523,7 @@ public class BookingService : IBookingService
                 }
                 catch (Exception ex)
                 {
+                    await transaction.RollbackAsync();
                     _logger.LogError(ex, "Error during booking cancellation transaction");
                     throw;
                 }

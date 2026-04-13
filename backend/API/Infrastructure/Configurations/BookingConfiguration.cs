@@ -16,7 +16,11 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
     public void Configure(EntityTypeBuilder<Booking> builder)
     {
         // Table configuration
-        builder.ToTable("Bookings");
+        builder.ToTable("Bookings", table =>
+        {
+            table.HasCheckConstraint("CK_Bookings_PassengerCount_Positive", "\"PassengerCount\" > 0");
+            table.HasCheckConstraint("CK_Bookings_TotalPrice_NonNegative", "\"TotalPrice\" >= 0");
+        });
 
         // Primary key
         builder.HasKey(b => b.Id);
@@ -47,12 +51,12 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
 
         builder.Property(b => b.CreatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Creation timestamp");
 
         builder.Property(b => b.UpdatedAt)
             .IsRequired()
-            .HasDefaultValueSql("GETUTCDATE()")
+            .HasDefaultValueSql("TIMEZONE('UTC', NOW())")
             .HasComment("Last update timestamp");
 
         builder.Property(b => b.CancelledAt)
@@ -100,6 +104,6 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
         builder.HasOne<Payment>()
             .WithOne()
             .HasForeignKey<Payment>(p => p.BookingId)
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }
