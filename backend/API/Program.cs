@@ -33,6 +33,7 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = redisConnectionString;
     options.InstanceName = "flight-booking:";
 });
+builder.Services.AddMemoryCache();
 
 // DI registrations - Repositories
 builder.Services.AddScoped<IFlightRepository, FlightRepository>();
