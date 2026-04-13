@@ -14,32 +14,32 @@ public class EmailService : IEmailService
     public Task<bool> SendBookingConfirmationAsync(string userEmail, string bookingReference, string flightNumber, DateTime departureTime, int passengerCount)
     {
         _logger.LogInformation(
-            "Booking confirmation queued to {Email}. Ref: {Reference}, Flight: {Flight}, Departure: {Departure}, Pax: {Pax}",
-            userEmail, bookingReference, flightNumber, departureTime, passengerCount);
+            "Booking confirmation queued. Ref: {Reference}, Flight: {Flight}, Departure: {Departure}, Pax: {Pax}",
+            bookingReference, flightNumber, departureTime, passengerCount);
         return Task.FromResult(true);
     }
 
     public Task<bool> SendCancellationConfirmationAsync(string userEmail, string bookingReference, string flightNumber, decimal refundAmount)
     {
         _logger.LogInformation(
-            "Cancellation confirmation queued to {Email}. Ref: {Reference}, Flight: {Flight}, Refund: {Refund}",
-            userEmail, bookingReference, flightNumber, refundAmount);
+            "Cancellation confirmation queued. Ref: {Reference}, Flight: {Flight}, Refund: {Refund}",
+            bookingReference, flightNumber, refundAmount);
         return Task.FromResult(true);
     }
 
     public Task<bool> SendRefundNotificationAsync(string userEmail, string bookingReference, decimal refundAmount, string refundStatus)
     {
         _logger.LogInformation(
-            "Refund notification queued to {Email}. Ref: {Reference}, Refund: {Refund}, Status: {Status}",
-            userEmail, bookingReference, refundAmount, refundStatus);
+            "Refund notification queued. Ref: {Reference}, Refund: {Refund}, Status: {Status}",
+            bookingReference, refundAmount, refundStatus);
         return Task.FromResult(true);
     }
 
     public Task<bool> SendCheckInReminderAsync(string userEmail, string bookingReference, string flightNumber, DateTime departureTime)
     {
         _logger.LogInformation(
-            "Check-in reminder queued to {Email}. Ref: {Reference}, Flight: {Flight}, Departure: {Departure}",
-            userEmail, bookingReference, flightNumber, departureTime);
+            "Check-in reminder queued. Ref: {Reference}, Flight: {Flight}, Departure: {Departure}",
+            bookingReference, flightNumber, departureTime);
         return Task.FromResult(true);
     }
 }
