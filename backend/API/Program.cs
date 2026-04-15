@@ -1,8 +1,11 @@
 using API.Application.Interfaces;
 using API.Application.Services;
-using API.Infrastructure.Caching;
 using API.Infrastructure.Data;
+using API.Infrastructure.ExternalServices;
 using API.Infrastructure.Repositories;
+using API.Infrastructure.Security;
+using API.Infrastructure.Services;
+using API.Middleware;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +14,86 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
 builder.Services.AddControllers();
+builder.Services.AddHttpClient(); // Add HttpClient for payment providers
+
+// Register Phase 7: Security & Validation
+builder.Services.AddDataProtection();
+builder.Services.AddScoped<IDataProtectionService, DataProtectionService>();
+builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
+builder.Services.AddScoped<AuditService>();
+
+// Register application services - Phase 1: Authentication
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+
+// Register application services - Phase 2: Flight Search & Booking
+builder.Services.AddScoped<IFlightService, FlightService>();
+builder.Services.AddScoped<IBookingService, BookingService>();
+builder.Services.AddScoped<IPricingService, PricingService>();
+builder.Services.AddScoped<IPromotionService, PromotionService>();
+
+// Register application services - Phase 3: Payment & Ticketing
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<ITicketService, TicketService>();
+builder.Services.AddScoped<IRefundService, RefundService>();
+
+// Register application services - Phase 4: Admin Management
+builder.Services.AddScoped<IFlightAdminService, FlightAdminService>();
+builder.Services.AddScoped<IBookingAdminService, BookingAdminService>();
+builder.Services.AddScoped<IUserAdminService, UserAdminService>();
+builder.Services.AddScoped<IPromotionAdminService, PromotionAdminService>();
+
+// Register application services - Phase 5: Notifications, Logging & Dashboard
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<ISmsService, SmsService>();
+builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
+
+// Register application services - Phase 6: Advanced Analytics, Reporting & Realtime
+builder.Services.AddScoped<IReportingService, ReportingService>();
+builder.Services.AddScoped<IAdvancedSearchService, AdvancedSearchService>();
+builder.Services.AddScoped<IRealtimeDashboardService, RealtimeDashboardService>();
+builder.Services.AddScoped<IPerformanceAnalyticsService, PerformanceAnalyticsService>();
+
+// Register payment providers
+builder.Services.AddScoped<MomoPaymentProvider>();
+builder.Services.AddScoped<VnpayPaymentProvider>();
+builder.Services.AddScoped<StripePaymentProvider>();
+builder.Services.AddScoped<PaypalPaymentProvider>();
+builder.Services.AddScoped<CardPaymentProvider>();
+builder.Services.AddScoped<BankTransferProvider>();
+builder.Services.AddScoped<IPaymentProviderFactory, PaymentProviderFactory>();
+
+// Register repositories - All Phases
+// NOTE: IMPORTANT - Repository implementations are REQUIRED for functionality
+// Phase 1 repositories (already implemented)
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
+builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
+
+// Phase 2-6 repositories (temporary placeholders - need real implementation)
+// TODO: Implement all repositories with actual database logic
+#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable reference type
+builder.Services.AddScoped<IFlightRepository>(sp => null!);
+builder.Services.AddScoped<IBookingRepository>(sp => null!);
+builder.Services.AddScoped<IFlightSeatInventoryRepository>(sp => null!);
+builder.Services.AddScoped<IPromotionRepository>(sp => null!);
+builder.Services.AddScoped<IPaymentRepository>(sp => null!);
+builder.Services.AddScoped<ITicketRepository>(sp => null!);
+builder.Services.AddScoped<IRefundRequestRepository>(sp => null!);
+builder.Services.AddScoped<IAuditLogRepository>(sp => null!);
+builder.Services.AddScoped<INotificationLogRepository>(sp => null!);
+builder.Services.AddScoped<IRoleRepository>(sp => null!);
+builder.Services.AddScoped<IAirportRepository>(sp => null!);
+builder.Services.AddScoped<IRouteRepository>(sp => null!);
+builder.Services.AddScoped<IAircraftRepository>(sp => null!);
+builder.Services.AddScoped<ISeatClassRepository>(sp => null!);
+builder.Services.AddScoped<IBookingPassengerRepository>(sp => null!);
+#pragma warning restore CS8600
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is missing.");
@@ -33,21 +116,6 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = redisConnectionString;
     options.InstanceName = "flight-booking:";
 });
-
-// DI registrations - Repositories
-builder.Services.AddScoped<IFlightRepository, FlightRepository>();
-builder.Services.AddScoped<IBookingRepository, BookingRepository>();
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IPassengerRepository, PassengerRepository>();
-
-// DI registrations - Services
-builder.Services.AddScoped<IFlightService, FlightService>();
-builder.Services.AddScoped<IBookingService, BookingService>();
-builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddScoped<IEmailService, EmailService>();
-
-// DI registrations - Caching
-builder.Services.AddScoped<ICacheService, InMemoryCacheService>();
 
 builder.Services.AddCors(options =>
 {
@@ -103,6 +171,12 @@ if (app.Environment.IsDevelopment())
         options.RoutePrefix = string.Empty; // Swagger UI at root
     });
 }
+
+// Phase 7: Security & Validation Middleware
+app.UseGlobalExceptionHandling();
+app.UseSecurityHeaders();
+app.UseRateLimiting();
+app.UseRequestLogging();
 
 app.UseCors("AllowAll");
 app.UseHttpsRedirection();

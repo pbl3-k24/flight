@@ -1,0 +1,30 @@
+namespace API.Infrastructure.Configurations;
+
+using API.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+
+public class RefundPolicyConfiguration : IEntityTypeConfiguration<RefundPolicy>
+{
+    public void Configure(EntityTypeBuilder<RefundPolicy> builder)
+    {
+        builder.HasKey(r => r.Id);
+
+        builder.Property(r => r.HoursBeforeDeparture)
+            .IsRequired();
+
+        builder.Property(r => r.RefundPercent)
+            .HasPrecision(5, 2);
+
+        builder.Property(r => r.PenaltyFee)
+            .HasPrecision(10, 2)
+            .HasDefaultValue(0);
+
+        builder.HasOne(r => r.SeatClass)
+            .WithMany(s => s.RefundPolicies)
+            .HasForeignKey(r => r.SeatClassId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.ToTable("RefundPolicies");
+    }
+}
