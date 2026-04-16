@@ -1,0 +1,122 @@
+info:
+  name: get /api/v1/admin/FlightsAdmin/routes
+  type: http
+  seq: 6
+  tags:
+    - FlightsAdmin
+
+http:
+  method: GET
+  url: "{{baseUrl}}/api/v1/admin/FlightsAdmin/routes"
+  params:
+    - name: page
+      value: "1"
+      type: query
+    - name: pageSize
+      value: "20"
+      type: query
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 200 Response
+    description: OK
+    request:
+      url: "{{baseUrl}}/api/v1/admin/FlightsAdmin/routes"
+      method: GET
+      params:
+        - name: page
+          value: "1"
+          type: query
+        - name: pageSize
+          value: "20"
+          type: query
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: text/plain
+      body:
+        type: text
+        data: |-
+          [
+            {
+              "routeId": 0,
+              "departureAirport": "",
+              "arrivalAirport": "",
+              "distanceKm": 0,
+              "estimatedDurationMinutes": 0,
+              "activeFlights": 0,
+              "isActive": false
+            }
+          ]
+  - name: 200 Response
+    description: OK
+    request:
+      url: "{{baseUrl}}/api/v1/admin/FlightsAdmin/routes"
+      method: GET
+      params:
+        - name: page
+          value: "1"
+          type: query
+        - name: pageSize
+          value: "20"
+          type: query
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          [
+            {
+              "routeId": 0,
+              "departureAirport": "",
+              "arrivalAirport": "",
+              "distanceKm": 0,
+              "estimatedDurationMinutes": 0,
+              "activeFlights": 0,
+              "isActive": false
+            }
+          ]
+  - name: 200 Response
+    description: OK
+    request:
+      url: "{{baseUrl}}/api/v1/admin/FlightsAdmin/routes"
+      method: GET
+      params:
+        - name: page
+          value: "1"
+          type: query
+        - name: pageSize
+          value: "20"
+          type: query
+    response:
+      status: 200
+      statusText: OK
+      headers:
+        - name: Content-Type
+          value: text/json
+      body:
+        type: json
+        data: |-
+          [
+            {
+              "routeId": 0,
+              "departureAirport": "",
+              "arrivalAirport": "",
+              "distanceKm": 0,
+              "estimatedDurationMinutes": 0,
+              "activeFlights": 0,
+              "isActive": false
+            }
+          ]

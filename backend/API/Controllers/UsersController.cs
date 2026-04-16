@@ -34,7 +34,7 @@ public class UsersController : ControllerBase
         {
             _logger.LogInformation("User registration attempt for email: {Email}", dto.Email);
             var response = await _authService.RegisterAsync(dto);
-            return CreatedAtAction(nameof(RegisterAsync), response);
+            return Created($"api/v1/users/{response.UserId}", new { success = true, data = response });
         }
         catch (ValidationException ex)
         {

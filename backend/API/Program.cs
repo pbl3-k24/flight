@@ -7,6 +7,7 @@ using API.Infrastructure.Security;
 using API.Infrastructure.Services;
 using API.Middleware;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -117,6 +118,13 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.InstanceName = "flight-booking:";
 });
 
+// Configure Authorization (using custom JWT authentication handler)
+builder.Services.AddAuthentication("JWT")
+    .AddScheme<AuthenticationSchemeOptions, JwtAuthenticationHandler>("JWT", null);
+
+// Configure Authorization policies
+builder.Services.AddAuthorization();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -151,6 +159,11 @@ using (var scope = app.Services.CreateScope())
         {
             logger.LogInformation("No pending migrations. Database is up to date.");
         }
+
+        // Seed sample data nếu database là trống
+        logger.LogInformation("Seeding sample data...");
+        await DbInitializer.InitializeDatabaseAsync(dbContext);
+        logger.LogInformation("Sample data seeding completed.");
     }
     catch (Exception ex)
     {
@@ -180,6 +193,11 @@ app.UseRequestLogging();
 
 app.UseCors("AllowAll");
 app.UseHttpsRedirection();
+
+// Authentication & Authorization middleware (MUST be in this order)
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapControllers();
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy" }));
 

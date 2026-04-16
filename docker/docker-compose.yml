@@ -39,7 +39,7 @@ services:
 
   api:
     build:
-      context: ..
+      context: ../backend/API
       dockerfile: Dockerfile
     container_name: flight-booking-api
     environment:

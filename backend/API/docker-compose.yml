@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:17-alpine
+    container_name: flight_postgres_db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: SecretPassword123!
+      POSTGRES_DB: FlightBookingDB
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - flight-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # pgAdmin for Database Management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: flight_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: pgadmin@example.com
+      PGADMIN_DEFAULT_PASSWORD: pgadmin123
+    ports:
+      - "5050:80"
+    networks:
+      - flight-network
+    depends_on:
+      - postgres
+
+  # Flight Booking API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flight_api
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5000
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=FlightBookingDB;Username=admin;Password=SecretPassword123!"
+      Jwt__Key: "your-super-secret-jwt-key-that-must-be-at-least-32-characters-long-for-security"
+      Jwt__Issuer: "flight-booking-api"
+      Jwt__Audience: "flight-booking-app"
+      Jwt__ExpirationHours: "24"
+      Smtp__Host: "smtp.gmail.com"
+      Smtp__Port: "587"
+      Smtp__Username: "your-email@gmail.com"
+      Smtp__Password: "your-app-password"
+      Smtp__FromEmail: "noreply@flightbooking.com"
+      Redis__ConnectionString: "redis:6379"
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - flight-network
+
+  # Redis Cache (optional but recommended)
+  redis:
+    image: redis:7-alpine
+    container_name: flight_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - flight-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  flight-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

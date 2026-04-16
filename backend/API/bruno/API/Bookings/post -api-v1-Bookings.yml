@@ -1,0 +1,495 @@
+info:
+  name: post /api/v1/Bookings
+  type: http
+  seq: 1
+  tags:
+    - Bookings
+
+http:
+  method: POST
+  url: "{{baseUrl}}/api/v1/Bookings"
+  body:
+    type: json
+    data: |-
+      {
+        "outboundFlightId": 0,
+        "returnFlightId": 0,
+        "passengerCount": 0,
+        "seatClassId": 0,
+        "passengers": [
+          {
+            "firstName": "",
+            "lastName": "",
+            "email": "",
+            "phone": "",
+            "dateOfBirth": "",
+            "nationality": "",
+            "passportNumber": ""
+          }
+        ],
+        "promotionId": 0
+      }
+  auth: inherit
+
+runtime:
+  variables:
+    - name: baseUrl
+      value: http://localhost:5042/index.html
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+examples:
+  - name: 201 Response
+    description: Created
+    request:
+      url: "{{baseUrl}}/api/v1/Bookings"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "outboundFlightId": 0,
+            "returnFlightId": 0,
+            "passengerCount": 0,
+            "seatClassId": 0,
+            "passengers": [
+              {
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "dateOfBirth": "",
+                "nationality": "",
+                "passportNumber": ""
+              }
+            ],
+            "promotionId": 0
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: Content-Type
+          value: text/plain
+      body:
+        type: text
+        data: |-
+          {
+            "bookingId": 0,
+            "bookingCode": "",
+            "status": "",
+            "totalAmount": 0,
+            "finalAmount": 0,
+            "createdAt": "",
+            "expiresAt": "",
+            "outboundFlight": {
+              "flightId": 0,
+              "flightNumber": "",
+              "departureAirport": "",
+              "arrivalAirport": "",
+              "departureTime": "",
+              "arrivalTime": "",
+              "seatClass": "",
+              "price": 0
+            },
+            "returnFlight": {},
+            "passengers": [
+              {
+                "passengerId": 0,
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "passportNumber": "",
+                "status": ""
+              }
+            ]
+          }
+  - name: 201 Response
+    description: Created
+    request:
+      url: "{{baseUrl}}/api/v1/Bookings"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "outboundFlightId": 0,
+            "returnFlightId": 0,
+            "passengerCount": 0,
+            "seatClassId": 0,
+            "passengers": [
+              {
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "dateOfBirth": "",
+                "nationality": "",
+                "passportNumber": ""
+              }
+            ],
+            "promotionId": 0
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "bookingId": 0,
+            "bookingCode": "",
+            "status": "",
+            "totalAmount": 0,
+            "finalAmount": 0,
+            "createdAt": "",
+            "expiresAt": "",
+            "outboundFlight": {
+              "flightId": 0,
+              "flightNumber": "",
+              "departureAirport": "",
+              "arrivalAirport": "",
+              "departureTime": "",
+              "arrivalTime": "",
+              "seatClass": "",
+              "price": 0
+            },
+            "returnFlight": {},
+            "passengers": [
+              {
+                "passengerId": 0,
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "passportNumber": "",
+                "status": ""
+              }
+            ]
+          }
+  - name: 201 Response
+    description: Created
+    request:
+      url: "{{baseUrl}}/api/v1/Bookings"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "outboundFlightId": 0,
+            "returnFlightId": 0,
+            "passengerCount": 0,
+            "seatClassId": 0,
+            "passengers": [
+              {
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "dateOfBirth": "",
+                "nationality": "",
+                "passportNumber": ""
+              }
+            ],
+            "promotionId": 0
+          }
+    response:
+      status: 201
+      statusText: Created
+      headers:
+        - name: Content-Type
+          value: text/json
+      body:
+        type: json
+        data: |-
+          {
+            "bookingId": 0,
+            "bookingCode": "",
+            "status": "",
+            "totalAmount": 0,
+            "finalAmount": 0,
+            "createdAt": "",
+            "expiresAt": "",
+            "outboundFlight": {
+              "flightId": 0,
+              "flightNumber": "",
+              "departureAirport": "",
+              "arrivalAirport": "",
+              "departureTime": "",
+              "arrivalTime": "",
+              "seatClass": "",
+              "price": 0
+            },
+            "returnFlight": {},
+            "passengers": [
+              {
+                "passengerId": 0,
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "passportNumber": "",
+                "status": ""
+              }
+            ]
+          }
+  - name: 400 Response
+    description: Bad Request
+    request:
+      url: "{{baseUrl}}/api/v1/Bookings"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "outboundFlightId": 0,
+            "returnFlightId": 0,
+            "passengerCount": 0,
+            "seatClassId": 0,
+            "passengers": [
+              {
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "dateOfBirth": "",
+                "nationality": "",
+                "passportNumber": ""
+              }
+            ],
+            "promotionId": 0
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: Content-Type
+          value: text/plain
+      body:
+        type: text
+        data: |-
+          {
+            "type": "",
+            "title": "",
+            "status": 0,
+            "detail": "",
+            "instance": ""
+          }
+  - name: 400 Response
+    description: Bad Request
+    request:
+      url: "{{baseUrl}}/api/v1/Bookings"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "outboundFlightId": 0,
+            "returnFlightId": 0,
+            "passengerCount": 0,
+            "seatClassId": 0,
+            "passengers": [
+              {
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "dateOfBirth": "",
+                "nationality": "",
+                "passportNumber": ""
+              }
+            ],
+            "promotionId": 0
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "type": "",
+            "title": "",
+            "status": 0,
+            "detail": "",
+            "instance": ""
+          }
+  - name: 400 Response
+    description: Bad Request
+    request:
+      url: "{{baseUrl}}/api/v1/Bookings"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "outboundFlightId": 0,
+            "returnFlightId": 0,
+            "passengerCount": 0,
+            "seatClassId": 0,
+            "passengers": [
+              {
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "dateOfBirth": "",
+                "nationality": "",
+                "passportNumber": ""
+              }
+            ],
+            "promotionId": 0
+          }
+    response:
+      status: 400
+      statusText: Bad Request
+      headers:
+        - name: Content-Type
+          value: text/json
+      body:
+        type: json
+        data: |-
+          {
+            "type": "",
+            "title": "",
+            "status": 0,
+            "detail": "",
+            "instance": ""
+          }
+  - name: 401 Response
+    description: Unauthorized
+    request:
+      url: "{{baseUrl}}/api/v1/Bookings"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "outboundFlightId": 0,
+            "returnFlightId": 0,
+            "passengerCount": 0,
+            "seatClassId": 0,
+            "passengers": [
+              {
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "dateOfBirth": "",
+                "nationality": "",
+                "passportNumber": ""
+              }
+            ],
+            "promotionId": 0
+          }
+    response:
+      status: 401
+      statusText: Unauthorized
+      headers:
+        - name: Content-Type
+          value: text/plain
+      body:
+        type: text
+        data: |-
+          {
+            "type": "",
+            "title": "",
+            "status": 0,
+            "detail": "",
+            "instance": ""
+          }
+  - name: 401 Response
+    description: Unauthorized
+    request:
+      url: "{{baseUrl}}/api/v1/Bookings"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "outboundFlightId": 0,
+            "returnFlightId": 0,
+            "passengerCount": 0,
+            "seatClassId": 0,
+            "passengers": [
+              {
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "dateOfBirth": "",
+                "nationality": "",
+                "passportNumber": ""
+              }
+            ],
+            "promotionId": 0
+          }
+    response:
+      status: 401
+      statusText: Unauthorized
+      headers:
+        - name: Content-Type
+          value: application/json
+      body:
+        type: json
+        data: |-
+          {
+            "type": "",
+            "title": "",
+            "status": 0,
+            "detail": "",
+            "instance": ""
+          }
+  - name: 401 Response
+    description: Unauthorized
+    request:
+      url: "{{baseUrl}}/api/v1/Bookings"
+      method: POST
+      body:
+        type: json
+        data: |-
+          {
+            "outboundFlightId": 0,
+            "returnFlightId": 0,
+            "passengerCount": 0,
+            "seatClassId": 0,
+            "passengers": [
+              {
+                "firstName": "",
+                "lastName": "",
+                "email": "",
+                "phone": "",
+                "dateOfBirth": "",
+                "nationality": "",
+                "passportNumber": ""
+              }
+            ],
+            "promotionId": 0
+          }
+    response:
+      status: 401
+      statusText: Unauthorized
+      headers:
+        - name: Content-Type
+          value: text/json
+      body:
+        type: json
+        data: |-
+          {
+            "type": "",
+            "title": "",
+            "status": 0,
+            "detail": "",
+            "instance": ""
+          }

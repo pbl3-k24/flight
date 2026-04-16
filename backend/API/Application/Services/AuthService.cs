@@ -81,8 +81,11 @@ public class AuthService : IAuthService
 
         await _emailTokenRepository.CreateAsync(verificationToken);
 
-        // 6. Send verification email
-        await _emailService.SendVerificationEmailAsync(createdUser.Email, verificationCode);
+        // 6. Send verification email (SKIPPED FOR TESTING - Email verification disabled)
+        // TODO: Configure proper SMTP settings in appsettings.json to enable email verification
+        // await _emailService.SendVerificationEmailAsync(createdUser.Email, verificationCode);
+        
+        _logger.LogInformation("Email verification skipped for testing purposes. User email not verified.");
 
         // 7. Generate JWT token
         var token = _jwtTokenService.GenerateToken(createdUser);
