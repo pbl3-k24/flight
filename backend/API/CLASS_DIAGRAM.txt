@@ -1,0 +1,436 @@
+================================================================================
+  FLIGHT BOOKING SYSTEM — CLASS DIAGRAM (DATABASE SCHEMA)
+  Source: EF Core Migration 20260413135213_InitialCreate + Model Snapshot
+  Database: PostgreSQL
+================================================================================
+
+LEGEND
+------
+  PK  = Primary Key (identity / auto-increment)
+  FK  = Foreign Key
+  UQ  = Unique constraint / unique index
+  CUQ = Composite Unique constraint
+  NN  = Not Null
+  ?   = Nullable
+  DEF = Default value
+  CC  = Concurrency token
+
+================================================================================
+  TABLES / ENTITIES
+================================================================================
+
++---------------------------+
+|         Aircraft          |
++---------------------------+
+| PK  Id                  int        NN  identity          |
+|     Model               varchar(100) NN                  |
+| UQ  RegistrationNumber  varchar(50)  NN                  |
+|     TotalSeats          int          NN                  |
+|     IsActive            bool         NN  DEF=true        |
++---------------------------+
+
++---------------------------+
+|         Airports          |
++---------------------------+
+| PK  Id       int           NN  identity                  |
+| UQ  Code     varchar(10)   NN                            |
+|     Name     varchar(255)  NN                            |
+|     City     varchar(100)  NN                            |
+|     Province varchar(100)  ?                             |
+|     IsActive bool          NN  DEF=true                  |
++---------------------------+
+
++---------------------------+
+|          Routes           |
++---------------------------+
+| PK  Id                       int   NN  identity          |
+| FK  DepartureAirportId        int   NN  -> Airports.Id [Restrict] |
+| FK  ArrivalAirportId          int   NN  -> Airports.Id [Restrict] |
+|     DistanceKm               int   NN                    |
+|     EstimatedDurationMinutes  int   NN                    |
+|     IsActive                 bool  NN  DEF=true          |
++---------------------------+
+
++---------------------------+
+|         SeatClasses        |
++---------------------------+
+| PK  Id            int           NN  identity             |
+| UQ  Code          varchar(20)   NN                       |
+|     Name          varchar(100)  NN                       |
+|     RefundPercent decimal(5,2)  NN                       |
+|     ChangeFee     decimal(10,2) NN                       |
+|     Priority      int           NN                       |
++---------------------------+
+
++----------------------------------+
+|      AircraftSeatTemplates       |
++----------------------------------+
+| PK   Id                int           NN  identity        |
+| FK   AircraftId         int           NN  -> Aircraft.Id [Cascade] |
+| FK   SeatClassId        int           NN  -> SeatClasses.Id [Cascade] |
+|      DefaultSeatCount   int           NN                 |
+|      DefaultBasePrice   decimal(10,2) NN                 |
+| CUQ  (AircraftId, SeatClassId)                          |
++----------------------------------+
+
++---------------------------+
+|         Flights           |
++---------------------------+
+| PK  Id            int          NN  identity              |
+| UQ  FlightNumber  varchar(20)  NN                        |
+| FK  RouteId       int          NN  -> Routes.Id [Restrict] |
+| FK  AircraftId    int          NN  -> Aircraft.Id [Restrict] |
+|     DepartureTime timestamptz  NN                        |
+|     ArrivalTime   timestamptz  NN                        |
+|     Status        int          NN  DEF=0                 |
+|     CreatedAt     timestamptz  NN                        |
+|     UpdatedAt     timestamptz  NN                        |
++---------------------------+
+
++-------------------------------------+
+|       FlightSeatInventories         |
++-------------------------------------+
+| PK   Id              int            NN  identity         |
+| FK   FlightId         int            NN  -> Flights.Id [Cascade] |
+| FK   SeatClassId      int            NN  -> SeatClasses.Id [Restrict] |
+|      TotalSeats       int            NN                  |
+|      AvailableSeats   int            NN                  |
+|      HeldSeats        int            NN  DEF=0           |
+|      SoldSeats        int            NN  DEF=0           |
+|      BasePrice        decimal(10,2)  NN                  |
+|      CurrentPrice     decimal(10,2)  NN                  |
+|  CC  Version          int            NN  DEF=0           |
+|      CreatedAt        timestamptz    NN                  |
+|      UpdatedAt        timestamptz    NN                  |
+| CUQ  (FlightId, SeatClassId)                            |
++-------------------------------------+
+
++---------------------------+
+|           Users           |
++---------------------------+
+| PK  Id           int           NN  identity              |
+| UQ  Email        varchar(255)  NN                        |
+|     PasswordHash text          NN                        |
+|     FullName     varchar(255)  NN                        |
+|     Phone        varchar(20)   ?                         |
+| UQ  GoogleId     varchar(255)  ?                         |
+|     Status       int           NN  DEF=0                 |
+|     CreatedAt    timestamptz   NN                        |
+|     UpdatedAt    timestamptz   NN                        |
++---------------------------+
+
++---------------------------+
+|           Roles           |
++---------------------------+
+| PK  Id          int           NN  identity               |
+| UQ  Name        varchar(50)   NN                         |
+|     Description varchar(500)  ?                          |
++---------------------------+
+
++---------------------------+
+|         UserRoles         |  (explicit many-to-many join table)
++---------------------------+
+| PK,FK  UserId  int  NN  -> Users.Id [Cascade]           |
+| PK,FK  RoleId  int  NN  -> Roles.Id [Cascade]           |
++---------------------------+
+
++---------------------------+
+|          RoleUser         |  (EF shadow join table — redundant with UserRoles)
++---------------------------+
+| PK,FK  RolesId  int  NN  -> Roles.Id [Cascade]          |
+| PK,FK  UsersId  int  NN  -> Users.Id [Cascade]          |
++---------------------------+
+
++---------------------------+
+|        Promotions         |
++---------------------------+
+| PK  Id             int           NN  identity            |
+| UQ  Code           varchar(50)   NN                      |
+|     DiscountType   int           NN  DEF=0               |
+|     DiscountValue  decimal(10,2) NN                      |
+|     ValidFrom      timestamptz   NN                      |
+|     ValidTo        timestamptz   NN                      |
+|     UsageLimit     int           ?                       |
+|     UsedCount      int           NN  DEF=0               |
+|     IsActive       bool          NN  DEF=true            |
+|     CreatedAt      timestamptz   NN                      |
++---------------------------+
+
++---------------------------+
+|         Bookings          |
++---------------------------+
+| PK  Id               int           NN  identity          |
+| UQ  BookingCode      varchar(10)   NN                    |
+| FK  UserId           int           NN  -> Users.Id [Cascade] |
+|     TripType         int           NN  DEF=0             |
+| FK  OutboundFlightId  int           NN  -> Flights.Id [Restrict] |
+| FK  ReturnFlightId   int           ?   -> Flights.Id [Restrict] |
+|     Status           int           NN  DEF=0             |
+|     ContactEmail     text          NN                    |
+|     ContactPhone     varchar(20)   ?                     |
+|     TotalAmount      decimal(10,2) NN                    |
+|     DiscountAmount   decimal(10,2) NN  DEF=0             |
+|     FinalAmount      decimal(10,2) NN                    |
+|     ExpiresAt        timestamptz   ?                     |
+|     CreatedAt        timestamptz   NN                    |
+|     UpdatedAt        timestamptz   NN                    |
+| FK  PromotionId      int           ?   -> Promotions.Id [SetNull] |
++---------------------------+
+
++---------------------------+
+|         Payments          |
++---------------------------+
+| PK  Id               int           NN  identity          |
+| FK,UQ BookingId      int           NN  -> Bookings.Id [Cascade] |
+|     Provider         varchar(50)   NN                    |
+|     Method           varchar(50)   NN                    |
+|     Amount           decimal(10,2) NN                    |
+|     Status           int           NN  DEF=0             |
+|     TransactionRef   varchar(255)  ?                     |
+|     QrCodeData       text          ?                     |
+|     PaidAt           timestamptz   ?                     |
+|     RawCallbackData  text          ?                     |
+|     CreatedAt        timestamptz   NN                    |
+|     UpdatedAt        timestamptz   NN                    |
++---------------------------+
+
++---------------------------+
+|      PromotionUsages      |
++---------------------------+
+| PK   Id              int           NN  identity          |
+| FK   PromotionId      int           NN  -> Promotions.Id [Cascade] |
+| FK   BookingId        int           NN  -> Bookings.Id [Cascade] |
+|      DiscountAmount   decimal(10,2) NN                   |
+|      UsedAt           timestamptz   NN                   |
+| CUQ  (PromotionId, BookingId)                           |
++---------------------------+
+
++---------------------------+
+|     BookingPassengers     |
++---------------------------+
+| PK  Id                   int          NN  identity       |
+| FK  BookingId             int          NN  -> Bookings.Id [Cascade] |
+|     FullName              varchar(255) NN                 |
+|     Gender                varchar(10)  ?                  |
+|     DateOfBirth           timestamptz  ?                  |
+|     NationalId            varchar(50)  ?                  |
+|     PassengerType         int          NN  DEF=0          |
+| FK  FlightSeatInventoryId  int          NN  -> FlightSeatInventories.Id [Restrict] |
+|     FareSnapshot          text         ?                  |
++---------------------------+
+
++---------------------------+
+|      BookingServices      |
++---------------------------+
+| PK  Id                 int           NN  identity        |
+| FK  BookingPassengerId  int           NN  -> BookingPassengers.Id [Cascade] |
+|     ServiceType         varchar(50)   NN                  |
+|     ServiceName         varchar(255)  NN                  |
+|     Price               decimal(10,2) NN                  |
++---------------------------+
+
++---------------------------+
+|          Tickets          |
++---------------------------+
+| PK     Id                  int          NN  identity     |
+| FK,UQ  BookingPassengerId   int          NN  -> BookingPassengers.Id [Cascade] |
+| UQ     TicketNumber         varchar(50)  NN               |
+|        Status               int          NN  DEF=0        |
+|        IssuedAt             timestamptz  NN               |
+| FK     ReplacedByTicketId   int          ?   -> Tickets.Id [SetNull] (self-ref) |
++---------------------------+
+
++---------------------------+
+|       RefundPolicies      |
++---------------------------+
+| PK  Id                  int          NN  identity        |
+| FK  SeatClassId          int          NN  -> SeatClasses.Id [Cascade] |
+|     HoursBeforeDeparture  int          NN                 |
+|     RefundPercent         decimal(5,2) NN                 |
+|     PenaltyFee            decimal(10,2) NN  DEF=0        |
++---------------------------+
+
++---------------------------+
+|      RefundRequests       |
++---------------------------+
+| PK     Id            int           NN  identity          |
+| FK     BookingId      int           NN  -> Bookings.Id [Cascade] |
+| FK,UQ  PaymentId      int           NN  -> Payments.Id [Cascade] |
+|        RefundAmount   decimal(10,2) NN                   |
+|        Reason         varchar(500)  ?                    |
+|        Status         int           NN  DEF=0            |
+|        ProcessedAt    timestamptz   ?                    |
+|        CreatedAt      timestamptz   NN                   |
++---------------------------+
+
++---------------------------+
+|         AuditLogs         |
++---------------------------+
+| PK  Id          int           NN  identity               |
+| FK  ActorId     int           ?   -> Users.Id [SetNull]  |
+|     Action      varchar(100)  NN                         |
+|     EntityType  varchar(100)  NN                         |
+|     EntityId    int           NN                         |
+|     BeforeJson  text          ?                          |
+|     AfterJson   text          ?                          |
+|     CreatedAt   timestamptz   NN                         |
++---------------------------+
+
++---------------------------+
+|     NotificationLogs      |
++---------------------------+
+| PK  Id        int           NN  identity                 |
+| FK  UserId    int           NN  -> Users.Id [Cascade]    |
+|     Email     varchar(255)  ?                            |
+|     Type      varchar(50)   NN                           |
+|     Title     varchar(255)  NN                           |
+|     Content   text          NN                           |
+|     Status    int           NN  DEF=0                    |
+|     SentAt    timestamptz   ?                            |
+|     CreatedAt timestamptz   NN                           |
++---------------------------+
+
++-----------------------------+
+|  EmailVerificationTokens    |
++-----------------------------+
+| PK  Id        int           NN  identity                 |
+| FK  UserId    int           NN  -> Users.Id [Cascade]    |
+|     Code      varchar(500)  NN                           |
+|     ExpiresAt timestamptz   NN                           |
+|     UsedAt    timestamptz   ?                            |
++-----------------------------+
+
++---------------------------+
+|    PasswordResetTokens    |
++---------------------------+
+| PK  Id        int           NN  identity                 |
+| FK  UserId    int           NN  -> Users.Id [Cascade]    |
+|     Code      varchar(500)  NN                           |
+|     ExpiresAt timestamptz   NN                           |
+|     UsedAt    timestamptz   ?                            |
++---------------------------+
+
+================================================================================
+  RELATIONSHIPS (Cardinality & Delete Behaviour)
+================================================================================
+
+  Notation:  ||—o{  = one-to-many
+             ||—||  = one-to-one
+             }o—o{  = many-to-many (via join table)
+             ->      = FK points to
+
+  [Restrict]  = FK delete blocked if children exist
+  [Cascade]   = children deleted automatically
+  [SetNull]   = FK column set to NULL on parent delete
+
+  ── GEOGRAPHY / AIRCRAFT ──────────────────────────────────────────────────────
+
+  Airports        ||—o{  Routes          (DepartureAirportId) [Restrict]
+  Airports        ||—o{  Routes          (ArrivalAirportId)   [Restrict]
+  Aircraft        ||—o{  Flights                              [Restrict]
+  Routes          ||—o{  Flights                              [Restrict]
+
+  ── SEAT CLASSES ──────────────────────────────────────────────────────────────
+
+  Aircraft        ||—o{  AircraftSeatTemplates  [Cascade]
+  SeatClasses     ||—o{  AircraftSeatTemplates  [Cascade]
+                         CUQ (AircraftId, SeatClassId)
+
+  Flights         ||—o{  FlightSeatInventories  [Cascade]
+  SeatClasses     ||—o{  FlightSeatInventories  [Restrict]
+                         CUQ (FlightId, SeatClassId)
+
+  SeatClasses     ||—o{  RefundPolicies         [Cascade]
+
+  ── USERS & ROLES ─────────────────────────────────────────────────────────────
+
+  Users           }o—o{  Roles   (via UserRoles,  UserId/RoleId  Cascade both)
+  Users           }o—o{  Roles   (via RoleUser,   RolesId/UsersId Cascade both)
+                          Note: RoleUser is an EF shadow join table (redundant)
+
+  ── BOOKINGS & PAYMENTS ───────────────────────────────────────────────────────
+
+  Users           ||—o{  Bookings          (UserId)            [Cascade]
+  Flights         ||—o{  Bookings          (OutboundFlightId)  [Restrict]
+  Flights         ||—o{  Bookings          (ReturnFlightId ?)  [Restrict]
+  Promotions      ||—o{  Bookings          (PromotionId ?)     [SetNull]
+
+  Bookings        ||—||  Payments          (BookingId UQ)      [Cascade]
+  Payments        ||—||  RefundRequests    (PaymentId UQ)      [Cascade]
+  Bookings        ||—o{  RefundRequests    (BookingId)         [Cascade]
+
+  Promotions      ||—o{  PromotionUsages  (PromotionId)       [Cascade]
+  Bookings        ||—o{  PromotionUsages  (BookingId)         [Cascade]
+                         CUQ (PromotionId, BookingId)
+
+  ── PASSENGERS & TICKETS ──────────────────────────────────────────────────────
+
+  Bookings              ||—o{  BookingPassengers  (BookingId)             [Cascade]
+  FlightSeatInventories ||—o{  BookingPassengers  (FlightSeatInventoryId) [Restrict]
+  BookingPassengers     ||—o{  BookingServices    (BookingPassengerId)    [Cascade]
+  BookingPassengers     ||—||  Tickets            (BookingPassengerId UQ) [Cascade]
+  Tickets               ||—o{  Tickets            (ReplacedByTicketId ?)  [SetNull]
+                               Self-reference: replacement ticket chain
+
+  ── AUDIT / NOTIFICATIONS / TOKENS ───────────────────────────────────────────
+
+  Users  ||—o{  AuditLogs               (ActorId ?)  [SetNull]
+  Users  ||—o{  NotificationLogs        (UserId)     [Cascade]
+  Users  ||—o{  EmailVerificationTokens (UserId)     [Cascade]
+  Users  ||—o{  PasswordResetTokens     (UserId)     [Cascade]
+
+================================================================================
+  ENTITY DEPENDENCY ORDER (creation order in migration)
+================================================================================
+
+  Level 0 (no FKs):  Aircraft, Airports, Promotions, Roles, SeatClasses, Users
+
+  Level 1:  Routes                  (← Airports)
+            AircraftSeatTemplates   (← Aircraft, SeatClasses)
+            RefundPolicies          (← SeatClasses)
+            AuditLogs               (← Users)
+            EmailVerificationTokens (← Users)
+            NotificationLogs        (← Users)
+            PasswordResetTokens     (← Users)
+            RoleUser                (← Roles, Users)
+            UserRoles               (← Roles, Users)
+
+  Level 2:  Flights                 (← Routes, Aircraft)
+
+  Level 3:  Bookings                (← Users, Flights, Promotions)
+            FlightSeatInventories   (← Flights, SeatClasses)
+
+  Level 4:  Payments                (← Bookings)
+            PromotionUsages         (← Promotions, Bookings)
+            BookingPassengers       (← Bookings, FlightSeatInventories)
+
+  Level 5:  RefundRequests          (← Bookings, Payments)
+            BookingServices         (← BookingPassengers)
+            Tickets                 (← BookingPassengers)
+
+================================================================================
+  UNIQUE INDEXES SUMMARY
+================================================================================
+
+  Table                    Unique Index / Constraint
+  -----------------------  -------------------------------------------------------
+  Aircraft                 RegistrationNumber
+  Airports                 Code
+  AircraftSeatTemplates    (AircraftId, SeatClassId)  [composite]
+  Flights                  FlightNumber
+  FlightSeatInventories    (FlightId, SeatClassId)    [composite]
+  Users                    Email
+  Users                    GoogleId
+  Roles                    Name
+  Promotions               Code
+  Bookings                 BookingCode
+  Payments                 BookingId                  [enforces 1-1]
+  PromotionUsages          (PromotionId, BookingId)   [composite]
+  Tickets                  BookingPassengerId          [enforces 1-1]
+  Tickets                  TicketNumber
+  RefundRequests           PaymentId                  [enforces 1-1]
+  SeatClasses              Code
+
+================================================================================
+  END OF CLASS DIAGRAM
+================================================================================
