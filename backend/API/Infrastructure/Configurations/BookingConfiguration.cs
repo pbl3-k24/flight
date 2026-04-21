@@ -65,6 +65,23 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
             .HasForeignKey(b => b.PromotionId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // Add CHECK constraints
+        builder.HasCheckConstraint(
+            "CK_Booking_TotalAmount_Positive",
+            "\"TotalAmount\" > 0");
+
+        builder.HasCheckConstraint(
+            "CK_Booking_DiscountAmount_NonNegative",
+            "\"DiscountAmount\" >= 0");
+
+        builder.HasCheckConstraint(
+            "CK_Booking_FinalAmount_Positive",
+            "\"FinalAmount\" > 0");
+
+        builder.HasCheckConstraint(
+            "CK_Booking_FinalAmount_LessThanTotal",
+            "\"FinalAmount\" <= \"TotalAmount\"");
+
         builder.ToTable("Bookings");
     }
 }

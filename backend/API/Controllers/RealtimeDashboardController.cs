@@ -1,6 +1,7 @@
 namespace API.Controllers;
 
 using API.Application.Dtos.RealTime;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

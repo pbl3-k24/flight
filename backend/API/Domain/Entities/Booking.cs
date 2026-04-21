@@ -50,12 +50,9 @@ public class Booking
     // Domain methods
     public string GenerateBookingCode()
     {
-        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        var random = new Random();
-        BookingCode = new string(Enumerable.Range(0, 10)
-            .Select(_ => chars[random.Next(chars.Length)])
-            .ToArray());
-        return BookingCode;
+        // DEPRECATED: Use service method instead
+        // This method is unsafe - kept for backward compatibility
+        throw new NotSupportedException("Use BookingService.GenerateUniqueBookingCodeAsync() instead");
     }
 
     public bool CanCancel(DateTime currentDateTime) => Status != 3 && (ExpiresAt == null || currentDateTime < ExpiresAt);

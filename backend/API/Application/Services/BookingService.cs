@@ -1,6 +1,7 @@
 namespace API.Application.Services;
 
 using API.Application.Dtos.Booking;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
 using Microsoft.Extensions.Logging;
@@ -138,9 +139,16 @@ public class BookingService : IBookingService
                 passengers.First().FlightSeatInventoryId);
             if (seatInventory != null)
             {
-                seatInventory.SoldSeats -= passengers.Count;
+                if (booking.Status == 1) // Confirmed
+                {
+                    seatInventory.SoldSeats -= passengers.Count;
+                }
+                else if (booking.Status == 0) // Pending
+                {
+                    seatInventory.HeldSeats -= passengers.Count;
+                }
+
                 seatInventory.AvailableSeats += passengers.Count;
-                await _seatInventoryRepository.UpdateAsync(seatInventory);
             }
 
             _logger.LogInformation("Booking cancelled: {BookingId}", bookingId);

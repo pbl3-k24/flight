@@ -34,6 +34,15 @@ public class PromotionConfiguration : IEntityTypeConfiguration<Promotion>
             .HasForeignKey(pu => pu.PromotionId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Add CHECK constraints
+        builder.HasCheckConstraint(
+            "CK_Promotion_DiscountValue_Positive",
+            "\"DiscountValue\" > 0");
+
+        builder.HasCheckConstraint(
+            "CK_Promotion_UsedCount_NonNegative",
+            "\"UsedCount\" >= 0");
+
         builder.ToTable("Promotions");
     }
 }

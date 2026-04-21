@@ -25,6 +25,19 @@ public class RefundPolicyConfiguration : IEntityTypeConfiguration<RefundPolicy>
             .HasForeignKey(r => r.SeatClassId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Add CHECK constraints
+        builder.HasCheckConstraint(
+            "CK_RefundPolicy_HoursBeforeDeparture_Positive",
+            "\"HoursBeforeDeparture\" > 0");
+
+        builder.HasCheckConstraint(
+            "CK_RefundPolicy_RefundPercent_Valid",
+            "\"RefundPercent\" >= 0 AND \"RefundPercent\" <= 100");
+
+        builder.HasCheckConstraint(
+            "CK_RefundPolicy_PenaltyFee_NonNegative",
+            "\"PenaltyFee\" >= 0");
+
         builder.ToTable("RefundPolicies");
     }
 }

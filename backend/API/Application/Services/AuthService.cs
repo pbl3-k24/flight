@@ -1,6 +1,7 @@
 namespace API.Application.Services;
 
 using API.Application.Dtos.Auth;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
 using Microsoft.Extensions.Logging;
@@ -106,8 +107,8 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponse> LoginAsync(LoginDto dto)
     {
-        // 1. Find user by email
-        var user = await _userRepository.GetByEmailAsync(dto.Email);
+        // 1. Find user by email WITH roles (needed for JWT token generation)
+        var user = await _userRepository.GetByEmailWithRolesAsync(dto.Email);
         if (user == null)
         {
             _logger.LogWarning("Login failed: User not found for email {Email}", dto.Email);
@@ -313,20 +314,5 @@ public class AuthService : IAuthService
     {
         return Guid.NewGuid().ToString("N").Substring(0, 32);
     }
-}
-
-public class ValidationException : Exception
-{
-    public ValidationException(string message) : base(message) { }
-}
-
-public class NotFoundException : Exception
-{
-    public NotFoundException(string message) : base(message) { }
-}
-
-public class UnauthorizedException : Exception
-{
-    public UnauthorizedException(string message) : base(message) { }
 }
 

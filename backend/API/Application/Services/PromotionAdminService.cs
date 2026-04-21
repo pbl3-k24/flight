@@ -1,6 +1,7 @@
 namespace API.Application.Services;
 
 using API.Application.Dtos.Admin;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
 using Microsoft.Extensions.Logging;
@@ -129,9 +130,15 @@ public class PromotionAdminService : IPromotionAdminService
             var promotions = await _promotionRepository.GetAllAsync();
             var results = new List<PromotionManagementResponse>();
 
-            foreach (var promotion in promotions.Skip((page - 1) * pageSize).Take(pageSize))
+            if (promotions != null)
             {
-                results.Add(BuildPromotionResponse(promotion));
+                foreach (var promotion in promotions.Skip((page - 1) * pageSize).Take(pageSize))
+                {
+                    if (promotion != null)
+                    {
+                        results.Add(BuildPromotionResponse(promotion));
+                    }
+                }
             }
 
             return results;
@@ -150,14 +157,17 @@ public class PromotionAdminService : IPromotionAdminService
             var promotions = await _promotionRepository.GetAllAsync();
             var results = new List<PromotionManagementResponse>();
 
-            var now = DateTime.UtcNow;
-            var activePromotions = promotions
-                .Where(p => p.IsActive && p.ValidFrom <= now && p.ValidTo >= now)
-                .ToList();
-
-            foreach (var promotion in activePromotions)
+            if (promotions != null)
             {
-                results.Add(BuildPromotionResponse(promotion));
+                var now = DateTime.UtcNow;
+                var activePromotions = promotions
+                    .Where(p => p.IsActive && p.ValidFrom <= now && p.ValidTo >= now)
+                    .ToList();
+
+                foreach (var promotion in activePromotions)
+                {
+                    results.Add(BuildPromotionResponse(promotion));
+                }
             }
 
             return results;
@@ -199,10 +209,15 @@ public class PromotionAdminService : IPromotionAdminService
 
     private PromotionManagementResponse BuildPromotionResponse(Promotion promotion)
     {
+        if (promotion == null)
+        {
+            throw new ArgumentNullException(nameof(promotion), "Promotion cannot be null");
+        }
+
         return new PromotionManagementResponse
         {
             PromotionId = promotion.Id,
-            Code = promotion.Code,
+            Code = promotion.Code ?? "",
             Description = "",
             DiscountType = promotion.DiscountType,
             DiscountValue = promotion.DiscountValue,

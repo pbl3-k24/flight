@@ -51,6 +51,35 @@ public class FlightSeatInventoryConfiguration : IEntityTypeConfiguration<FlightS
 
         builder.HasIndex(f => new { f.FlightId, f.SeatClassId }).IsUnique();
 
+        // Add CHECK constraints
+        builder.HasCheckConstraint(
+            "CK_FlightSeatInventory_TotalSeats_Positive",
+            "\"TotalSeats\" > 0");
+
+        builder.HasCheckConstraint(
+            "CK_FlightSeatInventory_AvailableSeats_Valid",
+            "\"AvailableSeats\" >= 0 AND \"AvailableSeats\" <= \"TotalSeats\"");
+
+        builder.HasCheckConstraint(
+            "CK_FlightSeatInventory_HeldSeats_NonNegative",
+            "\"HeldSeats\" >= 0");
+
+        builder.HasCheckConstraint(
+            "CK_FlightSeatInventory_SoldSeats_NonNegative",
+            "\"SoldSeats\" >= 0");
+
+        builder.HasCheckConstraint(
+            "CK_FlightSeatInventory_Seats_Total",
+            "\"AvailableSeats\" + \"HeldSeats\" + \"SoldSeats\" <= \"TotalSeats\"");
+
+        builder.HasCheckConstraint(
+            "CK_FlightSeatInventory_BasePrice_Positive",
+            "\"BasePrice\" > 0");
+
+        builder.HasCheckConstraint(
+            "CK_FlightSeatInventory_CurrentPrice_Positive",
+            "\"CurrentPrice\" > 0");
+
         builder.ToTable("FlightSeatInventories");
     }
 }

@@ -30,6 +30,11 @@ public class RefundRequestConfiguration : IEntityTypeConfiguration<RefundRequest
             .HasForeignKey<RefundRequest>(r => r.PaymentId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Add CHECK constraints
+        builder.HasCheckConstraint(
+            "CK_RefundRequest_RefundAmount_Positive",
+            "\"RefundAmount\" > 0");
+
         builder.ToTable("RefundRequests");
     }
 }

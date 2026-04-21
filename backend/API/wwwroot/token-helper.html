@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Flight API - JWT Token Helper</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 500px;
+            padding: 40px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 24px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            transition: border-color 0.3s;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        button {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .btn-login {
+            background: #667eea;
+            color: white;
+        }
+        .btn-login:hover {
+            background: #5568d3;
+        }
+        .btn-copy {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-copy:hover {
+            background: #45a049;
+        }
+        .btn-clear {
+            background: #f44336;
+            color: white;
+        }
+        .btn-clear:hover {
+            background: #da190b;
+        }
+        .status {
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 20px;
+            font-size: 14px;
+            display: none;
+        }
+        .status.success {
+            display: block;
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            display: block;
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .credentials {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+        .credentials-title {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        .credential-item {
+            margin: 5px 0;
+            color: #666;
+        }
+        code {
+            background: #fff;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✈️ Flight Booking API</h1>
+        <p class="subtitle">JWT Token Generator & Validator</p>
+
+        <div class="credentials">
+            <div class="credentials-title">📌 Test Credentials:</div>
+            <div class="credential-item"><strong>Admin:</strong> <code>admin@flightbooking.vn</code> / <code>Admin@123456</code></div>
+            <div class="credential-item"><strong>User:</strong> <code>user1@gmail.com</code> / <code>User1@123456</code></div>
+        </div>
+
+        <form onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" value="admin@flightbooking.vn" required>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" value="Admin@123456" required>
+            </div>
+
+            <button type="submit" class="btn-login">🔐 Login & Get Token</button>
+        </form>
+
+        <div class="form-group">
+            <label for="token">JWT Token:</label>
+            <textarea id="token" readonly placeholder="Token will appear here after login..."></textarea>
+        </div>
+
+        <div class="button-group">
+            <button onclick="copyToken()" class="btn-copy">📋 Copy Token</button>
+            <button onclick="clearToken()" class="btn-clear">✕ Clear</button>
+        </div>
+
+        <div id="status" class="status"></div>
+
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd;">
+            <p style="color: #666; font-size: 13px; margin-bottom: 10px;">
+                📖 <strong>How to use:</strong>
+            </p>
+            <ol style="color: #666; font-size: 13px; margin-left: 20px;">
+                <li>Enter email & password</li>
+                <li>Click "Login & Get Token"</li>
+                <li>Copy the token</li>
+                <li>Use it in API requests: <code>Authorization: Bearer &lt;token&gt;</code></li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        async function handleLogin(event) {
+            event.preventDefault();
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const statusDiv = document.getElementById('status');
+
+            try {
+                const response = await fetch('/api/v1/Users/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('token').value = data.token;
+                    showStatus('✓ Login successful! Token copied to clipboard.', 'success');
+                    // Auto copy to clipboard
+                    navigator.clipboard.writeText(data.token);
+                } else {
+                    const error = await response.text();
+                    showStatus('✕ Login failed: ' + error, 'error');
+                }
+            } catch (error) {
+                showStatus('✕ Error: ' + error.message, 'error');
+            }
+        }
+
+        function copyToken() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                showStatus('✕ No token to copy', 'error');
+                return;
+            }
+
+            const tokenWithBearer = 'Bearer ' + token;
+            navigator.clipboard.writeText(tokenWithBearer).then(() => {
+                showStatus('✓ Token copied to clipboard with "Bearer" prefix!', 'success');
+            }).catch(err => {
+                showStatus('✕ Failed to copy: ' + err, 'error');
+            });
+        }
+
+        function clearToken() {
+            document.getElementById('token').value = '';
+            document.getElementById('email').value = 'admin@flightbooking.vn';
+            document.getElementById('password').value = 'Admin@123456';
+            document.getElementById('status').style.display = 'none';
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+        }
+
+        // Auto-login on load if token exists in localStorage
+        window.addEventListener('load', () => {
+            const savedToken = localStorage.getItem('api-token');
+            if (savedToken) {
+                document.getElementById('token').value = savedToken;
+            }
+        });
+
+        // Save token to localStorage when changed
+        document.getElementById('token').addEventListener('change', () => {
+            localStorage.setItem('api-token', document.getElementById('token').value);
+        });
+    </script>
+</body>
+</html>

@@ -36,18 +36,22 @@ public class JwtAuthenticationHandler : AuthenticationHandler<AuthenticationSche
         {
             // Extract token from Authorization header
             var authHeader = Request.Headers.Authorization.ToString();
-            
+            _logger.LogInformation("Authorization Header: {AuthHeader}", authHeader);
+
             if (string.IsNullOrEmpty(authHeader))
             {
+                _logger.LogWarning("No Authorization header found");
                 return Task.FromResult(AuthenticateResult.NoResult());
             }
 
             if (!authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             {
+                _logger.LogWarning("Invalid authorization header format: {AuthHeader}", authHeader);
                 return Task.FromResult(AuthenticateResult.Fail("Invalid authorization header format"));
             }
 
             var token = authHeader.Substring("Bearer ".Length).Trim();
+            _logger.LogInformation("Extracted token (first 50 chars): {Token}...", token.Substring(0, Math.Min(50, token.Length)));
 
             // Validate token using JwtTokenService
             var principal = _jwtTokenService.ValidateToken(token);
@@ -58,13 +62,16 @@ public class JwtAuthenticationHandler : AuthenticationHandler<AuthenticationSche
                 return Task.FromResult(AuthenticateResult.Fail("Invalid or expired token"));
             }
 
+            _logger.LogInformation("Token validated successfully. Principal claims: {Claims}", 
+                string.Join(", ", principal.Claims.Select(c => $"{c.Type}={c.Value}")));
+
             // Create authentication ticket
             var ticket = new AuthenticationTicket(principal, Scheme.Name);
             return Task.FromResult(AuthenticateResult.Success(ticket));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error authenticating request");
+            _logger.LogError(ex, "Error authenticating request: {Message}", ex.Message);
             return Task.FromResult(AuthenticateResult.Fail("Authentication failed"));
         }
     }

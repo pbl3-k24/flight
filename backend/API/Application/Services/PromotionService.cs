@@ -1,5 +1,6 @@
 namespace API.Application.Services;
 
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
 using Microsoft.Extensions.Logging;

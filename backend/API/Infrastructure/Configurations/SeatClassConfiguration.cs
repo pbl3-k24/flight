@@ -41,6 +41,15 @@ public class SeatClassConfiguration : IEntityTypeConfiguration<SeatClass>
             .HasForeignKey(rp => rp.SeatClassId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // Add CHECK constraints
+        builder.HasCheckConstraint(
+            "CK_SeatClass_RefundPercent_Valid",
+            "\"RefundPercent\" >= 0 AND \"RefundPercent\" <= 100");
+
+        builder.HasCheckConstraint(
+            "CK_SeatClass_ChangeFee_NonNegative",
+            "\"ChangeFee\" >= 0");
+
         builder.ToTable("SeatClasses");
     }
 }

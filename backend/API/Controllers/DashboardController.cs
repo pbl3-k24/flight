@@ -2,6 +2,7 @@ namespace API.Controllers;
 
 using API.Application.Dtos.Dashboard;
 using API.Application.Dtos.Logging;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Application.Services;
 using Microsoft.AspNetCore.Authorization;

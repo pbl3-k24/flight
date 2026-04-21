@@ -1,6 +1,7 @@
 namespace API.Controllers;
 
 using API.Application.Dtos.Notification;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Application.Services;
 using Microsoft.AspNetCore.Authorization;

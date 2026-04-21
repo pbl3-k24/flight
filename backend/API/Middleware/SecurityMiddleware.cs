@@ -1,6 +1,7 @@
 namespace API.Middleware;
 
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 
 public class RequestLoggingMiddleware
@@ -92,7 +93,9 @@ public class RateLimitingMiddleware
 {
     private readonly RequestDelegate _next;
     private readonly ILogger<RateLimitingMiddleware> _logger;
-    private static readonly Dictionary<string, RateLimitData> IpRequests = new();
+    // FIX: Use ConcurrentDictionary for thread-safe access
+    private static readonly ConcurrentDictionary<string, RateLimitData> IpRequests 
+        = new ConcurrentDictionary<string, RateLimitData>();
     private const int MaxRequests = 100;
     private const int WindowSeconds = 60;
 
@@ -105,33 +108,44 @@ public class RateLimitingMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        var now = DateTime.UtcNow;
 
-        if (!IpRequests.ContainsKey(ipAddress))
-        {
-            IpRequests[ipAddress] = new RateLimitData { Count = 1, ResetTime = DateTime.UtcNow.AddSeconds(WindowSeconds) };
-        }
-        else
-        {
-            var data = IpRequests[ipAddress];
-
-            if (DateTime.UtcNow > data.ResetTime)
+        // Thread-safe AddOrUpdate operation
+        var limitData = IpRequests.AddOrUpdate(
+            ipAddress,
+            new RateLimitData 
+            { 
+                Count = 1, 
+                ResetTime = now.AddSeconds(WindowSeconds) 
+            },
+            (key, existingData) =>
             {
-                data.Count = 1;
-                data.ResetTime = DateTime.UtcNow.AddSeconds(WindowSeconds);
-            }
-            else
-            {
-                data.Count++;
-
-                if (data.Count > MaxRequests)
+                // Check if window expired
+                if (now > existingData.ResetTime)
                 {
-                    _logger.LogWarning("Rate limit exceeded for IP: {IpAddress}", ipAddress);
-                    context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-                    context.Response.Headers.Add("Retry-After", WindowSeconds.ToString());
-                    await context.Response.WriteAsJsonAsync(new { message = "Rate limit exceeded" });
-                    return;
+                    return new RateLimitData 
+                    { 
+                        Count = 1, 
+                        ResetTime = now.AddSeconds(WindowSeconds) 
+                    };
                 }
+
+                // Increment count
+                existingData.Count++;
+                return existingData;
             }
+        );
+
+        // Check if limit exceeded
+        if (limitData.Count > MaxRequests)
+        {
+            _logger.LogWarning("Rate limit exceeded for IP: {IpAddress}. Requests: {Count}", 
+                ipAddress, limitData.Count);
+
+            context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            context.Response.Headers.Add("Retry-After", WindowSeconds.ToString());
+            await context.Response.WriteAsJsonAsync(new { message = "Rate limit exceeded. Please try again later." });
+            return;
         }
 
         await _next(context);

@@ -1,6 +1,7 @@
 namespace API.Application.Services;
 
 using API.Application.Dtos.Dashboard;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
 using Microsoft.Extensions.Logging;

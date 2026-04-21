@@ -47,6 +47,22 @@ public class UserRepository : IUserRepository
         }
     }
 
+    public async Task<User?> GetByEmailWithRolesAsync(string email)
+    {
+        try
+        {
+            return await _context.Users
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting user with roles by email {Email}", email);
+            throw;
+        }
+    }
+
     public async Task<User?> GetWithRolesAsync(int id)
     {
         try

@@ -1,6 +1,7 @@
 namespace API.Application.Services;
 
 using API.Application.Dtos.Search;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using Microsoft.Extensions.Logging;
 

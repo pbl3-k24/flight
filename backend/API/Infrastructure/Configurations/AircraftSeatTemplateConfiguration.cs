@@ -29,6 +29,15 @@ public class AircraftSeatTemplateConfiguration : IEntityTypeConfiguration<Aircra
 
         builder.HasIndex(a => new { a.AircraftId, a.SeatClassId }).IsUnique();
 
+        // Add CHECK constraints
+        builder.HasCheckConstraint(
+            "CK_AircraftSeatTemplate_DefaultSeatCount_Positive",
+            "\"DefaultSeatCount\" > 0");
+
+        builder.HasCheckConstraint(
+            "CK_AircraftSeatTemplate_DefaultBasePrice_Positive",
+            "\"DefaultBasePrice\" > 0");
+
         builder.ToTable("AircraftSeatTemplates");
     }
 }

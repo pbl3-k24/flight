@@ -34,6 +34,19 @@ public class RouteConfiguration : IEntityTypeConfiguration<Route>
             .HasForeignKey(f => f.RouteId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Add CHECK constraints
+        builder.HasCheckConstraint(
+            "CK_Route_DistanceKm_Positive",
+            "\"DistanceKm\" > 0");
+
+        builder.HasCheckConstraint(
+            "CK_Route_EstimatedDurationMinutes_Positive",
+            "\"EstimatedDurationMinutes\" > 0");
+
+        builder.HasCheckConstraint(
+            "CK_Route_DifferentAirports",
+            "\"DepartureAirportId\" != \"ArrivalAirportId\"");
+
         builder.ToTable("Routes");
     }
 }

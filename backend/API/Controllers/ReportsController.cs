@@ -1,6 +1,7 @@
 namespace API.Controllers;
 
 using API.Application.Dtos.Reporting;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

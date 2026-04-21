@@ -1,6 +1,7 @@
 namespace API.Application.Services;
 
 using API.Application.Dtos.Admin;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
 using Microsoft.Extensions.Logging;
@@ -158,9 +159,15 @@ public class FlightAdminService : IFlightAdminService
             var flights = await _flightRepository.GetAllAsync();
             var responses = new List<FlightManagementResponse>();
 
-            foreach (var flight in flights.Skip((page - 1) * pageSize).Take(pageSize))
+            if (flights != null)
             {
-                responses.Add(await BuildFlightResponseAsync(flight));
+                foreach (var flight in flights.Skip((page - 1) * pageSize).Take(pageSize))
+                {
+                    if (flight != null)
+                    {
+                        responses.Add(await BuildFlightResponseAsync(flight));
+                    }
+                }
             }
 
             return responses;

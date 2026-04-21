@@ -8,12 +8,40 @@ using API.Infrastructure.Services;
 using API.Middleware;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddOpenApi();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    // JWT Bearer token configuration
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "Enter JWT Bearer token"
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+
+    // Add operation filter to apply Bearer token to all endpoints
+    options.OperationFilter<API.Infrastructure.Swagger.AuthorizeOperationFilter>();
+});
 builder.Services.AddControllers();
 builder.Services.AddHttpClient(); // Add HttpClient for payment providers
 
@@ -79,19 +107,19 @@ builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepo
 // Phase 2-6 repositories (temporary placeholders - need real implementation)
 // TODO: Implement all repositories with actual database logic
 #pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable reference type
-builder.Services.AddScoped<IFlightRepository>(sp => null!);
+builder.Services.AddScoped<IFlightRepository, FlightRepository>();
 builder.Services.AddScoped<IBookingRepository>(sp => null!);
-builder.Services.AddScoped<IFlightSeatInventoryRepository>(sp => null!);
-builder.Services.AddScoped<IPromotionRepository>(sp => null!);
+builder.Services.AddScoped<IFlightSeatInventoryRepository, FlightSeatInventoryRepository>();
+builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IPaymentRepository>(sp => null!);
 builder.Services.AddScoped<ITicketRepository>(sp => null!);
 builder.Services.AddScoped<IRefundRequestRepository>(sp => null!);
 builder.Services.AddScoped<IAuditLogRepository>(sp => null!);
 builder.Services.AddScoped<INotificationLogRepository>(sp => null!);
 builder.Services.AddScoped<IRoleRepository>(sp => null!);
-builder.Services.AddScoped<IAirportRepository>(sp => null!);
-builder.Services.AddScoped<IRouteRepository>(sp => null!);
-builder.Services.AddScoped<IAircraftRepository>(sp => null!);
+builder.Services.AddScoped<IAirportRepository, AirportRepository>();
+builder.Services.AddScoped<IRouteRepository, RouteRepository>();
+builder.Services.AddScoped<IAircraftRepository, AircraftRepository>();
 builder.Services.AddScoped<ISeatClassRepository>(sp => null!);
 builder.Services.AddScoped<IBookingPassengerRepository>(sp => null!);
 #pragma warning restore CS8600
@@ -118,9 +146,13 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.InstanceName = "flight-booking:";
 });
 
-// Configure Authorization (using custom JWT authentication handler)
-builder.Services.AddAuthentication("JWT")
-    .AddScheme<AuthenticationSchemeOptions, JwtAuthenticationHandler>("JWT", null);
+// Configure JWT Bearer authentication using Microsoft.AspNetCore.Authentication.JwtBearer
+var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key not configured");
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+var jwtAudience = builder.Configuration["Jwt:Audience"];
+
+builder.Services.AddAuthentication("Bearer")
+    .AddScheme<AuthenticationSchemeOptions, JwtAuthenticationHandler>("Bearer", null);
 
 // Configure Authorization policies
 builder.Services.AddAuthorization();
@@ -164,24 +196,43 @@ using (var scope = app.Services.CreateScope())
         logger.LogInformation("Seeding sample data...");
         await DbInitializer.InitializeDatabaseAsync(dbContext);
         logger.LogInformation("Sample data seeding completed.");
+
+        // Add additional search test data in development mode
+        if (app.Environment.IsDevelopment())
+        {
+            logger.LogInformation("Adding comprehensive search test data...");
+            await SampleDataForSearching.AddSearchTestDataAsync(dbContext);
+        }
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Failed to apply database migrations. Continuing without database...");
-        logger.LogWarning("The application will continue to run, but database operations will fail.");
-        // Don't throw - allow app to start even without database
+        logger.LogError(ex, "Failed to apply database migrations");
+
+        // In PRODUCTION: Fail hard - don't allow app to run without database
+        if (!app.Environment.IsDevelopment())
+        {
+            logger.LogCritical("Database initialization failed in PRODUCTION environment. " +
+                "Application startup aborted to prevent serving with broken database.");
+            throw;  // Re-throw to stop application startup
+        }
+
+        // In DEVELOPMENT: Allow to continue with warning
+        logger.LogWarning("Running in DEVELOPMENT mode without database. " +
+            "Database operations will fail.");
     }
 }
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
     app.UseSwagger();
     app.UseSwaggerUI(options =>
     {
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "Flight Ticket Booking API v1");
         options.RoutePrefix = string.Empty; // Swagger UI at root
+        options.DocExpansion(Swashbuckle.AspNetCore.SwaggerUI.DocExpansion.List);
+        options.DefaultModelsExpandDepth(1);
+        options.EnablePersistAuthorization(); // Lưu token khi đóng browser
     });
 }
 
@@ -192,7 +243,16 @@ app.UseRateLimiting();
 app.UseRequestLogging();
 
 app.UseCors("AllowAll");
-app.UseHttpsRedirection();
+
+// JWT Authentication middleware - MUST be BEFORE UseHttpsRedirection
+// so Authorization header is processed before any redirects
+app.UseJwtAuthenticationMiddleware();
+
+// HTTPS Redirect only in production to avoid stripping Authorization headers in development
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 // Authentication & Authorization middleware (MUST be in this order)
 app.UseAuthentication();

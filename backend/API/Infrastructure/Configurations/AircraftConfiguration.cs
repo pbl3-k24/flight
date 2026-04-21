@@ -36,6 +36,11 @@ public class AircraftConfiguration : IEntityTypeConfiguration<Aircraft>
             .HasForeignKey(f => f.AircraftId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Add CHECK constraints
+        builder.HasCheckConstraint(
+            "CK_Aircraft_TotalSeats_Positive",
+            "\"TotalSeats\" > 0");
+
         builder.ToTable("Aircraft");
     }
 }

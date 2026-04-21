@@ -53,7 +53,10 @@ namespace API.Migrations
                     b.HasIndex("RegistrationNumber")
                         .IsUnique();
 
-                    b.ToTable("Aircraft", (string)null);
+                    b.ToTable("Aircraft", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Aircraft_TotalSeats_Positive", "\"TotalSeats\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.AircraftSeatTemplate", b =>
@@ -84,7 +87,12 @@ namespace API.Migrations
                     b.HasIndex("AircraftId", "SeatClassId")
                         .IsUnique();
 
-                    b.ToTable("AircraftSeatTemplates", (string)null);
+                    b.ToTable("AircraftSeatTemplates", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AircraftSeatTemplate_DefaultBasePrice_Positive", "\"DefaultBasePrice\" > 0");
+
+                            t.HasCheckConstraint("CK_AircraftSeatTemplate_DefaultSeatCount_Positive", "\"DefaultSeatCount\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.Airport", b =>
@@ -246,7 +254,16 @@ namespace API.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Bookings", (string)null);
+                    b.ToTable("Bookings", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Booking_DiscountAmount_NonNegative", "\"DiscountAmount\" >= 0");
+
+                            t.HasCheckConstraint("CK_Booking_FinalAmount_LessThanTotal", "\"FinalAmount\" <= \"TotalAmount\"");
+
+                            t.HasCheckConstraint("CK_Booking_FinalAmount_Positive", "\"FinalAmount\" > 0");
+
+                            t.HasCheckConstraint("CK_Booking_TotalAmount_Positive", "\"TotalAmount\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.BookingPassenger", b =>
@@ -462,7 +479,22 @@ namespace API.Migrations
                     b.HasIndex("FlightId", "SeatClassId")
                         .IsUnique();
 
-                    b.ToTable("FlightSeatInventories", (string)null);
+                    b.ToTable("FlightSeatInventories", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_FlightSeatInventory_AvailableSeats_Valid", "\"AvailableSeats\" >= 0 AND \"AvailableSeats\" <= \"TotalSeats\"");
+
+                            t.HasCheckConstraint("CK_FlightSeatInventory_BasePrice_Positive", "\"BasePrice\" > 0");
+
+                            t.HasCheckConstraint("CK_FlightSeatInventory_CurrentPrice_Positive", "\"CurrentPrice\" > 0");
+
+                            t.HasCheckConstraint("CK_FlightSeatInventory_HeldSeats_NonNegative", "\"HeldSeats\" >= 0");
+
+                            t.HasCheckConstraint("CK_FlightSeatInventory_Seats_Total", "\"AvailableSeats\" + \"HeldSeats\" + \"SoldSeats\" <= \"TotalSeats\"");
+
+                            t.HasCheckConstraint("CK_FlightSeatInventory_SoldSeats_NonNegative", "\"SoldSeats\" >= 0");
+
+                            t.HasCheckConstraint("CK_FlightSeatInventory_TotalSeats_Positive", "\"TotalSeats\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.NotificationLog", b =>
@@ -595,7 +627,10 @@ namespace API.Migrations
                     b.HasIndex("BookingId")
                         .IsUnique();
 
-                    b.ToTable("Payments", (string)null);
+                    b.ToTable("Payments", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Payment_Amount_Positive", "\"Amount\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.Promotion", b =>
@@ -647,7 +682,12 @@ namespace API.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("Promotions", (string)null);
+                    b.ToTable("Promotions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Promotion_DiscountValue_Positive", "\"DiscountValue\" > 0");
+
+                            t.HasCheckConstraint("CK_Promotion_UsedCount_NonNegative", "\"UsedCount\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.PromotionUsage", b =>
@@ -709,7 +749,14 @@ namespace API.Migrations
 
                     b.HasIndex("SeatClassId");
 
-                    b.ToTable("RefundPolicies", (string)null);
+                    b.ToTable("RefundPolicies", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_RefundPolicy_HoursBeforeDeparture_Positive", "\"HoursBeforeDeparture\" > 0");
+
+                            t.HasCheckConstraint("CK_RefundPolicy_PenaltyFee_NonNegative", "\"PenaltyFee\" >= 0");
+
+                            t.HasCheckConstraint("CK_RefundPolicy_RefundPercent_Valid", "\"RefundPercent\" >= 0 AND \"RefundPercent\" <= 100");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.RefundRequest", b =>
@@ -752,7 +799,10 @@ namespace API.Migrations
                     b.HasIndex("PaymentId")
                         .IsUnique();
 
-                    b.ToTable("RefundRequests", (string)null);
+                    b.ToTable("RefundRequests", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_RefundRequest_RefundAmount_Positive", "\"RefundAmount\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.Role", b =>
@@ -811,7 +861,14 @@ namespace API.Migrations
 
                     b.HasIndex("DepartureAirportId");
 
-                    b.ToTable("Routes", (string)null);
+                    b.ToTable("Routes", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Route_DifferentAirports", "\"DepartureAirportId\" != \"ArrivalAirportId\"");
+
+                            t.HasCheckConstraint("CK_Route_DistanceKm_Positive", "\"DistanceKm\" > 0");
+
+                            t.HasCheckConstraint("CK_Route_EstimatedDurationMinutes_Positive", "\"EstimatedDurationMinutes\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.SeatClass", b =>
@@ -848,7 +905,12 @@ namespace API.Migrations
                     b.HasIndex("Code")
                         .IsUnique();
 
-                    b.ToTable("SeatClasses", (string)null);
+                    b.ToTable("SeatClasses", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SeatClass_ChangeFee_NonNegative", "\"ChangeFee\" >= 0");
+
+                            t.HasCheckConstraint("CK_SeatClass_RefundPercent_Valid", "\"RefundPercent\" >= 0 AND \"RefundPercent\" <= 100");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.Ticket", b =>

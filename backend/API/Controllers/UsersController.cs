@@ -1,11 +1,11 @@
 namespace API.Controllers;
 
 using API.Application.Dtos.Auth;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
-using API.Application.Services;
+using API.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 [ApiController]
 [Route("api/v1/[controller]")]
@@ -24,28 +24,16 @@ public class UsersController : ControllerBase
 
     /// <summary>
     /// Registers a new user.
+    /// Sends verification email with code to user's email address.
     /// </summary>
     [HttpPost("register")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AuthResponse>> RegisterAsync([FromBody] RegisterDto dto)
     {
-        try
-        {
-            _logger.LogInformation("User registration attempt for email: {Email}", dto.Email);
-            var response = await _authService.RegisterAsync(dto);
-            return Created($"api/v1/users/{response.UserId}", new { success = true, data = response });
-        }
-        catch (ValidationException ex)
-        {
-            _logger.LogWarning("Registration validation failed: {Message}", ex.Message);
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Registration error");
-            return StatusCode(500, new { message = "An error occurred during registration" });
-        }
+        _logger.LogInformation("User registration attempt");
+        var response = await _authService.RegisterAsync(dto);
+        return Created($"api/v1/users/{response.UserId}", new { success = true, data = response });
     }
 
     /// <summary>
@@ -56,71 +44,24 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AuthResponse>> LoginAsync([FromBody] LoginDto dto)
     {
-        try
-        {
-            _logger.LogInformation("Login attempt for email: {Email}", dto.Email);
-            var response = await _authService.LoginAsync(dto);
-            return Ok(response);
-        }
-        catch (NotFoundException ex)
-        {
-            _logger.LogWarning("Login failed: {Message}", ex.Message);
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (ValidationException ex)
-        {
-            _logger.LogWarning("Login validation failed: {Message}", ex.Message);
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Login error");
-            return StatusCode(500, new { message = "An error occurred during login" });
-        }
+        _logger.LogInformation("Login attempt");
+        var response = await _authService.LoginAsync(dto);
+        return Ok(response);
     }
 
     /// <summary>
     /// Verifies user email with the provided verification code.
+    /// No authentication required - code is enough to verify.
+    /// Flow: User registers → Receives email with code → Clicks /verify-email?code=abc123
     /// </summary>
     [HttpPost("verify-email")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> VerifyEmailAsync([FromQuery] string code)
     {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(code))
-            {
-                return BadRequest(new { message = "Verification code is required" });
-            }
-
-            // In a real scenario, get userId from the token or request
-            // For now, we extract from claims if authenticated
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userIdClaim))
-            {
-                return Unauthorized(new { message = "User not authenticated" });
-            }
-
-            _logger.LogInformation("Email verification attempt for user: {UserId}", userIdClaim);
-            await _authService.VerifyEmailAsync(userIdClaim, code);
-            return Ok(new { message = "Email verified successfully" });
-        }
-        catch (NotFoundException ex)
-        {
-            _logger.LogWarning("Email verification failed: {Message}", ex.Message);
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (ValidationException ex)
-        {
-            _logger.LogWarning("Email verification validation failed: {Message}", ex.Message);
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Email verification error");
-            return StatusCode(500, new { message = "An error occurred during email verification" });
-        }
+        _logger.LogInformation("Email verification request received");
+        await _authService.VerifyEmailAsync(null!, code);
+        return Ok(new { message = "Email verified successfully" });
     }
 
     /// <summary>
@@ -133,89 +74,38 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> ChangePasswordAsync([FromBody] ChangePasswordDto dto)
     {
-        try
-        {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
-            {
-                return Unauthorized(new { message = "Invalid user context" });
-            }
-
-            _logger.LogInformation("Password change attempt for user: {UserId}", userId);
-            await _authService.ChangePasswordAsync(userId, dto);
-            return Ok(new { message = "Password changed successfully" });
-        }
-        catch (ValidationException ex)
-        {
-            _logger.LogWarning("Password change validation failed: {Message}", ex.Message);
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (NotFoundException ex)
-        {
-            _logger.LogWarning("Password change failed: {Message}", ex.Message);
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Password change error");
-            return StatusCode(500, new { message = "An error occurred while changing password" });
-        }
+        var userId = User.GetUserIdOrThrow();
+        _logger.LogInformation("Password change request for authenticated user");
+        await _authService.ChangePasswordAsync(userId, dto);
+        return Ok(new { message = "Password changed successfully" });
     }
 
     /// <summary>
     /// Requests a password reset for the given email.
+    /// Returns success regardless of whether account exists (prevents email enumeration).
     /// </summary>
     [HttpPost("forgot-password")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> ForgotPasswordAsync([FromBody] ForgotPasswordDto dto)
     {
-        try
-        {
-            _logger.LogInformation("Password reset requested for email: {Email}", dto.Email);
-            await _authService.RequestPasswordResetAsync(dto.Email);
-            // Always return success to prevent email enumeration
-            return Ok(new { message = "If an account with that email exists, a password reset link has been sent" });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Password reset request error");
-            return StatusCode(500, new { message = "An error occurred while processing your request" });
-        }
+        _logger.LogInformation("Password reset request");
+        await _authService.RequestPasswordResetAsync(dto.Email);
+        // Always return success to prevent email enumeration attacks
+        return Ok(new { message = "If an account with that email exists, a password reset link has been sent" });
     }
 
     /// <summary>
     /// Resets the password using a reset code.
+    /// No authentication required - code is enough to reset.
+    /// Flow: User requests reset → Receives email with code → Calls /reset-password with code + new password
     /// </summary>
     [HttpPost("reset-password")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ResetPasswordAsync([FromBody] ResetPasswordDto dto)
     {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(dto.Code))
-            {
-                return BadRequest(new { message = "Reset code is required" });
-            }
-
-            _logger.LogInformation("Password reset attempt with code: {Code}", dto.Code);
-            await _authService.ResetPasswordAsync(dto.Code, dto.NewPassword);
-            return Ok(new { message = "Password reset successfully" });
-        }
-        catch (NotFoundException ex)
-        {
-            _logger.LogWarning("Password reset failed: {Message}", ex.Message);
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (ValidationException ex)
-        {
-            _logger.LogWarning("Password reset validation failed: {Message}", ex.Message);
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Password reset error");
-            return StatusCode(500, new { message = "An error occurred while resetting password" });
-        }
+        _logger.LogInformation("Password reset request with code");
+        await _authService.ResetPasswordAsync(dto.Code, dto.NewPassword);
+        return Ok(new { message = "Password reset successfully" });
     }
 }

@@ -1,6 +1,7 @@
 namespace API.Application.Services;
 
 using API.Application.Dtos.RealTime;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using Microsoft.Extensions.Logging;
 
