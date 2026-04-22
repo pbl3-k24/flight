@@ -5,6 +5,7 @@ using API.Infrastructure.ExternalServices;
 using API.Infrastructure.Repositories;
 using API.Infrastructure.Security;
 using API.Infrastructure.Services;
+using API.Infrastructure.UnitOfWork;
 using API.Middleware;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication;
@@ -105,24 +106,25 @@ builder.Services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationT
 builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
 
 // Phase 2-6 repositories (temporary placeholders - need real implementation)
-// TODO: Implement all repositories with actual database logic
-#pragma warning disable CS8600 // Converting null literal or possible null value to non-nullable reference type
+// Repository registrations - all with actual implementations
 builder.Services.AddScoped<IFlightRepository, FlightRepository>();
-builder.Services.AddScoped<IBookingRepository>(sp => null!);
+builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IFlightSeatInventoryRepository, FlightSeatInventoryRepository>();
 builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
-builder.Services.AddScoped<IPaymentRepository>(sp => null!);
-builder.Services.AddScoped<ITicketRepository>(sp => null!);
-builder.Services.AddScoped<IRefundRequestRepository>(sp => null!);
-builder.Services.AddScoped<IAuditLogRepository>(sp => null!);
-builder.Services.AddScoped<INotificationLogRepository>(sp => null!);
-builder.Services.AddScoped<IRoleRepository>(sp => null!);
+builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
+builder.Services.AddScoped<ITicketRepository, TicketRepository>();
+builder.Services.AddScoped<IRefundRequestRepository, RefundRequestRepository>();
+builder.Services.AddScoped<IAuditLogRepository, AuditLogRepository>();
+builder.Services.AddScoped<INotificationLogRepository, NotificationLogRepository>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.AddScoped<IAirportRepository, AirportRepository>();
 builder.Services.AddScoped<IRouteRepository, RouteRepository>();
 builder.Services.AddScoped<IAircraftRepository, AircraftRepository>();
-builder.Services.AddScoped<ISeatClassRepository>(sp => null!);
-builder.Services.AddScoped<IBookingPassengerRepository>(sp => null!);
-#pragma warning restore CS8600
+builder.Services.AddScoped<ISeatClassRepository, SeatClassRepository>();
+builder.Services.AddScoped<IBookingPassengerRepository, BookingPassengerRepository>();
+
+// Unit of Work for atomic transaction operations
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is missing.");

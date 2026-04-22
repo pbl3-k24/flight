@@ -33,19 +33,15 @@ public class FlightSeatInventory
 
     public virtual ICollection<BookingPassenger> BookingPassengers { get; set; } = [];
 
-    // Domain methods
-    public bool CanBook(int count) => AvailableSeats >= count;
+    // Domain methods for seat state machine
+    // State invariant: Available + Held + Sold <= Total (always holds)
 
-    public void ReserveSeats(int count)
-    {
-        if (!CanBook(count))
-            throw new InvalidOperationException($"Cannot reserve {count} seats. Available: {AvailableSeats}");
+    public bool CanHold(int count) => AvailableSeats >= count;
 
-        AvailableSeats -= count;
-        SoldSeats += count;
-        UpdatedAt = DateTime.UtcNow;
-    }
-
+    /// <summary>
+    /// Hold seats when booking is created (Available -> Held)
+    /// Called in: BookingService.CreateBookingAsync()
+    /// </summary>
     public void HoldSeats(int count)
     {
         if (AvailableSeats < count)
@@ -56,12 +52,44 @@ public class FlightSeatInventory
         UpdatedAt = DateTime.UtcNow;
     }
 
-    public void ReleaseHold(int count)
+    /// <summary>
+    /// Convert held seats to sold when payment succeeds (Held -> Sold)
+    /// Called in: PaymentService.ProcessPaymentAsync()
+    /// </summary>
+    public void ConfirmHeldSeats(int count)
+    {
+        if (HeldSeats < count)
+            throw new InvalidOperationException($"Cannot confirm {count} held seats. Held: {HeldSeats}");
+
+        HeldSeats -= count;
+        SoldSeats += count;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Release held seats back to available (Held -> Available)
+    /// Called in: PaymentService when payment fails/expires, BookingService when payment times out
+    /// </summary>
+    public void ReleaseHeldSeats(int count)
     {
         if (HeldSeats < count)
             throw new InvalidOperationException($"Cannot release {count} held seats. Held: {HeldSeats}");
 
         HeldSeats -= count;
+        AvailableSeats += count;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Release sold seats back to available (Sold -> Available)
+    /// Called in: BookingService.CancelBookingAsync() when cancelling confirmed booking
+    /// </summary>
+    public void CancelSoldSeats(int count)
+    {
+        if (SoldSeats < count)
+            throw new InvalidOperationException($"Cannot cancel {count} sold seats. Sold: {SoldSeats}");
+
+        SoldSeats -= count;
         AvailableSeats += count;
         UpdatedAt = DateTime.UtcNow;
     }

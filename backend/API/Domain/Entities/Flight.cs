@@ -41,7 +41,7 @@ public class Flight
     public bool CanBook(int seatClassId, int count)
     {
         var inventory = SeatInventories.FirstOrDefault(si => si.SeatClassId == seatClassId);
-        return inventory?.CanBook(count) ?? false;
+        return inventory?.CanHold(count) ?? false;
     }
 
     public void ReserveSeats(int seatClassId, int count)
@@ -49,7 +49,7 @@ public class Flight
         var inventory = SeatInventories.FirstOrDefault(si => si.SeatClassId == seatClassId);
         if (inventory != null)
         {
-            inventory.ReserveSeats(count);
+            inventory.HoldSeats(count);
         }
     }
 
@@ -58,7 +58,7 @@ public class Flight
         var inventory = SeatInventories.FirstOrDefault(si => si.SeatClassId == seatClassId);
         if (inventory != null)
         {
-            inventory.ReleaseHold(count);
+            inventory.ReleaseHeldSeats(count);
         }
     }
 

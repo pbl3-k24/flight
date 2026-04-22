@@ -21,16 +21,24 @@ public interface IPaymentService
     Task<bool> ProcessPaymentAsync(int paymentId, PaymentCallbackDto callback);
 
     /// <summary>
-    /// Gets payment status.
+    /// Gets payment status with ownership check.
+    /// Only the payment owner or admin can view payment details.
     /// </summary>
     /// <param name="paymentId">Payment ID</param>
+    /// <param name="userId">Current user ID for ownership check</param>
+    /// <param name="isAdmin">Whether user is admin (bypasses ownership check)</param>
     /// <returns>Current payment status</returns>
-    Task<PaymentResponse> GetPaymentStatusAsync(int paymentId);
+    /// <exception cref="UnauthorizedException">Thrown if user is not owner and not admin</exception>
+    Task<PaymentResponse> GetPaymentStatusAsync(int paymentId, int userId, bool isAdmin = false);
 
     /// <summary>
-    /// Gets payment history for a booking.
+    /// Gets payment history for a booking with ownership check.
+    /// Only the booking owner or admin can view payment history.
     /// </summary>
     /// <param name="bookingId">Booking ID</param>
+    /// <param name="userId">Current user ID for ownership check</param>
+    /// <param name="isAdmin">Whether user is admin (bypasses ownership check)</param>
     /// <returns>List of payment attempts</returns>
-    Task<List<PaymentHistoryResponse>> GetPaymentHistoryAsync(int bookingId);
+    /// <exception cref="UnauthorizedException">Thrown if user is not owner and not admin</exception>
+    Task<List<PaymentHistoryResponse>> GetPaymentHistoryAsync(int bookingId, int userId, bool isAdmin = false);
 }

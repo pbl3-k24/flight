@@ -102,14 +102,14 @@ public class FlightSeatInventoryRepository : IFlightSeatInventoryRepository
             var inventory = await _context.FlightSeatInventories.FirstOrDefaultAsync(fsi => fsi.Id == id);
             if (inventory != null && inventory.Version == version)
             {
-                inventory.ReserveSeats(count);
+                inventory.HoldSeats(count);
                 _context.FlightSeatInventories.Update(inventory);
                 await _context.SaveChangesAsync();
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error reserving seats");
+            _logger.LogError(ex, "Error holding seats");
             throw;
         }
     }

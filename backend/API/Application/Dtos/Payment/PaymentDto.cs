@@ -45,6 +45,8 @@ public class PaymentCallbackDto
     public string? Signature { get; set; }
 
     public Dictionary<string, string>? AdditionalData { get; set; }
+
+    public string? RawData { get; set; } // Raw payload for signature verification
 }
 
 public class PaymentHistoryResponse

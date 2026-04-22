@@ -1,19 +1,61 @@
-# COPILOT GLOBAL INSTRUCTIONS
+These rules are mandatory and override any default AI behavior.
+## Clean Code Enforcement Rules
 
-Always follow instruction files in .github/ with this priority order:
+When generating or modifying code, you MUST strictly follow these principles:
 
-1. 09_DONOT_RULES.md
-2. 01_ARCHITECTURE_RULES.md
-3. 02_DATABASE_RULES.md
-4. 03_BACKEND_IMPLEMENTATION_RULES.md
-5. 04_FRONTEND_IMPLEMENTATION_RULES.md
-6. 05_AI_EXECUTION_PROTOCOL.md
-7. 06_VALIDATION_CHECKLIST.md
-8. 07_ERROR_RECOVERY_PROTOCOL.md
-9. 08_CODING_STANDARDS.md
-10. 10_TASK_ROADMAP.md
-11. 00_PROJECT_CONTEXT.md
+### 1. Naming Conventions
 
-Never violate higher-priority instructions.
+* Use meaningful, intention-revealing names.
+* Avoid abbreviations unless universally understood.
+* Variables, functions, and classes must clearly describe their purpose.
 
-Read relevant instruction files before implementing any task.
+### 2. Function Design
+
+* Each function must do ONE thing only.
+* Functions should be small (preferably < 30 lines).
+* Avoid deep nesting (max 2–3 levels).
+
+### 3. Readability
+
+* Code must be self-explanatory without excessive comments.
+* Prefer clarity over cleverness.
+* Maintain consistent formatting and structure.
+
+### 4. Comments
+
+* Do NOT write redundant comments.
+* Only explain "why", not "what".
+* Remove commented-out code.
+
+### 5. Error Handling
+
+* Handle exceptions explicitly.
+* Do not swallow errors silently.
+* Provide meaningful error messages.
+
+### 6. DRY Principle
+
+* Avoid code duplication.
+* Extract reusable logic into functions or modules.
+
+### 7. SOLID Principles
+
+* Follow SOLID where applicable.
+* Ensure proper separation of concerns.
+
+### 8. Dependencies
+
+* Minimize coupling.
+* Use dependency injection where possible.
+
+### 9. Testing Awareness
+
+* Code should be testable.
+* Avoid hard-coded values and side effects.
+
+### 10. Refactoring Requirement
+
+* If existing code is messy, you MUST refactor it before adding new logic.
+* Do not build on top of bad code.
+
+Failure to follow these rules means the code is NOT acceptable.

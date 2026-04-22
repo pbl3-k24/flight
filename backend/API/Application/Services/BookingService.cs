@@ -8,32 +8,25 @@ using Microsoft.Extensions.Logging;
 
 public class BookingService : IBookingService
 {
-    private readonly IBookingRepository _bookingRepository;
-    private readonly IBookingPassengerRepository _passengerRepository;
-    private readonly IFlightSeatInventoryRepository _seatInventoryRepository;
-    private readonly IFlightRepository _flightRepository;
+    private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<BookingService> _logger;
 
     public BookingService(
-        IBookingRepository bookingRepository,
-        IBookingPassengerRepository passengerRepository,
-        IFlightSeatInventoryRepository seatInventoryRepository,
-        IFlightRepository flightRepository,
+        IUnitOfWork unitOfWork,
         ILogger<BookingService> logger)
     {
-        _bookingRepository = bookingRepository;
-        _passengerRepository = passengerRepository;
-        _seatInventoryRepository = seatInventoryRepository;
-        _flightRepository = flightRepository;
-        _logger = logger;
+        _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<BookingResponse> CreateBookingAsync(int userId, CreateBookingDto dto)
     {
         try
         {
+            await _unitOfWork.BeginTransactionAsync();
+
             // 1. Validate flight exists
-            var outboundFlight = await _flightRepository.GetByIdAsync(dto.OutboundFlightId);
+            var outboundFlight = await _unitOfWork.Flights.GetByIdAsync(dto.OutboundFlightId);
             if (outboundFlight == null)
             {
                 throw new NotFoundException("Flight not found");
@@ -46,7 +39,7 @@ public class BookingService : IBookingService
             }
 
             // 3. Validate seats available
-            var outboundInventory = await _seatInventoryRepository.GetByFlightAndSeatClassAsync(
+            var outboundInventory = await _unitOfWork.FlightSeatInventories.GetByFlightAndSeatClassAsync(
                 dto.OutboundFlightId, dto.SeatClassId);
             if (outboundInventory == null || outboundInventory.AvailableSeats < dto.PassengerCount)
             {
@@ -71,7 +64,7 @@ public class BookingService : IBookingService
                 PromotionId = dto.PromotionId
             };
 
-            var createdBooking = await _bookingRepository.CreateAsync(booking);
+            var createdBooking = await _unitOfWork.Bookings.CreateAsync(booking);
 
             // 5. Create passengers
             foreach (var passengerDto in dto.Passengers)
@@ -86,21 +79,24 @@ public class BookingService : IBookingService
                     FlightSeatInventoryId = outboundInventory.Id
                 };
 
-                await _passengerRepository.CreateAsync(passenger);
+                await _unitOfWork.BookingPassengers.CreateAsync(passenger);
             }
 
-            // 6. Reserve seats
-            outboundInventory.HeldSeats += dto.PassengerCount;
-            outboundInventory.AvailableSeats -= dto.PassengerCount;
-            await _seatInventoryRepository.UpdateAsync(outboundInventory);
+            // 6. Hold seats (Available -> Held)
+            outboundInventory.HoldSeats(dto.PassengerCount);
+            await _unitOfWork.FlightSeatInventories.UpdateAsync(outboundInventory);
 
-            _logger.LogInformation("Booking created: {BookingCode}", bookingCode);
+            // Commit transaction - all or nothing
+            await _unitOfWork.CommitAsync();
+
+            _logger.LogInformation("Booking created atomically: {BookingCode}", bookingCode);
 
             return await BuildBookingResponseAsync(createdBooking);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error creating booking");
+            _logger.LogError(ex, "Error creating booking - rolling back transaction");
+            await _unitOfWork.RollbackAsync();
             throw;
         }
     }
@@ -109,7 +105,7 @@ public class BookingService : IBookingService
     {
         try
         {
-            var booking = await _bookingRepository.GetByIdAsync(bookingId);
+            var booking = await _unitOfWork.Bookings.GetByIdAsync(bookingId);
             if (booking == null || booking.UserId != userId)
             {
                 throw new UnauthorizedException("Cannot cancel this booking");
@@ -120,7 +116,7 @@ public class BookingService : IBookingService
                 throw new ValidationException("Only confirmed bookings can be cancelled");
             }
 
-            var flight = await _flightRepository.GetByIdAsync(booking.OutboundFlightId);
+            var flight = await _unitOfWork.Flights.GetByIdAsync(booking.OutboundFlightId);
             var hoursToDeparture = (flight!.DepartureTime - DateTime.UtcNow).TotalHours;
 
             if (hoursToDeparture < 24)
@@ -128,30 +124,32 @@ public class BookingService : IBookingService
                 throw new ValidationException("Cannot cancel within 24 hours of departure");
             }
 
-            // Update booking
-            booking.Status = 3; // Cancelled
-            booking.UpdatedAt = DateTime.UtcNow;
-            await _bookingRepository.UpdateAsync(booking);
-
-            // Release seats
-            var passengers = await _passengerRepository.GetByBookingIdAsync(bookingId);
-            var seatInventory = await _seatInventoryRepository.GetByIdAsync(
+            // Get seat inventory BEFORE updating booking status
+            var passengers = await _unitOfWork.BookingPassengers.GetByBookingIdAsync(bookingId);
+            var seatInventory = await _unitOfWork.FlightSeatInventories.GetByIdAsync(
                 passengers.First().FlightSeatInventoryId);
+
+            // Release seats based on ORIGINAL booking status (before update)
             if (seatInventory != null)
             {
-                if (booking.Status == 1) // Confirmed
+                if (booking.Status == 1) // Confirmed - Sold -> Available
                 {
-                    seatInventory.SoldSeats -= passengers.Count;
+                    seatInventory.CancelSoldSeats(passengers.Count);
                 }
-                else if (booking.Status == 0) // Pending
+                else if (booking.Status == 0) // Pending - Held -> Available
                 {
-                    seatInventory.HeldSeats -= passengers.Count;
+                    seatInventory.ReleaseHeldSeats(passengers.Count);
                 }
-
-                seatInventory.AvailableSeats += passengers.Count;
+                await _unitOfWork.FlightSeatInventories.UpdateAsync(seatInventory);
             }
 
-            _logger.LogInformation("Booking cancelled: {BookingId}", bookingId);
+            // Update booking status AFTER releasing seats
+            booking.Status = 3; // Cancelled
+            booking.UpdatedAt = DateTime.UtcNow;
+            await _unitOfWork.Bookings.UpdateAsync(booking);
+
+            _logger.LogInformation("Booking cancelled: {BookingId} with {PassengerCount} passengers", 
+                bookingId, passengers.Count);
             return true;
         }
         catch (Exception ex)
@@ -165,7 +163,7 @@ public class BookingService : IBookingService
     {
         try
         {
-            var booking = await _bookingRepository.GetByIdAsync(bookingId);
+            var booking = await _unitOfWork.Bookings.GetByIdAsync(bookingId);
             if (booking == null || booking.UserId != userId)
             {
                 throw new UnauthorizedException("Cannot update this booking");
@@ -180,11 +178,11 @@ public class BookingService : IBookingService
             {
                 foreach (var passengerDto in dto.Passengers)
                 {
-                    var passenger = await _passengerRepository.GetByIdAsync(passengerDto.PassengerId);
+                    var passenger = await _unitOfWork.BookingPassengers.GetByIdAsync(passengerDto.PassengerId);
                     if (passenger != null)
                     {
                         passenger.FullName = $"{passengerDto.FirstName} {passengerDto.LastName}";
-                        await _passengerRepository.UpdateAsync(passenger);
+                        await _unitOfWork.BookingPassengers.UpdateAsync(passenger);
                     }
                 }
             }
@@ -203,7 +201,7 @@ public class BookingService : IBookingService
     {
         try
         {
-            var booking = await _bookingRepository.GetByIdAsync(bookingId);
+            var booking = await _unitOfWork.Bookings.GetByIdAsync(bookingId);
             if (booking == null || booking.UserId != userId)
             {
                 throw new UnauthorizedException("Cannot access this booking");
@@ -222,7 +220,7 @@ public class BookingService : IBookingService
     {
         try
         {
-            var bookings = await _bookingRepository.GetByUserIdAsync(userId, page, pageSize);
+            var bookings = await _unitOfWork.Bookings.GetByUserIdAsync(userId, page, pageSize);
             var responses = new List<BookingResponse>();
 
             foreach (var booking in bookings)
@@ -241,8 +239,8 @@ public class BookingService : IBookingService
 
     private async Task<BookingResponse> BuildBookingResponseAsync(Booking booking)
     {
-        var outboundFlight = await _flightRepository.GetByIdAsync(booking.OutboundFlightId);
-        var passengers = await _passengerRepository.GetByBookingIdAsync(booking.Id);
+        var outboundFlight = await _unitOfWork.Flights.GetByIdAsync(booking.OutboundFlightId);
+        var passengers = await _unitOfWork.BookingPassengers.GetByBookingIdAsync(booking.Id);
 
         var statusString = booking.Status switch
         {
@@ -287,7 +285,7 @@ public class BookingService : IBookingService
 
         if (booking.ReturnFlightId.HasValue)
         {
-            var returnFlight = await _flightRepository.GetByIdAsync(booking.ReturnFlightId.Value);
+            var returnFlight = await _unitOfWork.Flights.GetByIdAsync(booking.ReturnFlightId.Value);
             response.ReturnFlight = new FlightBookingDetail
             {
                 FlightId = returnFlight!.Id,
