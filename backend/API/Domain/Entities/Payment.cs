@@ -12,6 +12,8 @@ public class Payment
 
     public decimal Amount { get; set; }
 
+    public string Currency { get; set; } = "VND";
+
     public int Status { get; set; } = 0; // 0=Pending, 1=Completed, 2=Failed, 3=Refunded
 
     public string? TransactionRef { get; set; }
@@ -25,6 +27,17 @@ public class Payment
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
+
+    // Audit properties
+    public int? CreatedBy { get; set; }
+    public int? UpdatedBy { get; set; }
+
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
+    // Concurrency token
+    public int Version { get; set; } = 0;
 
     // Navigation properties
     public virtual Booking Booking { get; set; } = null!;
@@ -53,4 +66,18 @@ public class Payment
     }
 
     public bool CanBeRefunded() => Status == 1; // Only completed payments can be refunded
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }

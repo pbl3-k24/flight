@@ -3,7 +3,7 @@ namespace API.Application.Interfaces;
 public interface IPasswordHasher
 {
     /// <summary>
-    /// Hashes a password using PBKDF2 with SHA256.
+    /// Hashes a password using a secure hashing algorithm.
     /// </summary>
     /// <param name="password">Plain text password</param>
     /// <returns>Hashed password</returns>
@@ -13,7 +13,7 @@ public interface IPasswordHasher
     /// Verifies a password against its hash.
     /// </summary>
     /// <param name="password">Plain text password</param>
-    /// <param name="hash">Password hash</param>
-    /// <returns>True if password matches hash</returns>
-    bool VerifyPassword(string password, string hash);
+    /// <param name="hashedPassword">Hashed password</param>
+    /// <returns>True if password matches</returns>
+    bool VerifyPassword(string password, string hashedPassword);
 }

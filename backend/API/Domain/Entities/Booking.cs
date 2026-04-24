@@ -26,6 +26,8 @@ public class Booking
 
     public decimal FinalAmount { get; set; }
 
+    public string Currency { get; set; } = "VND";
+
     public DateTime? ExpiresAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
@@ -33,6 +35,17 @@ public class Booking
     public DateTime UpdatedAt { get; set; }
 
     public int? PromotionId { get; set; }
+
+    // Audit properties
+    public int? CreatedBy { get; set; }
+    public int? UpdatedBy { get; set; }
+
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
+    // Concurrency token
+    public int Version { get; set; } = 0;
 
     // Navigation properties
     public virtual User User { get; set; } = null!;
@@ -77,4 +90,18 @@ public class Booking
     }
 
     public bool HasExpired(DateTime currentDateTime) => ExpiresAt.HasValue && currentDateTime > ExpiresAt;
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
+        UpdatedAt = DateTime.UtcNow;
+    }
 }

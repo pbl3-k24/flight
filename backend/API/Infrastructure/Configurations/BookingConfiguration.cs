@@ -38,7 +38,29 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
             .HasPrecision(10, 2)
             .IsRequired();
 
+        builder.Property(b => b.Currency)
+            .HasMaxLength(10)
+            .HasDefaultValue("VND")
+            .IsRequired();
+
+        // Audit properties
+        builder.Property(b => b.CreatedBy);
+
+        builder.Property(b => b.UpdatedBy);
+
+        // Soft delete
+        builder.Property(b => b.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(b => b.DeletedAt);
+
+        // Concurrency token
+        builder.Property(b => b.Version)
+            .IsConcurrencyToken()
+            .HasDefaultValue(0);
+
         builder.HasIndex(b => b.BookingCode).IsUnique();
+        builder.HasIndex(b => b.Status);
 
         builder.HasOne(b => b.User)
             .WithMany(u => u.Bookings)
@@ -81,6 +103,22 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
         builder.HasCheckConstraint(
             "CK_Booking_FinalAmount_LessThanTotal",
             "\"FinalAmount\" <= \"TotalAmount\"");
+
+        builder.HasCheckConstraint(
+            "CK_Booking_TripType_Valid",
+            "\"TripType\" IN (0, 1)");
+
+        builder.HasCheckConstraint(
+            "CK_Booking_Status_Valid",
+            "\"Status\" IN (0, 1, 2, 3)");
+
+        builder.HasCheckConstraint(
+            "CK_Booking_ContactEmail_Default",
+            "\"ContactEmail\" IS NOT NULL");
+
+        builder.HasCheckConstraint(
+            "CK_Booking_ContactPhone_Default",
+            "\"ContactPhone\" IS NULL OR \"ContactPhone\" <> ''");
 
         builder.ToTable("Bookings");
     }

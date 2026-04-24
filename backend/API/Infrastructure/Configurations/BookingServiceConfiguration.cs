@@ -22,10 +22,18 @@ public class BookingServiceConfiguration : IEntityTypeConfiguration<BookingServi
             .HasPrecision(10, 2)
             .IsRequired();
 
+        // Soft delete
+        builder.Property(b => b.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(b => b.DeletedAt);
+
         builder.HasOne(b => b.BookingPassenger)
             .WithMany(bp => bp.Services)
             .HasForeignKey(b => b.BookingPassengerId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(b => b.BookingPassengerId);
 
         builder.ToTable("BookingServices");
     }

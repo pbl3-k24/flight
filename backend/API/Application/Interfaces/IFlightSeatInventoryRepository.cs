@@ -12,6 +12,8 @@ public interface IFlightSeatInventoryRepository
 
     Task<FlightSeatInventory?> GetByFlightAndSeatClassAsync(int flightId, int seatClassId);
 
+    Task<bool> TryUpdateWithConcurrencyCheckAsync(int id, Func<FlightSeatInventory, bool> updateAction);
+
     Task<List<FlightSeatInventory>> GetActiveInventoriesAsync();
 
     Task ReserveSeatsAsync(int id, int count, int version);

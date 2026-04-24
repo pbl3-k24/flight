@@ -28,6 +28,12 @@ public class AirportConfiguration : IEntityTypeConfiguration<Airport>
         builder.Property(a => a.IsActive)
             .HasDefaultValue(true);
 
+        // Soft delete
+        builder.Property(a => a.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(a => a.DeletedAt);
+
         builder.HasIndex(a => a.Code).IsUnique();
 
         builder.HasMany(a => a.DepartureRoutes)

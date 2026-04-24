@@ -24,6 +24,12 @@ public class AircraftConfiguration : IEntityTypeConfiguration<Aircraft>
         builder.Property(a => a.IsActive)
             .HasDefaultValue(true);
 
+        // Soft delete
+        builder.Property(a => a.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(a => a.DeletedAt);
+
         builder.HasIndex(a => a.RegistrationNumber).IsUnique();
 
         builder.HasMany(a => a.SeatTemplates)

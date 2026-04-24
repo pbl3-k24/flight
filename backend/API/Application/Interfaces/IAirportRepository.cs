@@ -4,17 +4,15 @@ using API.Domain.Entities;
 
 public interface IAirportRepository
 {
+    Task<Airport?> GetByIdAsync(int id);
+
     Task<Airport?> GetByCodeAsync(string code);
 
-    Task<IEnumerable<Airport>> GetAllActiveAsync();
+    Task<IEnumerable<Airport>> GetAllAsync();
 
     Task<Airport> CreateAsync(Airport airport);
 
     Task UpdateAsync(Airport airport);
-
-    Task<Airport?> GetByIdAsync(int id);
-
-    Task<IEnumerable<Airport>> GetAllAsync();
 
     Task DeleteAsync(int id);
 }

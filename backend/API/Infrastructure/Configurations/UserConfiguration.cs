@@ -30,8 +30,95 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Status)
             .HasDefaultValue(0);
 
+        // Security properties
+        builder.Property(u => u.IsEmailVerified)
+            .HasDefaultValue(false);
+
+        builder.Property(u => u.FailedLoginAttempts)
+            .HasDefaultValue(0);
+
+        builder.Property(u => u.PasswordChangedAt);
+
+        builder.Property(u => u.LastLoginAt);
+
+        builder.Property(u => u.IsTwoFactorEnabled)
+            .HasDefaultValue(false);
+
+        builder.Property(u => u.TwoFactorSecret)
+            .HasMaxLength(500);
+
+        builder.Property(u => u.PhoneNumberVerified)
+            .HasDefaultValue(false);
+
+        // Profile properties
+        builder.Property(u => u.DateOfBirth);
+
+        builder.Property(u => u.Nationality)
+            .HasMaxLength(100);
+
+        builder.Property(u => u.PassportExpiryDate);
+
+        builder.Property(u => u.PassportCountry)
+            .HasMaxLength(100);
+
+        builder.Property(u => u.Gender)
+            .HasMaxLength(10);
+
+        builder.Property(u => u.MaritalStatus)
+            .HasMaxLength(50);
+
+        builder.Property(u => u.Occupation)
+            .HasMaxLength(255);
+
+        builder.Property(u => u.Address)
+            .HasMaxLength(500);
+
+        builder.Property(u => u.City)
+            .HasMaxLength(100);
+
+        builder.Property(u => u.Country)
+            .HasMaxLength(100);
+
+        builder.Property(u => u.ZipCode)
+            .HasMaxLength(20);
+
+        builder.Property(u => u.PreferredLanguage)
+            .HasMaxLength(10);
+
+        builder.Property(u => u.PreferredCurrency)
+            .HasMaxLength(10);
+
+        builder.Property(u => u.TimeZone)
+            .HasMaxLength(100);
+
+        builder.Property(u => u.MarketingOptIn)
+            .HasDefaultValue(false);
+
+        builder.Property(u => u.NewsletterSubscription)
+            .HasDefaultValue(false);
+
+        builder.Property(u => u.NotificationPreferences)
+            .HasColumnType("jsonb");
+
+        // Audit properties
+        builder.Property(u => u.CreatedBy);
+
+        builder.Property(u => u.UpdatedBy);
+
+        // Soft delete
+        builder.Property(u => u.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(u => u.DeletedAt);
+
+        // Concurrency token
+        builder.Property(u => u.Version)
+            .IsConcurrencyToken()
+            .HasDefaultValue(0);
+
         builder.HasIndex(u => u.Email).IsUnique();
         builder.HasIndex(u => u.GoogleId).IsUnique();
+        builder.HasIndex(u => u.Status);
 
         builder.HasMany(u => u.Bookings)
             .WithOne(b => b.User)

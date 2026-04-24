@@ -14,6 +14,10 @@ public class Route
 
     public bool IsActive { get; set; } = true;
 
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
     // Navigation properties
     public virtual Airport DepartureAirport { get; set; } = null!;
 
@@ -24,5 +28,17 @@ public class Route
     // Domain methods
     public double GetDurationInHours() => EstimatedDurationMinutes / 60.0;
 
-    public bool IsValid() => DepartureAirportId != ArrivalAirportId;
+    public bool IsValid() => DepartureAirportId != ArrivalAirportId && !IsDeleted;
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
+    }
 }

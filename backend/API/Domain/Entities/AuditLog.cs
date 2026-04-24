@@ -18,6 +18,11 @@ public class AuditLog
 
     public DateTime CreatedAt { get; set; }
 
+    // Additional audit properties
+    public string? IpAddress { get; set; }
+    public string? UserAgent { get; set; }
+    public string? SessionId { get; set; }
+
     // Navigation properties
     public virtual User? Actor { get; set; }
 

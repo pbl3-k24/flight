@@ -34,6 +34,12 @@ public class FlightSeatInventoryConfiguration : IEntityTypeConfiguration<FlightS
             .HasDefaultValue(0)
             .IsConcurrencyToken();
 
+        // Soft delete
+        builder.Property(f => f.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(f => f.DeletedAt);
+
         builder.HasOne(f => f.Flight)
             .WithMany(fl => fl.SeatInventories)
             .HasForeignKey(f => f.FlightId)

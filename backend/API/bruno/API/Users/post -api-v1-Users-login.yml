@@ -12,10 +12,15 @@ http:
     type: json
     data: |-
       {
-        "email": "",
-        "password": ""
+        "email": "admin@flightbooking.vn",
+        "password": "Admin@123456"
       }
   auth: inherit
+
+runtime:
+  variables:
+    - name: baseUrl
+      value: http://localhost:5042
 
 settings:
   encodeUrl: true

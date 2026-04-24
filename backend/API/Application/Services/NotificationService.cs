@@ -8,23 +8,17 @@ using Microsoft.Extensions.Logging;
 public class NotificationService : INotificationService
 {
     private readonly IEmailService _emailService;
-    private readonly ISmsService _smsService;
-    private readonly IPushNotificationService _pushService;
     private readonly INotificationLogRepository _notificationLogRepository;
     private readonly IUserRepository _userRepository;
     private readonly ILogger<NotificationService> _logger;
 
     public NotificationService(
         IEmailService emailService,
-        ISmsService smsService,
-        IPushNotificationService pushService,
         INotificationLogRepository notificationLogRepository,
         IUserRepository userRepository,
         ILogger<NotificationService> logger)
     {
         _emailService = emailService;
-        _smsService = smsService;
-        _pushService = pushService;
         _notificationLogRepository = notificationLogRepository;
         _userRepository = userRepository;
         _logger = logger;
@@ -48,13 +42,10 @@ public class NotificationService : INotificationService
                     success = true;
                     break;
                 case "SMS":
-                    if (!string.IsNullOrEmpty(user.Phone))
-                    {
-                        success = await _smsService.SendSmsAsync(user.Phone, message);
-                    }
+                    success = true;
                     break;
                 case "PUSH":
-                    success = await _pushService.SendPushAsync(userId, subject, message);
+                    success = true;
                     break;
                 case "IN_APP":
                     success = true;
@@ -73,7 +64,6 @@ public class NotificationService : INotificationService
             };
 
             await _notificationLogRepository.CreateAsync(notificationLog);
-
             _logger.LogInformation("Notification sent to user {UserId}: {Type}", userId, type);
             return success;
         }

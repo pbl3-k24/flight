@@ -19,6 +19,10 @@ public class PasswordResetTokenConfiguration : IEntityTypeConfiguration<Password
             .HasForeignKey(p => p.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasCheckConstraint(
+            "CK_PasswordResetToken_UsedAt_Valid",
+            "\"UsedAt\" IS NULL OR \"UsedAt\" <= \"ExpiresAt\"");
+
         builder.ToTable("PasswordResetTokens");
     }
 }

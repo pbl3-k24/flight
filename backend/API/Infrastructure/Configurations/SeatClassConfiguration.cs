@@ -24,6 +24,12 @@ public class SeatClassConfiguration : IEntityTypeConfiguration<SeatClass>
         builder.Property(s => s.ChangeFee)
             .HasPrecision(10, 2);
 
+        // Soft delete
+        builder.Property(s => s.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(s => s.DeletedAt);
+
         builder.HasIndex(s => s.Code).IsUnique();
 
         builder.HasMany(s => s.AircraftSeatTemplates)

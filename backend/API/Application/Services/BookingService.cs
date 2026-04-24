@@ -1,4 +1,4 @@
-namespace API.Application.Services;
+                                     namespace API.Application.Services;
 
 using API.Application.Dtos.Booking;
 using API.Application.Exceptions;
@@ -46,18 +46,20 @@ public class BookingService : IBookingService
                 throw new ValidationException("Insufficient seats available");
             }
 
-            // 4. Create booking
-            var bookingCode = GenerateBookingCode();
+            // 4. Calculate total amount with seat class pricing
+            var totalAmount = outboundInventory.CurrentPrice * dto.PassengerCount;
+
+            // 5. Create booking with expiration
             var booking = new Booking
             {
                 UserId = userId,
-                BookingCode = bookingCode,
+                BookingCode = GenerateBookingCode(),
                 OutboundFlightId = dto.OutboundFlightId,
                 ReturnFlightId = dto.ReturnFlightId,
-                Status = 0, // Pending
-                ContactEmail = "", // Will be set from user
-                TotalAmount = outboundInventory.CurrentPrice * dto.PassengerCount,
-                FinalAmount = outboundInventory.CurrentPrice * dto.PassengerCount,
+                Status = (int)BookingStatus.Pending,
+                ContactEmail = dto.ContactEmail ?? "",
+                TotalAmount = totalAmount,
+                FinalAmount = totalAmount,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
                 ExpiresAt = DateTime.UtcNow.AddMinutes(15),
@@ -66,30 +68,29 @@ public class BookingService : IBookingService
 
             var createdBooking = await _unitOfWork.Bookings.CreateAsync(booking);
 
-            // 5. Create passengers
+            // 6. Create passengers
             foreach (var passengerDto in dto.Passengers)
             {
-                var fullName = $"{passengerDto.FirstName} {passengerDto.LastName}";
                 var passenger = new BookingPassenger
                 {
                     BookingId = createdBooking.Id,
-                    FullName = fullName,
+                    FullName = $"{passengerDto.FirstName} {passengerDto.LastName}".Trim(),
                     DateOfBirth = passengerDto.DateOfBirth,
-                    PassengerType = 0, // Adult - would need logic to determine
+                    PassengerType = (int)PassengerType.Adult,
                     FlightSeatInventoryId = outboundInventory.Id
                 };
 
                 await _unitOfWork.BookingPassengers.CreateAsync(passenger);
             }
 
-            // 6. Hold seats (Available -> Held)
+            // 7. Hold seats atomically within transaction
             outboundInventory.HoldSeats(dto.PassengerCount);
             await _unitOfWork.FlightSeatInventories.UpdateAsync(outboundInventory);
 
             // Commit transaction - all or nothing
             await _unitOfWork.CommitAsync();
 
-            _logger.LogInformation("Booking created atomically: {BookingCode}", bookingCode);
+            _logger.LogInformation("Booking created atomically: {BookingCode}", booking.BookingCode);
 
             return await BuildBookingResponseAsync(createdBooking);
         }
@@ -111,7 +112,7 @@ public class BookingService : IBookingService
                 throw new UnauthorizedException("Cannot cancel this booking");
             }
 
-            if (booking.Status != 1) // Not Confirmed
+            if (booking.Status != (int)BookingStatus.Confirmed)
             {
                 throw new ValidationException("Only confirmed bookings can be cancelled");
             }
@@ -132,11 +133,11 @@ public class BookingService : IBookingService
             // Release seats based on ORIGINAL booking status (before update)
             if (seatInventory != null)
             {
-                if (booking.Status == 1) // Confirmed - Sold -> Available
+                if (booking.Status == (int)BookingStatus.Confirmed)
                 {
                     seatInventory.CancelSoldSeats(passengers.Count);
                 }
-                else if (booking.Status == 0) // Pending - Held -> Available
+                else if (booking.Status == (int)BookingStatus.Pending)
                 {
                     seatInventory.ReleaseHeldSeats(passengers.Count);
                 }
@@ -144,7 +145,7 @@ public class BookingService : IBookingService
             }
 
             // Update booking status AFTER releasing seats
-            booking.Status = 3; // Cancelled
+            booking.Status = (int)BookingStatus.Cancelled;
             booking.UpdatedAt = DateTime.UtcNow;
             await _unitOfWork.Bookings.UpdateAsync(booking);
 
@@ -169,19 +170,21 @@ public class BookingService : IBookingService
                 throw new UnauthorizedException("Cannot update this booking");
             }
 
-            if (booking.Status != 0) // Not Pending
+            if (booking.Status != (int)BookingStatus.Pending)
             {
                 throw new ValidationException("Can only update pending bookings");
             }
 
-            if (dto.Passengers != null)
+            if (dto.Passengers != null && dto.Passengers.Any())
             {
+                var existingPassengers = await _unitOfWork.BookingPassengers.GetByBookingIdAsync(bookingId);
+                
                 foreach (var passengerDto in dto.Passengers)
                 {
-                    var passenger = await _unitOfWork.BookingPassengers.GetByIdAsync(passengerDto.PassengerId);
+                    var passenger = existingPassengers.FirstOrDefault(p => p.Id == passengerDto.PassengerId);
                     if (passenger != null)
                     {
-                        passenger.FullName = $"{passengerDto.FirstName} {passengerDto.LastName}";
+                        passenger.FullName = $"{passengerDto.FirstName} {passengerDto.LastName}".Trim();
                         await _unitOfWork.BookingPassengers.UpdateAsync(passenger);
                     }
                 }
@@ -244,10 +247,10 @@ public class BookingService : IBookingService
 
         var statusString = booking.Status switch
         {
-            0 => "Pending",
-            1 => "Confirmed",
-            2 => "CheckedIn",
-            3 => "Cancelled",
+            (int)BookingStatus.Pending => "Pending",
+            (int)BookingStatus.Confirmed => "Confirmed",
+            (int)BookingStatus.CheckedIn => "CheckedIn",
+            (int)BookingStatus.Cancelled => "Cancelled",
             _ => "Unknown"
         };
 
@@ -274,8 +277,8 @@ public class BookingService : IBookingService
             Passengers = passengers.Select(p => new PassengerDetail
             {
                 PassengerId = p.Id,
-                FirstName = p.FullName.Split(' ')[0],
-                LastName = p.FullName.Contains(' ') ? p.FullName.Split(' ')[1] : "",
+                FirstName = p.FullName.Split(' ').FirstOrDefault() ?? "",
+                LastName = p.FullName.Split(' ').Skip(1).FirstOrDefault() ?? "",
                 Email = "",
                 Phone = "",
                 PassportNumber = p.NationalId ?? "",

@@ -20,10 +20,18 @@ public class RefundPolicyConfiguration : IEntityTypeConfiguration<RefundPolicy>
             .HasPrecision(10, 2)
             .HasDefaultValue(0);
 
+        // Soft delete
+        builder.Property(r => r.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(r => r.DeletedAt);
+
         builder.HasOne(r => r.SeatClass)
             .WithMany(s => s.RefundPolicies)
             .HasForeignKey(r => r.SeatClassId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(r => r.SeatClassId);
 
         // Add CHECK constraints
         builder.HasCheckConstraint(

@@ -19,6 +19,12 @@ public class RouteConfiguration : IEntityTypeConfiguration<Route>
         builder.Property(r => r.IsActive)
             .HasDefaultValue(true);
 
+        // Soft delete
+        builder.Property(r => r.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(r => r.DeletedAt);
+
         builder.HasOne(r => r.DepartureAirport)
             .WithMany(a => a.DepartureRoutes)
             .HasForeignKey(r => r.DepartureAirportId)

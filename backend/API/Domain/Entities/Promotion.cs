@@ -22,13 +22,24 @@ public class Promotion
 
     public DateTime CreatedAt { get; set; }
 
+    // Audit properties
+    public int? CreatedBy { get; set; }
+    public int? UpdatedBy { get; set; }
+
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
+    // Concurrency token
+    public int Version { get; set; } = 0;
+
     // Navigation properties
     public virtual ICollection<PromotionUsage> PromotionUsages { get; set; } = [];
 
     // Domain methods
     public bool IsValid(DateTime currentDateTime)
     {
-        return IsActive && currentDateTime >= ValidFrom && currentDateTime <= ValidTo;
+        return IsActive && !IsDeleted && currentDateTime >= ValidFrom && currentDateTime <= ValidTo;
     }
 
     public bool IsAvailable() => !UsageLimit.HasValue || UsedCount < UsageLimit;
@@ -40,10 +51,22 @@ public class Promotion
             : DiscountValue; // Fixed amount
     }
 
-    public bool CanBeUsed() => IsActive && IsAvailable();
+    public bool CanBeUsed() => IsActive && !IsDeleted && IsAvailable();
 
     public void IncrementUsage()
     {
         UsedCount++;
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
     }
 }

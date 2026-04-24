@@ -14,6 +14,10 @@ public class Airport
 
     public bool IsActive { get; set; } = true;
 
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
     // Navigation properties
     public virtual ICollection<Route> DepartureRoutes { get; set; } = [];
 
@@ -28,5 +32,17 @@ public class Airport
     public void Deactivate()
     {
         IsActive = false;
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
     }
 }

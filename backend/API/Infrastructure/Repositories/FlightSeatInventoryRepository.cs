@@ -1,6 +1,7 @@
 namespace API.Infrastructure.Repositories;
 
 using API.Application.Interfaces;
+using API.Application.Exceptions;
 using API.Domain.Entities;
 using API.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -78,6 +79,47 @@ public class FlightSeatInventoryRepository : IFlightSeatInventoryRepository
         }
     }
 
+    public async Task<bool> TryUpdateWithConcurrencyCheckAsync(int id, Func<FlightSeatInventory, bool> updateAction)
+    {
+        try
+        {
+            var inventory = await _context.FlightSeatInventories
+                .FirstOrDefaultAsync(fsi => fsi.Id == id);
+            
+            if (inventory == null)
+            {
+                return false;
+            }
+
+            var originalVersion = inventory.Version;
+            var updated = updateAction(inventory);
+
+            if (!updated)
+            {
+                return false;
+            }
+
+            inventory.Version = originalVersion + 1;
+            _context.FlightSeatInventories.Update(inventory);
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                _logger.LogWarning("Concurrency conflict when updating seat inventory {Id}", id);
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating seat inventory with concurrency check: {Id}", id);
+            throw;
+        }
+    }
+
     public async Task<List<FlightSeatInventory>> GetActiveInventoriesAsync()
     {
         try
@@ -100,16 +142,25 @@ public class FlightSeatInventoryRepository : IFlightSeatInventoryRepository
         try
         {
             var inventory = await _context.FlightSeatInventories.FirstOrDefaultAsync(fsi => fsi.Id == id);
-            if (inventory != null && inventory.Version == version)
+            if (inventory == null)
             {
-                inventory.HoldSeats(count);
-                _context.FlightSeatInventories.Update(inventory);
-                await _context.SaveChangesAsync();
+                throw new NotFoundException($"Seat inventory with id {id} not found");
             }
+
+            if (inventory.Version != version)
+            {
+                throw new ConcurrencyException("Seat inventory has been modified. Please refresh and try again.");
+            }
+
+            inventory.HoldSeats(count);
+            inventory.Version = version + 1;
+            
+            _context.FlightSeatInventories.Update(inventory);
+            await _context.SaveChangesAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error holding seats");
+            _logger.LogError(ex, "Error holding seats for inventory {Id}", id);
             throw;
         }
     }
@@ -118,8 +169,37 @@ public class FlightSeatInventoryRepository : IFlightSeatInventoryRepository
     {
         try
         {
+            // Optimistic concurrency check using Version field
+            var existing = await _context.FlightSeatInventories
+                .FirstOrDefaultAsync(fsi => fsi.Id == inventory.Id);
+            
+            if (existing == null)
+            {
+                throw new NotFoundException($"Seat inventory with id {inventory.Id} not found");
+            }
+
+            // Verify version hasn't changed since we read it
+            if (existing.Version != inventory.Version)
+            {
+                throw new ConcurrencyException(
+                    $"Seat inventory has been modified. Current version: {existing.Version}, attempted version: {inventory.Version}");
+            }
+
+            // Update the entity and increment version
+            inventory.Version = existing.Version + 1;
             _context.FlightSeatInventories.Update(inventory);
-            await _context.SaveChangesAsync();
+            
+            var affected = await _context.SaveChangesAsync();
+            
+            if (affected == 0)
+            {
+                throw new ConcurrencyException("Failed to update seat inventory - concurrent modification detected");
+            }
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            _logger.LogError(ex, "Concurrency conflict when updating seat inventory {Id}", inventory.Id);
+            throw new ConcurrencyException("Seat inventory has been modified by another process. Please refresh and try again.");
         }
         catch (Exception ex)
         {

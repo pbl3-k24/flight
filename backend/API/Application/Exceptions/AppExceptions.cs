@@ -78,3 +78,11 @@ public class RateLimitException : AppException
     {
     }
 }
+
+public class ConcurrencyException : AppException
+{
+    public ConcurrencyException(string message = "Concurrency conflict detected")
+        : base(message, 409, "CONCURRENCY_CONFLICT")
+    {
+    }
+}

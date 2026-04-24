@@ -62,15 +62,21 @@ public class FlightBookingDbContext : DbContext
 
         foreach (var entry in modifiedEntries)
         {
-            if (entry.Entity is not null && entry.Entity.GetType().GetProperty("UpdatedAt") != null)
+            if (entry.Entity is not null)
             {
-                entry.Property("UpdatedAt").CurrentValue = DateTime.UtcNow;
-            }
+                // Update UpdatedAt for entities that have it
+                var updatedAtProperty = entry.Entity.GetType().GetProperty("UpdatedAt");
+                if (updatedAtProperty != null)
+                {
+                    updatedAtProperty.SetValue(entry.Entity, DateTime.UtcNow);
+                }
 
-            // Increment Version for FlightSeatInventory
-            if (entry.Entity is FlightSeatInventory flightSeatInventory)
-            {
-                flightSeatInventory.Version++;
+                // Increment Version for entities that have it
+                var versionProperty = entry.Entity.GetType().GetProperty("Version");
+                if (versionProperty != null && versionProperty.PropertyType == typeof(int))
+                {
+                    versionProperty.SetValue(entry.Entity, (int)versionProperty.GetValue(entry.Entity) + 1);
+                }
             }
         }
 

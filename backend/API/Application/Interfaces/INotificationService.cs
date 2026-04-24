@@ -44,29 +44,3 @@ public interface INotificationService
     /// </summary>
     Task<NotificationSettingsDto> GetNotificationSettingsAsync(int userId);
 }
-
-public interface ISmsService
-{
-    /// <summary>
-    /// Sends an SMS message.
-    /// </summary>
-    Task<bool> SendSmsAsync(string phoneNumber, string message);
-
-    /// <summary>
-    /// Sends OTP via SMS.
-    /// </summary>
-    Task<bool> SendOtpAsync(string phoneNumber, string otp);
-}
-
-public interface IPushNotificationService
-{
-    /// <summary>
-    /// Sends a push notification.
-    /// </summary>
-    Task<bool> SendPushAsync(int userId, string title, string body);
-
-    /// <summary>
-    /// Sends bulk push notifications.
-    /// </summary>
-    Task<bool> SendBulkPushAsync(List<int> userIds, string title, string body);
-}

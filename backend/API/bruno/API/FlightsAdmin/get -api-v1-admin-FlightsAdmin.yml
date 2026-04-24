@@ -7,7 +7,7 @@ info:
 
 http:
   method: GET
-  url: "{{baseUrl}}/api/v1/admin/FlightsAdmin"
+  url: "{{baseUrl}}/api/v1/admin/FlightsAdmin?page=1&pageSize=20&JWT token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwiZW1haWwiOiJhZG1pbkBmbGlnaHRib29raW5nLnZuIiwidW5pcXVlX25hbWUiOiJRdeG6o24gdHLhu4sgdmnDqm4iLCJyb2xlIjoiQWRtaW4iLCJuYmYiOjE3NzY4MjUwODIsImV4cCI6MTc3NjkxMTQ4MiwiaWF0IjoxNzc2ODI1MDgyLCJpc3MiOiJmbGlnaHQtYm9va2luZy1hcGkiLCJhdWQiOiJmbGlnaHQtYm9va2luZy1hcHAifQ.kCppcpM04oe180oFlW9zpKg5c38dpBE8YvGwUNiaaIE"
   params:
     - name: page
       value: "1"
@@ -15,7 +15,15 @@ http:
     - name: pageSize
       value: "20"
       type: query
+    - name: JWT token
+      value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwiZW1haWwiOiJhZG1pbkBmbGlnaHRib29raW5nLnZuIiwidW5pcXVlX25hbWUiOiJRdeG6o24gdHLhu4sgdmnDqm4iLCJyb2xlIjoiQWRtaW4iLCJuYmYiOjE3NzY4MjUwODIsImV4cCI6MTc3NjkxMTQ4MiwiaWF0IjoxNzc2ODI1MDgyLCJpc3MiOiJmbGlnaHQtYm9va2luZy1hcGkiLCJhdWQiOiJmbGlnaHQtYm9va2luZy1hcHAifQ.kCppcpM04oe180oFlW9zpKg5c38dpBE8YvGwUNiaaIE
+      type: query
   auth: inherit
+
+runtime:
+  variables:
+    - name: baseUrl
+      value: http://localhost:5042
 
 settings:
   encodeUrl: true

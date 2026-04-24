@@ -13,9 +13,18 @@ config:
         username: ""
         password: ""
       bypassProxy: ""
+
+request:
+  variables:
+    - name: baseUrl
+      value: http://localhost:5042
 bundled: false
 extensions:
   bruno:
     ignore:
       - node_modules
       - .git
+    presets:
+      request:
+        type: http
+        url: http://localhost:5042

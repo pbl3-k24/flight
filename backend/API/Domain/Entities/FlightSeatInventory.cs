@@ -26,6 +26,10 @@ public class FlightSeatInventory
 
     public DateTime UpdatedAt { get; set; }
 
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
     // Navigation properties
     public virtual Flight Flight { get; set; } = null!;
 
@@ -105,6 +109,20 @@ public class FlightSeatInventory
     public void UpdateDynamicPrice(decimal demandFactor, decimal timeFactor)
     {
         CurrentPrice = BasePrice * demandFactor * timeFactor;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
         UpdatedAt = DateTime.UtcNow;
     }
 }

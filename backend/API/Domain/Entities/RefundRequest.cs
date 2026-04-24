@@ -18,6 +18,17 @@ public class RefundRequest
 
     public DateTime CreatedAt { get; set; }
 
+    // Audit properties
+    public int? CreatedBy { get; set; }
+    public int? UpdatedBy { get; set; }
+
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
+    // Concurrency token
+    public int Version { get; set; } = 0;
+
     // Navigation properties
     public virtual Booking Booking { get; set; } = null!;
 
@@ -39,5 +50,17 @@ public class RefundRequest
     {
         Status = 3; // Rejected
         Reason = reason;
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
     }
 }

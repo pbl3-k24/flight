@@ -17,7 +17,24 @@ public class FlightConfiguration : IEntityTypeConfiguration<Flight>
         builder.Property(f => f.Status)
             .HasDefaultValue(0);
 
+        // Audit properties
+        builder.Property(f => f.CreatedBy);
+
+        builder.Property(f => f.UpdatedBy);
+
+        // Soft delete
+        builder.Property(f => f.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(f => f.DeletedAt);
+
+        // Concurrency token
+        builder.Property(f => f.Version)
+            .IsConcurrencyToken()
+            .HasDefaultValue(0);
+
         builder.HasIndex(f => f.FlightNumber).IsUnique();
+        builder.HasIndex(f => f.Status);
 
         builder.HasOne(f => f.Route)
             .WithMany(r => r.Flights)
@@ -43,6 +60,10 @@ public class FlightConfiguration : IEntityTypeConfiguration<Flight>
             .WithOne(b => b.ReturnFlight)
             .HasForeignKey(b => b.ReturnFlightId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasCheckConstraint(
+            "CK_Flight_Status_Valid",
+            "\"Status\" IN (0, 1, 2, 3)");
 
         builder.ToTable("Flights");
     }

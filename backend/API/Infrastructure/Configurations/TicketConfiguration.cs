@@ -17,7 +17,14 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(t => t.Status)
             .HasDefaultValue(0);
 
+        // Soft delete
+        builder.Property(t => t.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(t => t.DeletedAt);
+
         builder.HasIndex(t => t.TicketNumber).IsUnique();
+        builder.HasIndex(t => t.Status);
 
         builder.HasOne(t => t.BookingPassenger)
             .WithOne(bp => bp.Ticket)
@@ -28,6 +35,8 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
             .WithMany()
             .HasForeignKey(t => t.ReplacedByTicketId)
             .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasIndex(t => t.ReplacedByTicketId);
 
         builder.ToTable("Tickets");
     }

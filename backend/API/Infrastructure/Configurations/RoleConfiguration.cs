@@ -17,6 +17,12 @@ public class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.Property(r => r.Description)
             .HasMaxLength(500);
 
+        // Soft delete
+        builder.Property(r => r.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(r => r.DeletedAt);
+
         builder.HasIndex(r => r.Name).IsUnique();
 
         builder.HasMany(r => r.UserRoles)

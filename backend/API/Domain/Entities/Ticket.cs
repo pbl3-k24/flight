@@ -14,13 +14,17 @@ public class Ticket
 
     public int? ReplacedByTicketId { get; set; }
 
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
     // Navigation properties
     public virtual BookingPassenger BookingPassenger { get; set; } = null!;
 
     public virtual Ticket? ReplacedByTicket { get; set; }
 
     // Domain methods
-    public bool IsValid() => Status == 0 && !ReplacedByTicketId.HasValue;
+    public bool IsValid() => Status == 0 && !ReplacedByTicketId.HasValue && !IsDeleted;
 
     public void MarkAsUsed()
     {
@@ -31,5 +35,17 @@ public class Ticket
     {
         ReplacedByTicketId = newTicketId;
         Status = 3; // Cancelled
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
     }
 }

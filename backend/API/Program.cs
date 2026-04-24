@@ -77,8 +77,6 @@ builder.Services.AddScoped<IPromotionAdminService, PromotionAdminService>();
 
 // Register application services - Phase 5: Notifications, Logging & Dashboard
 builder.Services.AddScoped<INotificationService, NotificationService>();
-builder.Services.AddScoped<ISmsService, SmsService>();
-builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IBackgroundJobService, BackgroundJobService>();
@@ -91,12 +89,6 @@ builder.Services.AddScoped<IPerformanceAnalyticsService, PerformanceAnalyticsSer
 
 // Register payment providers
 builder.Services.AddScoped<MomoPaymentProvider>();
-builder.Services.AddScoped<VnpayPaymentProvider>();
-builder.Services.AddScoped<StripePaymentProvider>();
-builder.Services.AddScoped<PaypalPaymentProvider>();
-builder.Services.AddScoped<CardPaymentProvider>();
-builder.Services.AddScoped<BankTransferProvider>();
-builder.Services.AddScoped<IPaymentProviderFactory, PaymentProviderFactory>();
 
 // Register repositories - All Phases
 // NOTE: IMPORTANT - Repository implementations are REQUIRED for functionality
@@ -270,3 +262,5 @@ record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 {
     public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
 }
+
+

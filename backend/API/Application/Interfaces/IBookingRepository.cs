@@ -14,6 +14,10 @@ public interface IBookingRepository
 
     Task<List<Booking>> GetRecentBookingsForFlightAsync(int flightId, int days);
 
+    Task<List<Booking>> GetExpiredPendingBookingsAsync();
+
+    Task<List<Booking>> GetExpiredPendingBookingsAsync(int flightId, int seatClassId);
+
     Task<Booking> CreateAsync(Booking booking);
 
     Task UpdateAsync(Booking booking);

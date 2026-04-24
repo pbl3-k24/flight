@@ -12,8 +12,24 @@ public class AircraftSeatTemplate
 
     public decimal DefaultBasePrice { get; set; }
 
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
     // Navigation properties
     public virtual Aircraft Aircraft { get; set; } = null!;
 
     public virtual SeatClass SeatClass { get; set; } = null!;
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
+    }
 }

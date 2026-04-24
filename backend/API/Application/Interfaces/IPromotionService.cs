@@ -16,4 +16,13 @@ public interface IPromotionService
     /// <param name="code">Promotion code</param>
     /// <returns>Promotion details if valid</returns>
     Task<Domain.Entities.Promotion?> ValidatePromotionCodeAsync(string code);
+
+    /// <summary>
+    /// Records promotion usage for a booking.
+    /// </summary>
+    /// <param name="promotionId">Promotion ID</param>
+    /// <param name="bookingId">Booking ID</param>
+    /// <param name="discountAmount">Discount amount applied</param>
+    /// <returns>True if recorded successfully</returns>
+    Task<bool> RecordPromotionUsageAsync(int promotionId, int bookingId, decimal discountAmount);
 }

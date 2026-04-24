@@ -12,6 +12,10 @@ public class Aircraft
 
     public bool IsActive { get; set; } = true;
 
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
     // Navigation properties
     public virtual ICollection<AircraftSeatTemplate> SeatTemplates { get; set; } = [];
 
@@ -21,7 +25,7 @@ public class Aircraft
     public int GetTotalSeatsByClass(SeatClass seatClass)
     {
         return SeatTemplates
-            .Where(st => st.SeatClass?.Id == seatClass.Id)
+            .Where(st => st.SeatClass?.Id == seatClass.Id && !st.IsDeleted)
             .Sum(st => st.DefaultSeatCount);
     }
 
@@ -33,5 +37,17 @@ public class Aircraft
     public void Deactivate()
     {
         IsActive = false;
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
     }
 }

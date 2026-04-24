@@ -122,6 +122,44 @@ public class BookingRepository : IBookingRepository
         }
     }
 
+    public async Task<List<Booking>> GetExpiredPendingBookingsAsync()
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            return await _context.Bookings
+                .Where(b => b.Status == (int)BookingStatus.Pending && b.ExpiresAt < now)
+                .Include(b => b.Passengers)
+                .Include(b => b.OutboundFlight)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting expired pending bookings");
+            throw;
+        }
+    }
+
+    public async Task<List<Booking>> GetExpiredPendingBookingsAsync(int flightId, int seatClassId)
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            return await _context.Bookings
+                .Where(b => b.Status == (int)BookingStatus.Pending && b.ExpiresAt < now)
+                .Where(b => b.OutboundFlightId == flightId)
+                .Include(b => b.Passengers)
+                .Include(b => b.OutboundFlight)
+                .ThenInclude(f => f.Route)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting expired pending bookings for flight {FlightId}", flightId);
+            throw;
+        }
+    }
+
     public async Task<IEnumerable<Booking>> GetAllAsync()
     {
         try

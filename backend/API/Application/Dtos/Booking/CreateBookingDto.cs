@@ -13,6 +13,8 @@ public class CreateBookingDto
     public List<CreatePassengerDto> Passengers { get; set; } = [];
 
     public int? PromotionId { get; set; }
+
+    public string? ContactEmail { get; set; }
 }
 
 public class CreatePassengerDto

@@ -20,6 +20,17 @@ public class Flight
 
     public DateTime UpdatedAt { get; set; }
 
+    // Audit properties
+    public int? CreatedBy { get; set; }
+    public int? UpdatedBy { get; set; }
+
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
+    // Concurrency token
+    public int Version { get; set; } = 0;
+
     // Navigation properties
     public virtual Route Route { get; set; } = null!;
 
@@ -73,5 +84,19 @@ public class Flight
         var now = DateTime.UtcNow;
         var timeUntilDeparture = DepartureTime - now;
         return timeUntilDeparture.TotalHours <= hours && timeUntilDeparture.TotalHours > 0;
+    }
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
+        UpdatedAt = DateTime.UtcNow;
     }
 }

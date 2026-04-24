@@ -1,0 +1,332 @@
+{
+  "users_register": {
+    "email": "qa_user01@example.com",
+    "password": "Test@1234",
+    "fullName": "QA User 01",
+    "phone": "0901234567"
+  },
+  "users_login_user": {
+    "email": "user1@gmail.com",
+    "password": "User1@123456"
+  },
+  "users_login_admin": {
+    "email": "admin@flightbooking.vn",
+    "password": "Admin@123456"
+  },
+  "users_change_password": {
+    "oldPassword": "Test@1234",
+    "newPassword": "NewTest@1234"
+  },
+  "users_forgot_password": {
+    "email": "user1@gmail.com"
+  },
+  "users_reset_password": {
+    "code": "RESET_CODE_FROM_EMAIL",
+    "newPassword": "Reset@1234"
+  },
+  "flights_search": {
+    "departureAirportId": 1,
+    "arrivalAirportId": 2,
+    "departureDate": "2026-04-25T00:00:00Z",
+    "returnDate": null,
+    "passengerCount": 2,
+    "seatPreference": 1
+  },
+  "bookings_create_one_way": {
+    "outboundFlightId": 1,
+    "returnFlightId": null,
+    "passengerCount": 2,
+    "seatClassId": 1,
+    "promotionId": null,
+    "contactEmail": "user1@gmail.com",
+    "passengers": [
+      {
+        "firstName": "Nguyen",
+        "lastName": "An",
+        "email": "an.passenger@example.com",
+        "phone": "0911111111",
+        "dateOfBirth": "1998-05-10T00:00:00Z",
+        "nationality": "VN",
+        "passportNumber": "P1234567"
+      },
+      {
+        "firstName": "Tran",
+        "lastName": "Binh",
+        "email": "binh.passenger@example.com",
+        "phone": "0922222222",
+        "dateOfBirth": "1995-11-20T00:00:00Z",
+        "nationality": "VN",
+        "passportNumber": "P7654321"
+      }
+    ]
+  },
+  "bookings_create_round_trip": {
+    "outboundFlightId": 1,
+    "returnFlightId": 2,
+    "passengerCount": 1,
+    "seatClassId": 2,
+    "promotionId": 1,
+    "contactEmail": "user1@gmail.com",
+    "passengers": [
+      {
+        "firstName": "Le",
+        "lastName": "Chi",
+        "email": "chi.passenger@example.com",
+        "phone": "0933333333",
+        "dateOfBirth": "1992-08-15T00:00:00Z",
+        "nationality": "VN",
+        "passportNumber": "P9988776"
+      }
+    ]
+  },
+  "bookings_update_passengers": {
+    "passengers": [
+      {
+        "passengerId": 1,
+        "firstName": "Nguyen",
+        "lastName": "An Updated",
+        "email": "an.updated@example.com",
+        "phone": "0999999999",
+        "passportNumber": "P1234567X"
+      }
+    ]
+  },
+  "bookings_cancel": {
+    "reason": "Customer changed travel plan"
+  },
+  "payments_initiate_card": {
+    "bookingId": 1,
+    "paymentMethod": "CARD",
+    "promoCode": null
+  },
+  "payments_initiate_momo": {
+    "bookingId": 1,
+    "paymentMethod": "MOMO",
+    "promoCode": "SUMMER2024"
+  },
+  "payments_callback_success": {
+    "transactionId": "TXN-20260423-0001",
+    "status": "success",
+    "amount": 3300000,
+    "signature": "SIGNATURE_FROM_PROVIDER",
+    "rawData": "RAW_CALLBACK_PAYLOAD",
+    "additionalData": {
+      "provider": "MOMO",
+      "orderInfo": "Booking payment"
+    }
+  },
+  "payments_callback_failed": {
+    "transactionId": "TXN-20260423-0002",
+    "status": "failed",
+    "amount": 3300000,
+    "signature": "SIGNATURE_FROM_PROVIDER",
+    "rawData": "RAW_CALLBACK_PAYLOAD",
+    "additionalData": {
+      "provider": "MOMO",
+      "reason": "User canceled payment"
+    }
+  },
+  "tickets_change": {
+    "newFlightId": 3,
+    "newSeatNumber": "12A",
+    "reason": "Need earlier departure"
+  },
+  "refunds_create": {
+    "bookingId": 1,
+    "reason": "Personal emergency"
+  },
+  "admin_flights_create": {
+    "flightNumber": "VN880",
+    "routeId": 1,
+    "aircraftId": 1,
+    "departureTime": "2026-05-01T08:00:00Z",
+    "arrivalTime": "2026-05-01T10:10:00Z",
+    "isActive": true
+  },
+  "admin_flights_update": {
+    "flightNumber": "VN880A",
+    "aircraftId": 1,
+    "departureTime": "2026-05-01T09:00:00Z",
+    "arrivalTime": "2026-05-01T11:10:00Z",
+    "isActive": true
+  },
+  "admin_routes_create": {
+    "departureAirportId": 1,
+    "arrivalAirportId": 3,
+    "distanceKm": 610,
+    "estimatedDurationMinutes": 95
+  },
+  "admin_routes_update": {
+    "departureAirportId": 1,
+    "arrivalAirportId": 3,
+    "distanceKm": 620,
+    "estimatedDurationMinutes": 100
+  },
+  "admin_bookings_search_filter": {
+    "bookingCode": null,
+    "userEmail": "user1@gmail.com",
+    "status": 1,
+    "fromDate": "2026-04-01T00:00:00Z",
+    "toDate": "2026-04-30T23:59:59Z",
+    "page": 1,
+    "pageSize": 20
+  },
+  "admin_bookings_cancel": {
+    "reason": "Fraud check failed",
+    "fullRefund": false
+  },
+  "admin_refund_approve": {
+    "approved": true,
+    "reason": "Valid refund request"
+  },
+  "admin_refund_reject": {
+    "approved": false,
+    "reason": "Booking not eligible by policy"
+  },
+  "admin_users_update_status": {
+    "status": 2,
+    "reason": "Too many failed payment attempts"
+  },
+  "admin_users_assign_role": {
+    "roleId": 1
+  },
+  "admin_promotions_create_percentage": {
+    "code": "MAY2026",
+    "description": "May promotion 15%",
+    "discountType": 0,
+    "discountValue": 15,
+    "minimumAmount": 1000000,
+    "usageLimit": 200,
+    "validFrom": "2026-05-01T00:00:00Z",
+    "validTo": "2026-05-31T23:59:59Z"
+  },
+  "admin_promotions_create_fixed": {
+    "code": "SAVE100K",
+    "description": "Save 100000 VND",
+    "discountType": 1,
+    "discountValue": 100000,
+    "minimumAmount": 800000,
+    "usageLimit": 500,
+    "validFrom": "2026-04-23T00:00:00Z",
+    "validTo": "2026-12-31T23:59:59Z"
+  },
+  "admin_promotions_update": {
+    "description": "Extended campaign",
+    "discountValue": 12,
+    "usageLimit": 300,
+    "validTo": "2026-06-30T23:59:59Z",
+    "isActive": true
+  },
+  "notifications_update_settings": {
+    "emailNotifications": true,
+    "smsNotifications": false,
+    "pushNotifications": true,
+    "bookingConfirmation": true,
+    "paymentReminder": true,
+    "refundNotification": true,
+    "promoNotifications": false
+  },
+  "search_flights_advanced": {
+    "searchTerm": "VN",
+    "sortBy": "CreatedAt",
+    "sortOrder": "DESC",
+    "page": 1,
+    "pageSize": 20,
+    "departureDateFrom": "2026-04-23T00:00:00Z",
+    "departureDateTo": "2026-05-30T23:59:59Z",
+    "departureAirport": "SGN",
+    "arrivalAirport": "HAN",
+    "minPrice": 1000000,
+    "maxPrice": 5000000,
+    "minSeatsAvailable": 1,
+    "bookingStatus": null,
+    "passengerName": null,
+    "passengerEmail": null,
+    "userStatus": null,
+    "userRole": null,
+    "registrationDateFrom": null,
+    "registrationDateTo": null,
+    "refundStatus": null,
+    "minRefundAmount": null,
+    "maxRefundAmount": null
+  },
+  "search_bookings_advanced": {
+    "searchTerm": "BK",
+    "sortBy": "CreatedAt",
+    "sortOrder": "DESC",
+    "page": 1,
+    "pageSize": 20,
+    "departureDateFrom": null,
+    "departureDateTo": null,
+    "departureAirport": null,
+    "arrivalAirport": null,
+    "minPrice": null,
+    "maxPrice": null,
+    "minSeatsAvailable": null,
+    "bookingStatus": 1,
+    "passengerName": "Nguyen",
+    "passengerEmail": "an.updated@example.com",
+    "userStatus": null,
+    "userRole": null,
+    "registrationDateFrom": null,
+    "registrationDateTo": null,
+    "refundStatus": null,
+    "minRefundAmount": null,
+    "maxRefundAmount": null
+  },
+  "search_users_advanced": {
+    "searchTerm": "user",
+    "sortBy": "CreatedAt",
+    "sortOrder": "DESC",
+    "page": 1,
+    "pageSize": 20,
+    "departureDateFrom": null,
+    "departureDateTo": null,
+    "departureAirport": null,
+    "arrivalAirport": null,
+    "minPrice": null,
+    "maxPrice": null,
+    "minSeatsAvailable": null,
+    "bookingStatus": null,
+    "passengerName": null,
+    "passengerEmail": null,
+    "userStatus": 0,
+    "userRole": "User",
+    "registrationDateFrom": "2026-01-01T00:00:00Z",
+    "registrationDateTo": "2026-12-31T23:59:59Z",
+    "refundStatus": null,
+    "minRefundAmount": null,
+    "maxRefundAmount": null
+  },
+  "dashboard_audit_logs_filter": {
+    "userId": null,
+    "entity": "Booking",
+    "action": "Update",
+    "fromDate": "2026-04-01T00:00:00Z",
+    "toDate": "2026-04-30T23:59:59Z",
+    "page": 1,
+    "pageSize": 50
+  },
+  "reports_generate_booking": {
+    "reportType": "BOOKING",
+    "startDate": "2026-04-01T00:00:00Z",
+    "endDate": "2026-04-30T23:59:59Z",
+    "format": "PDF"
+  },
+  "reports_generate_revenue": {
+    "reportType": "REVENUE",
+    "startDate": "2026-04-01T00:00:00Z",
+    "endDate": "2026-04-30T23:59:59Z",
+    "format": "CSV"
+  },
+  "notes": {
+    "status_values": {
+      "booking_status": "0 Pending, 1 Confirmed, 2 CheckedIn, 3 Cancelled",
+      "user_status": "0 Active, 1 Inactive, 2 Suspended",
+      "refund_status": "0 Pending, 1 Approved, 2 Processed, 3 Rejected",
+      "promotion_discount_type": "0 Percentage, 1 Fixed"
+    },
+    "seat_preference_hint": "seatPreference is SeatClassId, often 1 Economy, 2 Business, 3 First",
+    "verify_email_endpoint": "POST /api/v1/users/verify-email?code=YOUR_CODE"
+  }
+}

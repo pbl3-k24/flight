@@ -33,21 +33,22 @@ public class PromotionService : IPromotionService
                 return basePrice;
             }
 
-            var discountAmount = promotion.DiscountType == 0 // 0=PERCENTAGE
-                ? basePrice * (promotion.DiscountValue / 100)
-                : promotion.DiscountValue;
+            if (!promotion.IsAvailable())
+            {
+                return basePrice;
+            }
 
+            var discountAmount = promotion.CalculateDiscount(basePrice);
             var finalPrice = Math.Max(0, basePrice - discountAmount);
 
-            _logger.LogInformation("Applied promotion {PromotionId} to price {BasePrice}: {FinalPrice}",
-                promotionId, basePrice, finalPrice);
+            _logger.LogInformation("Applied promotion {PromotionId} to price {BasePrice}: {FinalPrice}", promotionId, basePrice, finalPrice);
 
             return finalPrice;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Error applying promotion");
-            return basePrice; // Return original price on error
+            return basePrice;
         }
     }
 
@@ -61,19 +62,14 @@ public class PromotionService : IPromotionService
                 return null;
             }
 
-            // Check if promotion is active and not expired
-            if (!promotion.IsActive || promotion.ValidTo < DateTime.UtcNow)
+            if (!promotion.IsValid(DateTime.UtcNow))
             {
                 return null;
             }
 
-            // Check usage limit if applicable
-            if (promotion.UsageLimit.HasValue && promotion.UsageLimit > 0)
+            if (!promotion.IsAvailable())
             {
-                // Would need to check usage count
-                // var usageCount = await _promotionUsageRepository.GetCountAsync(promotion.Id);
-                // if (usageCount >= promotion.UsageLimit)
-                //     return null;
+                return null;
             }
 
             return promotion;
@@ -82,6 +78,30 @@ public class PromotionService : IPromotionService
         {
             _logger.LogError(ex, "Error validating promotion code {Code}", code);
             return null;
+        }
+    }
+
+    public async Task<bool> RecordPromotionUsageAsync(int promotionId, int bookingId, decimal discountAmount)
+    {
+        try
+        {
+            var promotion = await _promotionRepository.GetByIdAsync(promotionId);
+            if (promotion == null)
+            {
+                return false;
+            }
+
+            promotion.IncrementUsage();
+            await _promotionRepository.UpdateAsync(promotion);
+
+            _logger.LogInformation("Recorded promotion usage for promotion {PromotionId} and booking {BookingId}", promotionId, bookingId);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error recording promotion usage");
+            return false;
         }
     }
 }

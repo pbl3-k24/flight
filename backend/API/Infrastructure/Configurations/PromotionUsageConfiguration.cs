@@ -25,6 +25,7 @@ public class PromotionUsageConfiguration : IEntityTypeConfiguration<PromotionUsa
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(p => new { p.PromotionId, p.BookingId }).IsUnique();
+        builder.HasIndex(p => p.BookingId);
 
         builder.ToTable("PromotionUsages");
     }

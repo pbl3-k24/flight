@@ -6,7 +6,7 @@ public interface IRouteRepository
 {
     Task<Route?> GetByIdAsync(int id);
 
-    Task<IEnumerable<Route>> GetByAirportsAsync(int departureAirportId, int arrivalAirportId);
+    Task<IEnumerable<Route>> GetByAirportsAsync(int departureId, int arrivalId);
 
     Task<IEnumerable<Route>> GetAllAsync();
 

@@ -19,6 +19,10 @@ public class EmailVerificationTokenConfiguration : IEntityTypeConfiguration<Emai
             .HasForeignKey(e => e.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasCheckConstraint(
+            "CK_EmailVerificationToken_UsedAt_Valid",
+            "\"UsedAt\" IS NULL OR \"UsedAt\" <= \"ExpiresAt\"");
+
         builder.ToTable("EmailVerificationTokens");
     }
 }

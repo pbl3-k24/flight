@@ -8,8 +8,24 @@ public class Role
 
     public string? Description { get; set; }
 
+    // Soft delete
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
+
     // Navigation properties
     public virtual ICollection<User> Users { get; set; } = [];
 
     public virtual ICollection<UserRole> UserRoles { get; set; } = [];
+
+    public void SoftDelete()
+    {
+        IsDeleted = true;
+        DeletedAt = DateTime.UtcNow;
+    }
+
+    public void Restore()
+    {
+        IsDeleted = false;
+        DeletedAt = null;
+    }
 }

@@ -17,6 +17,8 @@ public class BookingPassengerConfiguration : IEntityTypeConfiguration<BookingPas
         builder.Property(b => b.Gender)
             .HasMaxLength(10);
 
+        builder.Property(b => b.DateOfBirth);
+
         builder.Property(b => b.NationalId)
             .HasMaxLength(50);
 
@@ -37,6 +39,8 @@ public class BookingPassengerConfiguration : IEntityTypeConfiguration<BookingPas
             .WithOne(bs => bs.BookingPassenger)
             .HasForeignKey(bs => bs.BookingPassengerId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(b => b.FlightSeatInventoryId);
 
         builder.ToTable("BookingPassengers");
     }

@@ -17,6 +17,12 @@ public class AircraftSeatTemplateConfiguration : IEntityTypeConfiguration<Aircra
             .HasPrecision(10, 2)
             .IsRequired();
 
+        // Soft delete
+        builder.Property(a => a.IsDeleted)
+            .HasDefaultValue(false);
+
+        builder.Property(a => a.DeletedAt);
+
         builder.HasOne(a => a.Aircraft)
             .WithMany(ac => ac.SeatTemplates)
             .HasForeignKey(a => a.AircraftId)

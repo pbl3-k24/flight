@@ -21,6 +21,16 @@ public class AuditLogConfiguration : IEntityTypeConfiguration<AuditLog>
         builder.Property(a => a.EntityId)
             .IsRequired();
 
+        // Additional audit properties
+        builder.Property(a => a.IpAddress)
+            .HasMaxLength(50);
+
+        builder.Property(a => a.UserAgent)
+            .HasMaxLength(500);
+
+        builder.Property(a => a.SessionId)
+            .HasMaxLength(255);
+
         builder.HasOne(a => a.Actor)
             .WithMany(u => u.AuditLogs)
             .HasForeignKey(a => a.ActorId)

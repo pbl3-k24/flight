@@ -10,8 +10,6 @@ public interface IAircraftRepository
 
     Task<IEnumerable<Aircraft>> GetAllAsync();
 
-    Task<IEnumerable<Aircraft>> GetAllActiveAsync();
-
     Task<Aircraft> CreateAsync(Aircraft aircraft);
 
     Task UpdateAsync(Aircraft aircraft);
