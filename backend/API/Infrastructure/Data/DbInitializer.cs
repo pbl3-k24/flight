@@ -13,8 +13,8 @@ public static class DbInitializer
     {
         try
         {
-            // Apply migrations
-            await context.Database.MigrateAsync();
+            // Migrations are applied in Program.cs before calling DbInitializer.
+            // Keep initializer focused on seeding/repairing seed relations only.
 
             // Check if database has data
             bool usersExist = context.Users.Any();

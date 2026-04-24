@@ -451,30 +451,16 @@ namespace API.Migrations
                 table: "Users",
                 column: "Status");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_BookingPassengers_FlightSeatInventoryId",
-                table: "BookingPassengers",
-                column: "FlightSeatInventoryId");
+            // These indexes may already exist in some environments.
+            migrationBuilder.Sql("CREATE INDEX IF NOT EXISTS \"IX_BookingPassengers_FlightSeatInventoryId\" ON \"BookingPassengers\" (\"FlightSeatInventoryId\");");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_BookingServices_BookingPassengerId",
-                table: "BookingServices",
-                column: "BookingPassengerId");
+            migrationBuilder.Sql("CREATE INDEX IF NOT EXISTS \"IX_BookingServices_BookingPassengerId\" ON \"BookingServices\" (\"BookingPassengerId\");");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_PromotionUsages_BookingId",
-                table: "PromotionUsages",
-                column: "BookingId");
+            migrationBuilder.Sql("CREATE INDEX IF NOT EXISTS \"IX_PromotionUsages_BookingId\" ON \"PromotionUsages\" (\"BookingId\");");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_RefundPolicies_SeatClassId",
-                table: "RefundPolicies",
-                column: "SeatClassId");
+            migrationBuilder.Sql("CREATE INDEX IF NOT EXISTS \"IX_RefundPolicies_SeatClassId\" ON \"RefundPolicies\" (\"SeatClassId\");");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Tickets_ReplacedByTicketId",
-                table: "Tickets",
-                column: "ReplacedByTicketId");
+            migrationBuilder.Sql("CREATE INDEX IF NOT EXISTS \"IX_Tickets_ReplacedByTicketId\" ON \"Tickets\" (\"ReplacedByTicketId\");");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Tickets_Status",

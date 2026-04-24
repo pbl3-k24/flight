@@ -186,6 +186,42 @@ using (var scope = app.Services.CreateScope())
             logger.LogInformation("No pending migrations. Database is up to date.");
         }
 
+        // Guard against legacy schema drift where Route soft-delete columns are missing.
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""Roles"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""Roles"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""Routes"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""Routes"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""Airports"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""Airports"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""Aircraft"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""Aircraft"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""SeatClasses"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""SeatClasses"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""Flights"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""Flights"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""FlightSeatInventories"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""FlightSeatInventories"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""AircraftSeatTemplates"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""AircraftSeatTemplates"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""BookingServices"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""BookingServices"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""Tickets"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""Tickets"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""Payments"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""Payments"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""RefundPolicies"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""RefundPolicies"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""RefundRequests"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""RefundRequests"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+            ALTER TABLE ""Promotions"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
+            ALTER TABLE ""Promotions"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+        ");
+
         // Seed sample data nếu database là trống
         logger.LogInformation("Seeding sample data...");
         await DbInitializer.InitializeDatabaseAsync(dbContext);

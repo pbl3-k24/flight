@@ -1032,7 +1032,7 @@ namespace API.Migrations
 
                     b.HasIndex("UsersId");
 
-                    b.ToTable("RoleUser");
+                    b.ToTable("RoleUser", (string)null);
                 });
 
             modelBuilder.Entity("API.Domain.Entities.AircraftSeatTemplate", b =>
