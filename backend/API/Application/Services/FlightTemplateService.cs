@@ -164,6 +164,12 @@ public class FlightTemplateService : IFlightTemplateService
 
         try
         {
+            // Validate TemplateId first
+            if (dto.TemplateId <= 0)
+            {
+                throw new ValidationException($"Invalid TemplateId: {dto.TemplateId}. TemplateId must be greater than 0. Please check your request body.");
+            }
+
             // Validate
             if (dto.NumberOfWeeks < 1 || dto.NumberOfWeeks > 52)
             {

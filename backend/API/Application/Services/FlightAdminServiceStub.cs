@@ -11,10 +11,14 @@ using Microsoft.Extensions.Logging;
 public class FlightAdminServiceStub : IFlightAdminService
 {
     private readonly ILogger<FlightAdminServiceStub> _logger;
+    private readonly IUnitOfWork _unitOfWork;
 
-    public FlightAdminServiceStub(ILogger<FlightAdminServiceStub> logger)
+    public FlightAdminServiceStub(
+        ILogger<FlightAdminServiceStub> logger,
+        IUnitOfWork unitOfWork)
     {
         _logger = logger;
+        _unitOfWork = unitOfWork;
     }
 
     public Task<FlightManagementResponse> CreateFlightAsync(CreateFlightDto dto)
@@ -35,10 +39,63 @@ public class FlightAdminServiceStub : IFlightAdminService
         throw new NotImplementedException("FlightAdminService is being refactored for FlightDefinition architecture.");
     }
 
-    public Task<List<FlightManagementResponse>> GetFlightsAsync(int page, int pageSize)
+    public async Task<List<FlightManagementResponse>> GetFlightsAsync(int page, int pageSize)
     {
-        _logger.LogWarning("FlightAdminService is temporarily disabled");
-        throw new NotImplementedException("FlightAdminService is being refactored for FlightDefinition architecture. Use /api/v1/admin/flight-definitions instead.");
+        _logger.LogInformation("Getting flights (page {Page}, pageSize {PageSize})", page, pageSize);
+        
+        try
+        {
+            // Get flights with related data
+            var allFlights = await _unitOfWork.Flights.GetAllAsync();
+            
+            // Apply pagination
+            var flights = allFlights
+                .OrderByDescending(f => f.DepartureTime)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToList();
+
+            var response = new List<FlightManagementResponse>();
+
+            foreach (var flight in flights)
+            {
+                var flightDefinition = flight.FlightDefinition;
+                var route = flightDefinition?.Route;
+                var aircraft = flight.ActualAircraftId.HasValue 
+                    ? await _unitOfWork.Aircraft.GetByIdAsync(flight.ActualAircraftId.Value)
+                    : flightDefinition?.DefaultAircraft;
+
+                // Calculate booked seats from FlightSeatInventory
+                var seatInventories = await _unitOfWork.FlightSeatInventories.GetByFlightIdAsync(flight.Id);
+                var totalSeats = seatInventories.Sum(s => s.TotalSeats);
+                var availableSeats = seatInventories.Sum(s => s.AvailableSeats);
+                var bookedSeats = totalSeats - availableSeats;
+
+                response.Add(new FlightManagementResponse
+                {
+                    FlightId = flight.Id,
+                    FlightNumber = flightDefinition?.FlightNumber ?? "N/A",
+                    RouteCode = route != null 
+                        ? $"{route.DepartureAirport?.Code ?? "?"} → {route.ArrivalAirport?.Code ?? "?"}"
+                        : "N/A",
+                    AircraftModel = aircraft?.Model ?? "N/A",
+                    DepartureTime = flight.DepartureTime,
+                    ArrivalTime = flight.ArrivalTime,
+                    TotalSeats = totalSeats,
+                    AvailableSeats = availableSeats,
+                    BookedSeats = bookedSeats,
+                    IsActive = flightDefinition?.IsActive ?? false,
+                    CreatedAt = flight.CreatedAt
+                });
+            }
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting flights");
+            throw;
+        }
     }
 
     public Task<RouteManagementResponse> CreateRouteAsync(CreateRouteDto dto)

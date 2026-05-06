@@ -1,5 +1,7 @@
 namespace API.Application.Dtos.FlightTemplate;
 
+using System.ComponentModel.DataAnnotations;
+
 public class FlightScheduleTemplateDto
 {
     public int Id { get; set; }
@@ -50,16 +52,20 @@ public class GenerateFlightsFromTemplateDto
     /// <summary>
     /// Start date of the week (Monday recommended)
     /// </summary>
+    [Required(ErrorMessage = "WeekStartDate is required")]
     public DateTime WeekStartDate { get; set; }
     
     /// <summary>
     /// Template ID to use
     /// </summary>
+    [Required(ErrorMessage = "TemplateId is required")]
+    [Range(1, int.MaxValue, ErrorMessage = "TemplateId must be greater than 0")]
     public int TemplateId { get; set; }
     
     /// <summary>
     /// Number of weeks to generate (default: 1)
     /// </summary>
+    [Range(1, 52, ErrorMessage = "NumberOfWeeks must be between 1 and 52")]
     public int NumberOfWeeks { get; set; } = 1;
 }
 

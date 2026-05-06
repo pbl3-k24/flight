@@ -1,0 +1,100 @@
+@API_HostAddress = http://localhost:5042
+@token = YOUR_ADMIN_JWT_TOKEN_HERE
+
+### 1. Get all flight templates
+GET {{API_HostAddress}}/api/v1/admin/flight-templates
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### 2. Get template by ID
+GET {{API_HostAddress}}/api/v1/admin/flight-templates/1
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### 3. Create a new flight template
+POST {{API_HostAddress}}/api/v1/admin/flight-templates
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Summer Schedule 2026",
+  "description": "Weekly flight schedule for summer season",
+  "isActive": true,
+  "details": [
+    {
+      "routeId": 1,
+      "aircraftId": 1,
+      "dayOfWeek": 1,
+      "departureTime": "08:00:00",
+      "arrivalTime": "10:00:00",
+      "flightNumberPrefix": "VN",
+      "flightNumberSuffix": "101"
+    },
+    {
+      "routeId": 1,
+      "aircraftId": 2,
+      "dayOfWeek": 3,
+      "departureTime": "14:00:00",
+      "arrivalTime": "16:00:00",
+      "flightNumberPrefix": "VN",
+      "flightNumberSuffix": "103"
+    }
+  ]
+}
+
+### 4. Generate flights from template (CORRECT FORMAT)
+POST {{API_HostAddress}}/api/v1/admin/flight-templates/generate
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "templateId": 1,
+  "weekStartDate": "2026-05-04T00:00:00",
+  "numberOfWeeks": 1
+}
+
+### 5. Generate flights for multiple weeks
+POST {{API_HostAddress}}/api/v1/admin/flight-templates/generate
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "templateId": 1,
+  "weekStartDate": "2026-05-04T00:00:00",
+  "numberOfWeeks": 4
+}
+
+### 6. Update template
+PUT {{API_HostAddress}}/api/v1/admin/flight-templates/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Updated Summer Schedule",
+  "description": "Updated description",
+  "isActive": true,
+  "details": [
+    {
+      "routeId": 1,
+      "aircraftId": 1,
+      "dayOfWeek": 1,
+      "departureTime": "09:00:00",
+      "arrivalTime": "11:00:00",
+      "flightNumberPrefix": "VN",
+      "flightNumberSuffix": "101"
+    }
+  ]
+}
+
+### 7. Delete template
+DELETE {{API_HostAddress}}/api/v1/admin/flight-templates/1
+Authorization: Bearer {{token}}
+
+###
+
+# IMPORTANT NOTES:
+# 1. templateId MUST be included in the JSON body and must be > 0
+# 2. weekStartDate should be in ISO 8601 format: "2026-05-04T00:00:00"
+# 3. dayOfWeek: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday
+# 4. Times should be in 24-hour format: "HH:mm:ss"
+# 5. You need a valid Admin JWT token to access these endpoints

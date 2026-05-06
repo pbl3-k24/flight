@@ -76,6 +76,7 @@ builder.Services.AddScoped<IFlightAdminService, FlightAdminServiceStub>();
 builder.Services.AddScoped<IBookingAdminService, BookingAdminService>();
 builder.Services.AddScoped<IUserAdminService, UserAdminService>();
 builder.Services.AddScoped<IPromotionAdminService, PromotionAdminService>();
+builder.Services.AddScoped<IAircraftAdminService, AircraftAdminService>();
 builder.Services.AddScoped<IFlightTemplateService, FlightTemplateService>();
 builder.Services.AddScoped<IFlightDefinitionService, FlightDefinitionService>();
 

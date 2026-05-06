@@ -166,6 +166,10 @@ export const getFlightTemplates = () => {
   return makeRequest('/admin/flight-templates')
 }
 
+export const getFlightScheduleTemplate = (templateId) => {
+  return makeRequest(`/admin/flight-templates/${templateId}`)
+}
+
 export const createFlightTemplate = (templateData) => {
   console.log('📤 Sending template data to API:', JSON.stringify(templateData, null, 2))
   return makeRequest('/admin/flight-templates', {
@@ -182,6 +186,12 @@ export const deleteFlightTemplate = (id) => {
 
 export const generateFlightsFromTemplate = (generateData) => {
   console.log('🚀 Generating flights from template:', generateData)
+  console.log('📊 Data types:', {
+    templateId: typeof generateData.templateId,
+    weekStartDate: typeof generateData.weekStartDate,
+    numberOfWeeks: typeof generateData.numberOfWeeks,
+  })
+  console.log('📤 JSON to send:', JSON.stringify(generateData, null, 2))
   return makeRequest('/admin/flight-templates/generate', {
     method: 'POST',
     body: JSON.stringify(generateData),

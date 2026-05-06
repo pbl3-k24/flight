@@ -12,6 +12,7 @@ import {
   getBestPromotion,
   getFlightDefinitions,
   getFlightTemplates,
+  getFlightScheduleTemplate,
   createFlightTemplate,
   deleteFlightTemplate,
   generateFlightsFromTemplate,
@@ -210,6 +211,7 @@ function App() {
     numberOfWeeks: 1,
   })
   const [adminNotice, setAdminNotice] = useState('')
+  const [viewingTemplateDetail, setViewingTemplateDetail] = useState(null)
 
   // Load booking history once
   useEffect(() => {
@@ -1595,7 +1597,7 @@ function App() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {flightTemplates.map((template) => (
               <div
-                key={template.templateId}
+                key={template.templateId || template.id || template.Id}
                 className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:shadow-md transition"
               >
                 <div className="flex items-start justify-between">
@@ -1621,11 +1623,37 @@ function App() {
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"
+                    onClick={async () => {
+                      try {
+                        setApiError('')
+                        // Thử nhiều field có thể có
+                        const templateId = template.templateId || template.id || template.Id
+                        console.log('🔍 Template object:', template)
+                        console.log('🔍 Template ID:', templateId)
+                        
+                        if (!templateId) {
+                          setApiError('Không tìm thấy ID của template')
+                          return
+                        }
+                        
+                        const templateDetail = await getFlightScheduleTemplate(templateId)
+                        console.log('📋 Template Detail:', templateDetail)
+                        setViewingTemplateDetail(templateDetail)
+                      } catch (error) {
+                        setApiError(error.message || 'Lỗi khi tải chi tiết template')
+                      }
+                    }}
+                    className="flex-1 rounded-lg bg-slate-600 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+                  >
+                    👁️ Xem chi tiết
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => {
                       setSelectedTemplate(template)
                       setGenerateFormData((prev) => ({
                         ...prev,
-                        templateId: template.templateId,
+                        templateId: template.templateId || template.id || template.Id,
                       }))
                     }}
                     className="flex-1 rounded-lg bg-[#1E40AF] px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
@@ -1637,7 +1665,8 @@ function App() {
                     onClick={async () => {
                       if (window.confirm(`Xóa template "${template.name}"?`)) {
                         try {
-                          await deleteFlightTemplate(template.templateId)
+                          const templateId = template.templateId || template.id || template.Id
+                          await deleteFlightTemplate(templateId)
                           setAdminNotice(`✅ Đã xóa template "${template.name}"`)
                           const templates = await getFlightTemplates()
                           setFlightTemplates(Array.isArray(templates) ? templates : [])
@@ -1717,10 +1746,32 @@ function App() {
                   type="button"
                   onClick={async () => {
                     try {
+                      // Validate dữ liệu trước khi gửi
+                      const templateId = Number(generateFormData.templateId)
+                      const numberOfWeeks = Number(generateFormData.numberOfWeeks)
+                      
+                      if (!templateId || templateId <= 0) {
+                        setApiError('Template ID không hợp lệ')
+                        return
+                      }
+                      
+                      if (!numberOfWeeks || numberOfWeeks <= 0) {
+                        setApiError('Số tuần phải lớn hơn 0')
+                        return
+                      }
+                      
+                      if (!generateFormData.weekStartDate) {
+                        setApiError('Vui lòng chọn ngày bắt đầu')
+                        return
+                      }
+
+                      // Chuyển date sang ISO datetime với timezone UTC
+                      const weekStartDateTime = new Date(generateFormData.weekStartDate + 'T00:00:00Z').toISOString()
+
                       const result = await generateFlightsFromTemplate({
-                        templateId: generateFormData.templateId,
-                        weekStartDate: new Date(generateFormData.weekStartDate + 'T00:00:00').toISOString(),
-                        numberOfWeeks: generateFormData.numberOfWeeks,
+                        templateId: templateId,
+                        weekStartDate: weekStartDateTime, // ISO datetime với timezone
+                        numberOfWeeks: numberOfWeeks,
                       })
                       setAdminNotice(
                         `✅ Thành công! Đã sinh ${result.totalFlightsGenerated} chuyến bay! ` +
@@ -1877,6 +1928,102 @@ function App() {
           </div>
         </div>
       </section>
+
+      {/* Modal xem chi tiết template */}
+      {viewingTemplateDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-900">
+                  📋 {viewingTemplateDetail.name}
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">{viewingTemplateDetail.description}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-medium ${
+                      viewingTemplateDetail.isActive
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-slate-100 text-slate-600'
+                    }`}
+                  >
+                    {viewingTemplateDetail.isActive ? '✓ Hoạt động' : '⏸ Tạm dừng'}
+                  </span>
+                  <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
+                    {viewingTemplateDetail.details?.length || 0} chuyến bay/tuần
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingTemplateDetail(null)}
+                className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+              >
+                ✕ Đóng
+              </button>
+            </div>
+
+            {/* Hiển thị theo thứ */}
+            <div className="mt-6">
+              <h4 className="mb-3 text-lg font-bold text-slate-900">Lịch bay theo thứ</h4>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {[0, 1, 2, 3, 4, 5, 6].map((dayIndex) => {
+                  const flightsForDay = (viewingTemplateDetail.details || []).filter(
+                    (d) => d.dayOfWeek === dayIndex
+                  )
+                  return (
+                    <div
+                      key={dayIndex}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+                    >
+                      <div className="mb-2 text-center">
+                        <p className="text-sm font-bold text-slate-900">
+                          {getWeekdayName(dayIndex)}
+                        </p>
+                        <p className="text-xs text-slate-500">({flightsForDay.length} chuyến)</p>
+                      </div>
+                      <div className="space-y-2">
+                        {flightsForDay.map((detail, idx) => (
+                          <div
+                            key={idx}
+                            className="rounded-lg border border-blue-200 bg-blue-50 p-2"
+                          >
+                            <p className="text-xs font-semibold text-[#1E40AF]">
+                              {detail.flightNumberPrefix || 'FL'}
+                            </p>
+                            <p className="text-xs text-slate-600">
+                              Route ID: {detail.routeId}
+                            </p>
+                            <p className="text-xs text-slate-600">
+                              Aircraft ID: {detail.aircraftId}
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              {detail.departureTime} → {detail.arrivalTime}
+                            </p>
+                          </div>
+                        ))}
+                        {flightsForDay.length === 0 && (
+                          <div className="rounded-lg border border-dashed border-slate-300 p-3 text-center text-xs text-slate-400">
+                            Không có chuyến bay
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Hiển thị raw data */}
+            <div className="mt-6">
+              <h4 className="mb-2 text-sm font-bold text-slate-900">📊 Raw Data (JSON)</h4>
+              <pre className="max-h-60 overflow-auto rounded-lg bg-slate-900 p-4 text-xs text-green-400">
+                {JSON.stringify(viewingTemplateDetail, null, 2)}
+              </pre>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 

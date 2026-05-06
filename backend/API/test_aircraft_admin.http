@@ -1,0 +1,99 @@
+@API_HostAddress = http://localhost:5042
+@token = YOUR_ADMIN_JWT_TOKEN_HERE
+
+### 1. Get all aircraft
+GET {{API_HostAddress}}/api/v1/admin/aircraft?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+### 2. Get all aircraft including deleted
+GET {{API_HostAddress}}/api/v1/admin/aircraft?page=1&pageSize=20&includeDeleted=true
+Authorization: Bearer {{token}}
+
+### 3. Get aircraft by ID
+GET {{API_HostAddress}}/api/v1/admin/aircraft/1
+Authorization: Bearer {{token}}
+
+### 4. Create new aircraft
+POST {{API_HostAddress}}/api/v1/admin/aircraft
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "registrationNumber": "VN-A123",
+  "model": "Boeing 787-9 Dreamliner",
+  "totalSeats": 296,
+  "isActive": true,
+  "seatTemplates": [
+    {
+      "seatClassId": 1,
+      "defaultSeatCount": 28,
+      "defaultBasePrice": 5000000
+    },
+    {
+      "seatClassId": 2,
+      "defaultSeatCount": 35,
+      "defaultBasePrice": 3000000
+    },
+    {
+      "seatClassId": 3,
+      "defaultSeatCount": 233,
+      "defaultBasePrice": 1500000
+    }
+  ]
+}
+
+### 5. Update aircraft
+PUT {{API_HostAddress}}/api/v1/admin/aircraft/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "model": "Boeing 787-10 Dreamliner",
+  "isActive": true
+}
+
+### 6. Update aircraft with new seat configuration
+PUT {{API_HostAddress}}/api/v1/admin/aircraft/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "totalSeats": 300,
+  "seatTemplates": [
+    {
+      "seatClassId": 1,
+      "defaultSeatCount": 30,
+      "defaultBasePrice": 5500000
+    },
+    {
+      "seatClassId": 2,
+      "defaultSeatCount": 40,
+      "defaultBasePrice": 3200000
+    },
+    {
+      "seatClassId": 3,
+      "defaultSeatCount": 230,
+      "defaultBasePrice": 1600000
+    }
+  ]
+}
+
+### 7. Get aircraft statistics
+GET {{API_HostAddress}}/api/v1/admin/aircraft/1/statistics
+Authorization: Bearer {{token}}
+
+### 8. Delete aircraft (soft delete)
+DELETE {{API_HostAddress}}/api/v1/admin/aircraft/1
+Authorization: Bearer {{token}}
+
+### 9. Restore deleted aircraft
+POST {{API_HostAddress}}/api/v1/admin/aircraft/1/restore
+Authorization: Bearer {{token}}
+
+###
+
+# NOTES:
+# - All endpoints require Admin role
+# - Aircraft can only be deleted if no active flights
+# - Seat templates must sum to total seats
+# - Registration number must be unique
