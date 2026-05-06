@@ -30,9 +30,9 @@ public class User
     public bool PhoneNumberVerified { get; set; } = false;
 
     // Profile properties
-    public string? DateOfBirth { get; set; }
+    public DateTime? DateOfBirth { get; set; }
     public string? Nationality { get; set; }
-    public string? PassportExpiryDate { get; set; }
+    public DateTime? PassportExpiryDate { get; set; }
     public string? PassportCountry { get; set; }
     public string? Gender { get; set; }
     public string? MaritalStatus { get; set; }

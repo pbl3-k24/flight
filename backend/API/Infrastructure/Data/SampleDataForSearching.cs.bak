@@ -1,0 +1,214 @@
+namespace API.Infrastructure.Data;
+
+using API.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+
+public static class SampleDataForSearching
+{
+    public static async Task AddSearchTestDataAsync(FlightBookingDbContext context)
+    {
+        try
+        {
+            // ===== AIRPORTS =====
+            var airports = new[]
+            {
+                new Airport { Code = "SGN", Name = "Sân bay Tân Sơn Nhất", City = "Thành phố Hồ Chí Minh", Province = "Hồ Chí Minh", IsActive = true },
+                new Airport { Code = "HAN", Name = "Sân bay Nội Bài", City = "Hà Nội", Province = "Hà Nội", IsActive = true },
+                new Airport { Code = "DAD", Name = "Sân bay Quốc tế Đà Nẵng", City = "Đà Nẵng", Province = "Đà Nẵng", IsActive = true },
+                new Airport { Code = "CTS", Name = "Sân bay Cần Thơ", City = "Cần Thơ", Province = "Cần Thơ", IsActive = true },
+                new Airport { Code = "VCA", Name = "Sân bay Buôn Mê Thuộc", City = "Buôn Mê Thuộc", Province = "Đắk Lắk", IsActive = true },
+                new Airport { Code = "HUI", Name = "Sân bay Phú Bài", City = "Huế", Province = "Thừa Thiên Huế", IsActive = true }
+            };
+
+            var existingAirports = await context.Airports.Select(a => a.Code).ToListAsync();
+            var newAirports = airports.Where(a => !existingAirports.Contains(a.Code)).ToList();
+            if (newAirports.Count > 0)
+            {
+                context.Airports.AddRange(newAirports);
+                await context.SaveChangesAsync();
+            }
+
+            // ===== ROUTES =====
+            var sgn = await context.Airports.FirstAsync(a => a.Code == "SGN");
+            var han = await context.Airports.FirstAsync(a => a.Code == "HAN");
+            var dad = await context.Airports.FirstAsync(a => a.Code == "DAD");
+            var cts = await context.Airports.FirstAsync(a => a.Code == "CTS");
+            var vca = await context.Airports.FirstOrDefaultAsync(a => a.Code == "VCA");
+            var hui = await context.Airports.FirstOrDefaultAsync(a => a.Code == "HUI");
+
+            var routes = new[]
+            {
+                new Route { DepartureAirportId = sgn.Id, ArrivalAirportId = han.Id, DistanceKm = 1700, EstimatedDurationMinutes = 145, IsActive = true },
+                new Route { DepartureAirportId = han.Id, ArrivalAirportId = sgn.Id, DistanceKm = 1700, EstimatedDurationMinutes = 145, IsActive = true },
+                new Route { DepartureAirportId = sgn.Id, ArrivalAirportId = dad.Id, DistanceKm = 960, EstimatedDurationMinutes = 100, IsActive = true },
+                new Route { DepartureAirportId = dad.Id, ArrivalAirportId = sgn.Id, DistanceKm = 960, EstimatedDurationMinutes = 100, IsActive = true },
+                new Route { DepartureAirportId = han.Id, ArrivalAirportId = dad.Id, DistanceKm = 500, EstimatedDurationMinutes = 75, IsActive = true },
+                new Route { DepartureAirportId = sgn.Id, ArrivalAirportId = cts.Id, DistanceKm = 330, EstimatedDurationMinutes = 55, IsActive = true },
+                new Route { DepartureAirportId = cts.Id, ArrivalAirportId = sgn.Id, DistanceKm = 330, EstimatedDurationMinutes = 55, IsActive = true },
+                new Route { DepartureAirportId = han.Id, ArrivalAirportId = hui.Id, DistanceKm = 650, EstimatedDurationMinutes = 85, IsActive = true }
+            };
+
+            var existingRouteCount = await context.Routes.CountAsync();
+            if (existingRouteCount < 8)
+            {
+                context.Routes.AddRange(routes.Skip(existingRouteCount));
+                await context.SaveChangesAsync();
+            }
+
+            // ===== AIRCRAFT =====
+            var aircraft = new[]
+            {
+                new Aircraft { Model = "Boeing 737", RegistrationNumber = "VN-ABC123", TotalSeats = 180, IsActive = true },
+                new Aircraft { Model = "Airbus A320", RegistrationNumber = "VN-XYZ789", TotalSeats = 220, IsActive = true },
+                new Aircraft { Model = "Boeing 787", RegistrationNumber = "VN-DEF456", TotalSeats = 242, IsActive = true },
+                new Aircraft { Model = "Airbus A321", RegistrationNumber = "VN-GHI789", TotalSeats = 236, IsActive = true },
+                new Aircraft { Model = "Boeing 777", RegistrationNumber = "VN-JKL012", TotalSeats = 350, IsActive = true }
+            };
+
+            var existingAircraftCount = await context.Aircraft.CountAsync();
+            if (existingAircraftCount < 5)
+            {
+                context.Aircraft.AddRange(aircraft.Skip(existingAircraftCount));
+                await context.SaveChangesAsync();
+            }
+
+            // ===== SEAT CLASSES =====
+            var seatClasses = await context.SeatClasses.ToListAsync();
+            if (!seatClasses.Any(sc => sc.Code == "PRM"))
+            {
+                context.SeatClasses.Add(new SeatClass { Code = "PRM", Name = "Premium", RefundPercent = 60, ChangeFee = 300000, Priority = 1 });
+                await context.SaveChangesAsync();
+            }
+
+            var ecoClass = await context.SeatClasses.FirstAsync(sc => sc.Code == "ECO");
+            var busClass = await context.SeatClasses.FirstAsync(sc => sc.Code == "BUS");
+            var prmClass = await context.SeatClasses.FirstOrDefaultAsync(sc => sc.Code == "PRM");
+
+            // ===== FLIGHTS =====
+            // Kiểm tra tổng quát trước xem các chuyến bay từ mùng 6 đến 12/05 đã từng được seed chưa
+            // Việc check tổng này giúp bỏ qua hoàn toàn vòng lặp tốn tài nguyên bên dưới nếu dữ liệu đã tồn tại
+            var startDate = new DateTime(2026, 5, 6, 0, 0, 0, DateTimeKind.Utc);
+            var endDate = new DateTime(2026, 5, 12, 0, 0, 0, DateTimeKind.Utc);
+
+            bool hasDataSeeded = await context.Flights.AnyAsync(f => 
+                f.FlightNumber.StartsWith("VJ") && 
+                f.DepartureTime >= startDate && f.DepartureTime <= endDate);
+
+            if (!hasDataSeeded)
+            {
+                var baseDates = new List<DateTime>();
+                for (var d = startDate; d <= endDate; d = d.AddDays(1))
+                {
+                    baseDates.Add(d);
+                }
+
+                var routeList = await context.Routes.ToListAsync();
+                var aircraftList = await context.Aircraft.ToListAsync();
+
+                var flights = new List<Flight>();
+                int flightCounter = 1;
+
+                foreach (var date in baseDates)
+                {
+                    var times = new[] { 6, 10, 14, 18 }; 
+
+                    foreach (var hour in times)
+                    {
+                        foreach (var route in routeList)
+                        {
+                            var selectedAircraft = aircraftList[(flightCounter % aircraftList.Count)];
+                            var flightNumber = $"VJ{(date.Day * 100 + flightCounter):D4}"; 
+
+                            var departureTime = date.AddHours(hour).AddMinutes(Random.Shared.Next(0, 30));
+                            var duration = route.EstimatedDurationMinutes;
+                            var arrivalTime = departureTime.AddMinutes(duration);
+
+                            flights.Add(new Flight
+                            {
+                                FlightNumber = flightNumber,
+                                RouteId = route.Id,
+                                AircraftId = selectedAircraft.Id,
+                                DepartureTime = departureTime,
+                                ArrivalTime = arrivalTime,
+                                Status = 0,
+                                CreatedAt = DateTime.UtcNow,
+                                UpdatedAt = DateTime.UtcNow
+                            });
+
+                            flightCounter++;
+                        }
+                    }
+                }
+
+                if (flights.Count > 0)
+                {
+                    context.Flights.AddRange(flights);
+                    await context.SaveChangesAsync();
+
+                    var inventories = new List<FlightSeatInventory>();
+                    foreach (var flight in flights)
+                    {
+                        inventories.Add(new FlightSeatInventory
+                        {
+                            FlightId = flight.Id,
+                            SeatClassId = ecoClass.Id,
+                            TotalSeats = 150,
+                            AvailableSeats = 150,
+                            BasePrice = 1200000,
+                            CurrentPrice = 1200000,
+                            Version = 0
+                        });
+
+                        inventories.Add(new FlightSeatInventory
+                        {
+                            FlightId = flight.Id,
+                            SeatClassId = busClass.Id,
+                            TotalSeats = 30,
+                            AvailableSeats = 30,
+                            BasePrice = 3000000,
+                            CurrentPrice = 3000000,
+                            Version = 0
+                        });
+
+                        if (prmClass != null)
+                        {
+                            inventories.Add(new FlightSeatInventory
+                            {
+                                FlightId = flight.Id,
+                                SeatClassId = prmClass.Id,
+                                TotalSeats = 15,
+                                AvailableSeats = 15,
+                                BasePrice = 4500000,
+                                CurrentPrice = 4500000,
+                                Version = 0
+                            });
+                        }
+                    }
+
+                    context.FlightSeatInventories.AddRange(inventories);
+                    await context.SaveChangesAsync();
+                }
+            }
+            
+            // ===== PROMOTIONS =====
+            if (!await context.Promotions.AnyAsync(p => p.Code == "SUMMER20"))
+            {
+                var promoNow = DateTime.UtcNow;
+                var promos = new[]
+                {
+                    new Promotion { Code = "SUMMER20", DiscountType = 0, DiscountValue = 20, ValidFrom = promoNow.AddDays(-10), ValidTo = promoNow.AddDays(90), UsageLimit = 500, UsedCount = 45, IsActive = true, CreatedAt = promoNow },
+                    new Promotion { Code = "SAVE500K", DiscountType = 1, DiscountValue = 500000, ValidFrom = promoNow.AddDays(-5), ValidTo = promoNow.AddDays(30), UsageLimit = 300, UsedCount = 120, IsActive = true, CreatedAt = promoNow }
+                };
+                context.Promotions.AddRange(promos);
+                await context.SaveChangesAsync();
+            }
+            
+            Console.WriteLine("✅ Comprehensive flight dataset created successfully!");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error adding flight dataset: {ex.Message}");
+            throw;
+        }
+    }
+}

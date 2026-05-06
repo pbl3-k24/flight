@@ -4,7 +4,15 @@ public class CreateBookingDto
 {
     public int OutboundFlightId { get; set; }
 
+    public string? OutboundFlightNumber { get; set; }
+
+    public DateTime? OutboundDepartureDate { get; set; }
+
     public int? ReturnFlightId { get; set; }
+
+    public string? ReturnFlightNumber { get; set; }
+
+    public DateTime? ReturnDepartureDate { get; set; }
 
     public int PassengerCount { get; set; }
 

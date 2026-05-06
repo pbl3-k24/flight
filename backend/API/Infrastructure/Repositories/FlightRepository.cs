@@ -21,7 +21,17 @@ public class FlightRepository : IFlightRepository
     {
         try
         {
-            return await _context.Flights.FirstOrDefaultAsync(f => f.FlightNumber == flightNumber);
+            return await _context.Flights
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.ActualAircraft)
+                .FirstOrDefaultAsync(f => f.FlightDefinition.FlightNumber == flightNumber);
         }
         catch (Exception ex)
         {
@@ -35,13 +45,17 @@ public class FlightRepository : IFlightRepository
         try
         {
             return await _context.Flights
-                .Include(f => f.Route)
-                .ThenInclude(r => r.DepartureAirport)
-                .Include(f => f.Route)
-                .ThenInclude(r => r.ArrivalAirport)
-                .Include(f => f.Aircraft)
-                .Where(f => f.Route.DepartureAirportId == departureId 
-                    && f.Route.ArrivalAirportId == arrivalId 
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.ActualAircraft)
+                .Where(f => f.FlightDefinition.Route.DepartureAirportId == departureId 
+                    && f.FlightDefinition.Route.ArrivalAirportId == arrivalId 
                     && f.DepartureTime.Date == date.Date)
                 .ToListAsync();
         }
@@ -57,11 +71,15 @@ public class FlightRepository : IFlightRepository
         try
         {
             return await _context.Flights
-                .Include(f => f.Route)
-                .ThenInclude(r => r.DepartureAirport)
-                .Include(f => f.Route)
-                .ThenInclude(r => r.ArrivalAirport)
-                .Include(f => f.Aircraft)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.ActualAircraft)
                 .Include(f => f.SeatInventories)
                 .FirstOrDefaultAsync(f => f.Id == id);
         }
@@ -106,11 +124,15 @@ public class FlightRepository : IFlightRepository
         try
         {
             return await _context.Flights
-                .Include(f => f.Route)
-                .ThenInclude(r => r.DepartureAirport)
-                .Include(f => f.Route)
-                .ThenInclude(r => r.ArrivalAirport)
-                .Include(f => f.Aircraft)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.ActualAircraft)
                 .FirstOrDefaultAsync(f => f.Id == id);
         }
         catch (Exception ex)
@@ -125,11 +147,15 @@ public class FlightRepository : IFlightRepository
         try
         {
             return await _context.Flights
-                .Include(f => f.Route)
-                .ThenInclude(r => r.DepartureAirport)
-                .Include(f => f.Route)
-                .ThenInclude(r => r.ArrivalAirport)
-                .Include(f => f.Aircraft)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.ActualAircraft)
                 .Include(f => f.SeatInventories)
                 .FirstOrDefaultAsync(f => f.Id == id);
         }
@@ -146,11 +172,15 @@ public class FlightRepository : IFlightRepository
         {
             _logger.LogDebug("Fetching all flights from database");
             var result = await _context.Flights
-                .Include(f => f.Route)
-                .ThenInclude(r => r.DepartureAirport)
-                .Include(f => f.Route)
-                .ThenInclude(r => r.ArrivalAirport)
-                .Include(f => f.Aircraft)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.ActualAircraft)
                 .ToListAsync();
             _logger.LogDebug("Retrieved {Count} flights", result.Count);
             return result;
@@ -166,17 +196,39 @@ public class FlightRepository : IFlightRepository
     {
         try
         {
-            return await _context.Flights
-                .Include(f => f.Route)
-                .ThenInclude(r => r.DepartureAirport)
-                .Include(f => f.Route)
-                .ThenInclude(r => r.ArrivalAirport)
-                .Include(f => f.Aircraft)
-                .Where(f => f.Route.DepartureAirportId == departureAirportId 
-                    && f.Route.ArrivalAirportId == arrivalAirportId 
-                    && f.DepartureTime.Date >= startDate.Date 
-                    && f.DepartureTime.Date <= endDate.Date)
+            var start = startDate.Date;
+            var end = endDate.Date.AddDays(1);
+            
+            _logger.LogInformation("Searching flights: Dep={Dep}, Arr={Arr}, Start={Start}, End={End}", 
+                departureAirportId, arrivalAirportId, start, end);
+            
+            // First, get all flights in date range
+            var allFlights = await _context.Flights
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.ActualAircraft)
+                .Where(f => f.DepartureTime >= start && f.DepartureTime < end)
                 .ToListAsync();
+            
+            _logger.LogInformation("Found {Count} flights in date range", allFlights.Count);
+            
+            // Filter by route
+            var filtered = allFlights
+                .Where(f => f.FlightDefinition != null 
+                    && f.FlightDefinition.Route != null
+                    && f.FlightDefinition.Route.DepartureAirportId == departureAirportId 
+                    && f.FlightDefinition.Route.ArrivalAirportId == arrivalAirportId)
+                .ToList();
+            
+            _logger.LogInformation("After route filter: {Count} flights", filtered.Count);
+            
+            return filtered;
         }
         catch (Exception ex)
         {
@@ -185,17 +237,40 @@ public class FlightRepository : IFlightRepository
         }
     }
 
+    public async Task<bool> ExistsAsync(string flightNumber, DateTime departureTime, int routeId, int aircraftId)
+    {
+        try
+        {
+            return await _context.Flights.AnyAsync(f =>
+                f.FlightDefinition.RouteId == routeId
+                && (f.ActualAircraftId == aircraftId || f.FlightDefinition.DefaultAircraftId == aircraftId)
+                && f.DepartureTime == departureTime
+                && f.FlightDefinition.FlightNumber == flightNumber);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking flight existence for {FlightNumber}", flightNumber);
+            throw;
+        }
+    }
+
     public async Task<IEnumerable<Flight>> GetFlightsByRouteAndDateAsync(int routeId, DateTime departureDate)
     {
         try
         {
+            var start = departureDate.Date;
+            var end = start.AddDays(1);
             return await _context.Flights
-                .Include(f => f.Route)
-                .ThenInclude(r => r.DepartureAirport)
-                .Include(f => f.Route)
-                .ThenInclude(r => r.ArrivalAirport)
-                .Include(f => f.Aircraft)
-                .Where(f => f.RouteId == routeId && f.DepartureTime.Date == departureDate.Date)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.ActualAircraft)
+                .Where(f => f.FlightDefinition.RouteId == routeId && f.DepartureTime >= start && f.DepartureTime < end)
                 .ToListAsync();
         }
         catch (Exception ex)
@@ -212,11 +287,15 @@ public class FlightRepository : IFlightRepository
             var startDate = DateTime.UtcNow;
             var endDate = startDate.AddDays(days);
             return await _context.Flights
-                .Include(f => f.Route)
-                .ThenInclude(r => r.DepartureAirport)
-                .Include(f => f.Route)
-                .ThenInclude(r => r.ArrivalAirport)
-                .Include(f => f.Aircraft)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.FlightDefinition)
+                    .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.ActualAircraft)
                 .Where(f => f.DepartureTime >= startDate && f.DepartureTime <= endDate)
                 .ToListAsync();
         }

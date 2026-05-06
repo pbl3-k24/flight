@@ -62,8 +62,8 @@ public class AuditService
         string action,
         string entity,
         int? entityId,
-        string oldValues = null,
-        string newValues = null,
+        string? oldValues = null,
+        string? newValues = null,
         string ipAddress = "Unknown")
     {
         try

@@ -35,10 +35,8 @@ public class RouteConfiguration : IEntityTypeConfiguration<Route>
             .HasForeignKey(r => r.ArrivalAirportId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasMany(r => r.Flights)
-            .WithOne(f => f.Route)
-            .HasForeignKey(f => f.RouteId)
-            .OnDelete(DeleteBehavior.Restrict);
+        // Route no longer has direct relationship with Flight
+        // Flights are now linked through FlightDefinition
 
         // Add CHECK constraints
         builder.HasCheckConstraint(

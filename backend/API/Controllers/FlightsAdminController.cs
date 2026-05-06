@@ -24,6 +24,35 @@ public class FlightsAdminController : ControllerBase
     }
 
     /// <summary>
+    /// Creates schedule for one specific week and auto-generates the same pattern for following weeks.
+    /// Default auto-generation: 12 weeks.
+    /// </summary>
+    [HttpPost("weekly-schedule")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<List<FlightManagementResponse>>> CreateWeeklyScheduleAsync([FromBody] CreateWeeklyScheduleDto dto)
+    {
+        try
+        {
+            var response = await _flightService.CreateWeeklyScheduleAsync(dto);
+            return Ok(response);
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating weekly schedule");
+            return StatusCode(500, new { message = "Error creating weekly schedule" });
+        }
+    }
+
+    /// <summary>
     /// Creates a new flight (Admin only).
     /// </summary>
     [HttpPost]
@@ -65,6 +94,10 @@ public class FlightsAdminController : ControllerBase
             _logger.LogInformation("Updating flight: {FlightId}", flightId);
             var success = await _flightService.UpdateFlightAsync(flightId, dto);
             return success ? Ok(new { message = "Flight updated successfully" }) : BadRequest();
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         catch (NotFoundException ex)
         {

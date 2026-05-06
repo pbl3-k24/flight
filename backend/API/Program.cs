@@ -70,10 +70,14 @@ builder.Services.AddScoped<ITicketService, TicketService>();
 builder.Services.AddScoped<IRefundService, RefundService>();
 
 // Register application services - Phase 4: Admin Management
-builder.Services.AddScoped<IFlightAdminService, FlightAdminService>();
+// TODO: FlightAdminService needs refactoring for FlightDefinition
+// Temporary stub to prevent controller errors
+builder.Services.AddScoped<IFlightAdminService, FlightAdminServiceStub>();
 builder.Services.AddScoped<IBookingAdminService, BookingAdminService>();
 builder.Services.AddScoped<IUserAdminService, UserAdminService>();
 builder.Services.AddScoped<IPromotionAdminService, PromotionAdminService>();
+builder.Services.AddScoped<IFlightTemplateService, FlightTemplateService>();
+builder.Services.AddScoped<IFlightDefinitionService, FlightDefinitionService>();
 
 // Register application services - Phase 5: Notifications, Logging & Dashboard
 builder.Services.AddScoped<INotificationService, NotificationService>();
@@ -89,6 +93,7 @@ builder.Services.AddScoped<IPerformanceAnalyticsService, PerformanceAnalyticsSer
 
 // Register payment providers
 builder.Services.AddScoped<MomoPaymentProvider>();
+builder.Services.AddScoped<VnpayPaymentProvider>();
 
 // Register repositories - All Phases
 // NOTE: IMPORTANT - Repository implementations are REQUIRED for functionality
@@ -151,6 +156,13 @@ builder.Services.AddAuthentication("Bearer")
 // Configure Authorization policies
 builder.Services.AddAuthorization();
 
+// Background services
+builder.Services.AddScoped<API.Application.Interfaces.IBackgroundJobService, API.Application.Services.BackgroundJobService>();
+builder.Services.AddHostedService<API.Application.Services.BookingExpirationHostedService>();
+
+// Register VNPAY Refund Worker
+builder.Services.AddHostedService<API.Application.Services.VnpayRefundHostedService>();
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -163,33 +175,30 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Apply database migrations (optional - can be skipped if database is not available)
+// Apply database migrations only — data seeding is done once manually via seed_real_data.sql
 using (var scope = app.Services.CreateScope())
 {
     var scopedProvider = scope.ServiceProvider;
     var logger = scopedProvider.GetRequiredService<ILoggerFactory>()
-        .CreateLogger("DatabaseMigration");
+        .CreateLogger("DatabaseInitialization");
 
     try
     {
         var dbContext = scopedProvider.GetRequiredService<FlightBookingDbContext>();
-        var pendingMigrations = (await dbContext.Database.GetPendingMigrationsAsync()).ToList();
         
-        if (pendingMigrations.Count > 0)
-        {
-            logger.LogInformation("Found {Count} pending migrations. Applying migrations...", pendingMigrations.Count);
-            await dbContext.Database.MigrateAsync();
-            logger.LogInformation("Database migrations applied successfully.");
-        }
-        else
-        {
-            logger.LogInformation("No pending migrations. Database is up to date.");
-        }
+        // Use DbInitializer for automatic database setup
+        await DbInitializer.InitializeAsync(dbContext, logger);
 
-        // Guard against legacy schema drift where Route soft-delete columns are missing.
+        // Force synchronize database schema without using EF Migrations to avoid "Index already exists" conflicts
+        // This acts as an automated patch for missing constraints or adjusted parameter types
         await dbContext.Database.ExecuteSqlRawAsync(@"
             ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
             ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+
+            -- Fix DateOfBirth and PassportExpiryDate types for Users Registration
+            ALTER TABLE ""Users"" ALTER COLUMN ""DateOfBirth"" TYPE timestamp with time zone USING ""DateOfBirth""::timestamp with time zone;
+            ALTER TABLE ""Users"" ALTER COLUMN ""PassportExpiryDate"" TYPE timestamp with time zone USING ""PassportExpiryDate""::timestamp with time zone;
+
             ALTER TABLE ""Roles"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
             ALTER TABLE ""Roles"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
             ALTER TABLE ""Routes"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
@@ -220,30 +229,23 @@ using (var scope = app.Services.CreateScope())
             ALTER TABLE ""RefundRequests"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
             ALTER TABLE ""Promotions"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
             ALTER TABLE ""Promotions"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+
+            ALTER TABLE ""Payments"" DROP CONSTRAINT IF EXISTS ""CK_Payment_Status_Valid"";
+            ALTER TABLE ""Payments"" ADD CONSTRAINT ""CK_Payment_Status_Valid"" CHECK (""Status"" IN (0, 1, 2, 3, 4));
         ");
-
-        // Seed sample data nếu database là trống
-        logger.LogInformation("Seeding sample data...");
-        await DbInitializer.InitializeDatabaseAsync(dbContext);
-        logger.LogInformation("Sample data seeding completed.");
-
-        // Add additional search test data in development mode
-        if (app.Environment.IsDevelopment())
-        {
-            logger.LogInformation("Adding comprehensive search test data...");
-            await SampleDataForSearching.AddSearchTestDataAsync(dbContext);
-        }
+        
+        logger.LogInformation("✓ Database schema patches applied");
     }
     catch (Exception ex)
     {
-        logger.LogError(ex, "Failed to apply database migrations");
+        logger.LogError(ex, "Failed to initialize database");
 
         // In PRODUCTION: Fail hard - don't allow app to run without database
         if (!app.Environment.IsDevelopment())
         {
             logger.LogCritical("Database initialization failed in PRODUCTION environment. " +
                 "Application startup aborted to prevent serving with broken database.");
-            throw;  // Re-throw to stop application startup
+            throw;
         }
 
         // In DEVELOPMENT: Allow to continue with warning
@@ -251,6 +253,28 @@ using (var scope = app.Services.CreateScope())
             "Database operations will fail.");
     }
 }
+
+// Generate search test data
+// TODO: SampleDataForSearching needs refactoring for FlightDefinition
+/*
+using (var scope = app.Services.CreateScope())
+{
+    var scopedProvider = scope.ServiceProvider;
+    var logger = scopedProvider.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("DataSeeding");
+    try
+    {
+        var dbContext = scopedProvider.GetRequiredService<FlightBookingDbContext>();
+        logger.LogInformation("Starting sample search data seeding...");
+        await SampleDataForSearching.AddSearchTestDataAsync(dbContext);
+        logger.LogInformation("Sample search data seeding completed.");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to seed sample search data");
+    }
+}
+*/
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

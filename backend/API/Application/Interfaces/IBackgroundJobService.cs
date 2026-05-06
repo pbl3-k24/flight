@@ -33,6 +33,23 @@ public interface IBackgroundJobService
     void EnqueueGenerateReports();
 
     /// <summary>
+    /// Enqueues a VNPAY refund job to be processed asynchronously.
+    /// </summary>
+    /// <param name="bookingId">Booking ID to refund</param>
+    /// <param name="reason">Refund reason/order info</param>
+    void EnqueueVnpayRefund(int bookingId, string reason);
+
+    /// <summary>
+    /// Processes pending VNPAY refund jobs from queue.
+    /// </summary>
+    Task ProcessVnpayRefundQueueAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Processes expired bookings.
+    /// </summary>
+    Task ProcessExpiredBookingsAsync();
+
+    /// <summary>
     /// Starts recurring jobs.
     /// </summary>
     void StartRecurringJobs();

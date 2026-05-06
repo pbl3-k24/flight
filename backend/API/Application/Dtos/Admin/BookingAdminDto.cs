@@ -18,7 +18,7 @@ public class BookingManagementResponse
 
     public decimal Amount { get; set; }
 
-    public int BookingStatus { get; set; } // 0=Pending, 1=Confirmed, 2=CheckedIn, 3=Cancelled
+    public int BookingStatus { get; set; } // 0=Pending, 1=Confirmed, 2=CheckedIn, 3=Cancelled, 4=Refunded
 
     public string BookingStatusName { get; set; } = null!;
 

@@ -10,22 +10,28 @@ public class FlightConfiguration : IEntityTypeConfiguration<Flight>
     {
         builder.HasKey(f => f.Id);
 
-        builder.Property(f => f.FlightNumber)
-            .HasMaxLength(20)
+        // Reference to FlightDefinition (replaces RouteId and AircraftId)
+        builder.Property(f => f.FlightDefinitionId)
             .IsRequired();
+
+        builder.Property(f => f.DepartureTime)
+            .IsRequired();
+
+        builder.Property(f => f.ArrivalTime)
+            .IsRequired();
+
+        builder.Property(f => f.ActualAircraftId);
 
         builder.Property(f => f.Status)
             .HasDefaultValue(0);
 
         // Audit properties
         builder.Property(f => f.CreatedBy);
-
         builder.Property(f => f.UpdatedBy);
 
         // Soft delete
         builder.Property(f => f.IsDeleted)
             .HasDefaultValue(false);
-
         builder.Property(f => f.DeletedAt);
 
         // Concurrency token
@@ -33,17 +39,21 @@ public class FlightConfiguration : IEntityTypeConfiguration<Flight>
             .IsConcurrencyToken()
             .HasDefaultValue(0);
 
-        builder.HasIndex(f => f.FlightNumber).IsUnique();
+        // Indexes
+        builder.HasIndex(f => f.FlightDefinitionId);
+        builder.HasIndex(f => f.DepartureTime);
         builder.HasIndex(f => f.Status);
+        builder.HasIndex(f => new { f.FlightDefinitionId, f.DepartureTime });
 
-        builder.HasOne(f => f.Route)
-            .WithMany(r => r.Flights)
-            .HasForeignKey(f => f.RouteId)
+        // Relationships
+        builder.HasOne(f => f.FlightDefinition)
+            .WithMany(fd => fd.Flights)
+            .HasForeignKey(f => f.FlightDefinitionId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasOne(f => f.Aircraft)
-            .WithMany(a => a.Flights)
-            .HasForeignKey(f => f.AircraftId)
+        builder.HasOne(f => f.ActualAircraft)
+            .WithMany()
+            .HasForeignKey(f => f.ActualAircraftId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(f => f.SeatInventories)
@@ -61,10 +71,16 @@ public class FlightConfiguration : IEntityTypeConfiguration<Flight>
             .HasForeignKey(b => b.ReturnFlightId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Ignore computed properties
+        builder.Ignore(f => f.FlightNumber);
+        builder.Ignore(f => f.Route);
+        builder.Ignore(f => f.Aircraft);
+
         builder.HasCheckConstraint(
             "CK_Flight_Status_Valid",
-            "\"Status\" IN (0, 1, 2, 3)");
+            "\"Status\" IN (0, 1, 2, 3, 4)");
 
         builder.ToTable("Flights");
     }
 }
+

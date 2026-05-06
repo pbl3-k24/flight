@@ -24,6 +24,8 @@ public interface IFlightRepository
 
     Task<IEnumerable<Flight>> GetFlightsByRouteAndDateAsync(int routeId, DateTime departureDate);
 
+    Task<bool> ExistsAsync(string flightNumber, DateTime departureTime, int routeId, int aircraftId);
+
     Task<IEnumerable<Flight>> GetUpcomingFlightsAsync(int days = 30);
 
     Task DeleteAsync(int id);

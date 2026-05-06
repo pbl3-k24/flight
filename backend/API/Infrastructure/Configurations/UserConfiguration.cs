@@ -51,12 +51,14 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .HasDefaultValue(false);
 
         // Profile properties
-        builder.Property(u => u.DateOfBirth);
+        builder.Property(u => u.DateOfBirth)
+            .HasColumnType("timestamp with time zone");
 
         builder.Property(u => u.Nationality)
             .HasMaxLength(100);
 
-        builder.Property(u => u.PassportExpiryDate);
+        builder.Property(u => u.PassportExpiryDate)
+            .HasColumnType("timestamp with time zone");
 
         builder.Property(u => u.PassportCountry)
             .HasMaxLength(100);

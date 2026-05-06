@@ -44,6 +44,13 @@ public class AdvancedSearchService : IAdvancedSearchService
                 filtered = filtered.Where(f => f.DepartureTime <= filter.DepartureDateTo.Value);
             }
 
+            if (!string.IsNullOrWhiteSpace(filter.FlightNumber))
+            {
+                var flightNumber = filter.FlightNumber.Trim();
+                filtered = filtered.Where(f =>
+                    string.Equals(f.FlightNumber, flightNumber, StringComparison.OrdinalIgnoreCase));
+            }
+
             if (filter.MinPrice.HasValue)
             {
                 // Would filter by price
@@ -86,6 +93,14 @@ public class AdvancedSearchService : IAdvancedSearchService
             if (filter.BookingStatus.HasValue)
             {
                 filtered = filtered.Where(b => b.Status == filter.BookingStatus.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filter.FlightNumber))
+            {
+                var flightNumber = filter.FlightNumber.Trim();
+                filtered = filtered.Where(b =>
+                    b.OutboundFlight != null
+                    && string.Equals(b.OutboundFlight.FlightNumber, flightNumber, StringComparison.OrdinalIgnoreCase));
             }
 
             var total = filtered.Count();

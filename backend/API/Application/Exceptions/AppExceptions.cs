@@ -25,7 +25,7 @@ public class AppException : Exception
 
 public class ValidationException : AppException
 {
-    public ValidationException(string message, Dictionary<string, string[]> errors = null)
+    public ValidationException(string message, Dictionary<string, string[]>? errors = null)
         : base(message, errors ?? new(), 400, "VALIDATION_ERROR")
     {
     }

@@ -10,6 +10,11 @@ public interface IFlightAdminService
     Task<FlightManagementResponse> CreateFlightAsync(CreateFlightDto dto);
 
     /// <summary>
+    /// Creates flight schedule for one specific week and auto-generates the same pattern for following weeks.
+    /// </summary>
+    Task<List<FlightManagementResponse>> CreateWeeklyScheduleAsync(CreateWeeklyScheduleDto dto);
+
+    /// <summary>
     /// Updates an existing flight.
     /// </summary>
     Task<bool> UpdateFlightAsync(int flightId, UpdateFlightDto dto);

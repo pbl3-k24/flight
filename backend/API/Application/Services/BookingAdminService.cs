@@ -9,23 +9,29 @@ using Microsoft.Extensions.Logging;
 
 public class BookingAdminService : IBookingAdminService
 {
+    private readonly IUnitOfWork _unitOfWork;
     private readonly IBookingRepository _bookingRepository;
     private readonly IRefundRequestRepository _refundRepository;
     private readonly IFlightRepository _flightRepository;
     private readonly IUserRepository _userRepository;
+    private readonly IBackgroundJobService _backgroundJobService;
     private readonly ILogger<BookingAdminService> _logger;
 
     public BookingAdminService(
+        IUnitOfWork unitOfWork,
         IBookingRepository bookingRepository,
         IRefundRequestRepository refundRepository,
         IFlightRepository flightRepository,
         IUserRepository userRepository,
+        IBackgroundJobService backgroundJobService,
         ILogger<BookingAdminService> logger)
     {
+        _unitOfWork = unitOfWork;
         _bookingRepository = bookingRepository;
         _refundRepository = refundRepository;
         _flightRepository = flightRepository;
         _userRepository = userRepository;
+        _backgroundJobService = backgroundJobService;
         _logger = logger;
     }
 
@@ -101,30 +107,54 @@ public class BookingAdminService : IBookingAdminService
     {
         try
         {
-            var booking = await _bookingRepository.GetByIdAsync(bookingId);
-            if (booking == null)
+            return await _unitOfWork.ExecuteInTransactionAsync(async () =>
             {
-                throw new NotFoundException("Booking not found");
-            }
-
-            // Update booking status
-            booking.Status = 3; // Cancelled
-            booking.UpdatedAt = DateTime.UtcNow;
-            await _bookingRepository.UpdateAsync(booking);
-
-            // Create refund if requested
-            if (dto.FullRefund)
-            {
-                var refund = new RefundRequestEntity
+                var booking = await _bookingRepository.GetByIdAsync(bookingId);
+                if (booking == null)
                 {
-                    BookingId = bookingId,
-                    Status = 2 // Processed
-                };
-                await _refundRepository.CreateAsync(refund);
-            }
+                    throw new NotFoundException("Booking not found");
+                }
 
-            _logger.LogInformation("Booking cancelled by admin: {BookingId}", bookingId);
-            return true;
+                if (booking.Status != (int)BookingStatus.Pending && booking.Status != (int)BookingStatus.Confirmed)
+                {
+                    throw new ValidationException("Only pending or confirmed bookings can be cancelled");
+                }
+
+                var passengers = await _unitOfWork.BookingPassengers.GetByBookingIdAsync(bookingId);
+                if (passengers.Count > 0)
+                {
+                    var seatInventory = await _unitOfWork.FlightSeatInventories.GetByIdAsync(
+                        passengers.First().FlightSeatInventoryId);
+
+                    if (seatInventory == null)
+                    {
+                        throw new NotFoundException("Seat inventory not found for booking");
+                    }
+
+                    if (booking.Status == (int)BookingStatus.Pending)
+                    {
+                        seatInventory.ReleaseHeldSeats(passengers.Count);
+                    }
+                    else
+                    {
+                        seatInventory.CancelSoldSeats(passengers.Count);
+                    }
+
+                    await _unitOfWork.FlightSeatInventories.UpdateAsync(seatInventory);
+                }
+
+                booking.Status = (int)BookingStatus.Cancelled;
+                booking.UpdatedAt = DateTime.UtcNow;
+                await _bookingRepository.UpdateAsync(booking);
+
+                if (dto.FullRefund)
+                {
+                    _backgroundJobService.EnqueueVnpayRefund(bookingId, dto.Reason);
+                }
+
+                _logger.LogInformation("Booking cancelled by admin: {BookingId}", bookingId);
+                return true;
+            });
         }
         catch (Exception ex)
         {
@@ -217,6 +247,7 @@ public class BookingAdminService : IBookingAdminService
             1 => "Confirmed",
             2 => "CheckedIn",
             3 => "Cancelled",
+            4 => "Refunded",
             _ => "Unknown"
         };
 

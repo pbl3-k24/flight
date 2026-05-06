@@ -50,10 +50,12 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             .HasDefaultValue(0);
 
         builder.HasIndex(p => p.Status);
+        builder.HasIndex(p => p.BookingId); // Index for performance, not unique
 
+        // One booking can have many payment attempts
         builder.HasOne(p => p.Booking)
-            .WithOne(b => b.Payment)
-            .HasForeignKey<Payment>(p => p.BookingId)
+            .WithMany(b => b.Payments)  // Changed from WithOne to WithMany
+            .HasForeignKey(p => p.BookingId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(p => p.RefundRequest)
@@ -68,7 +70,7 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 
         builder.HasCheckConstraint(
             "CK_Payment_Status_Valid",
-            "\"Status\" IN (0, 1, 2, 3)");
+            "\"Status\" IN (0, 1, 2, 3, 4)");
 
         builder.ToTable("Payments");
     }

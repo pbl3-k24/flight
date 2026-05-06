@@ -27,29 +27,35 @@ public class MomoPaymentProvider : IPaymentProvider
     {
         try
         {
-            var partnerCode = _config["Payment:Momo:PartnerCode"];
-            var secretKey = _config["Payment:Momo:SecretKey"];
-            var apiUrl = _config["Payment:Momo:ApiUrl"];
-            var notifyUrl = _config["Payment:Momo:NotifyUrl"];
+            var partnerCode = ResolveConfig("Payment:Momo:PartnerCode", "MomoAPI:PartnerCode");
+            var secretKey = ResolveConfig("Payment:Momo:SecretKey", "MomoAPI:SecretKey");
+            var accessKey = ResolveConfig("Payment:Momo:AccessKey", "MomoAPI:AccessKey");
+            var apiUrl = ResolveConfig("Payment:Momo:ApiUrl", "MomoAPI:MomoApiUrl")
+                ?? "https://test-payment.momo.vn/v2/gateway/api/create";
+            var notifyUrl = ResolveConfig("Payment:Momo:NotifyUrl", "MomoAPI:NotifyUrl")
+                ?? throw new InvalidOperationException("Momo notify URL is not configured");
+            var returnUrl = request.ReturnUrl
+                ?? ResolveConfig("Payment:Momo:ReturnUrl", "MomoAPI:ReturnUrl")
+                ?? throw new InvalidOperationException("Momo return URL is not configured");
+            var requestType = ResolveConfig("Payment:Momo:RequestType", "MomoAPI:RequestType")
+                ?? "captureMoMoWallet";
+
+            if (string.IsNullOrWhiteSpace(partnerCode)
+                || string.IsNullOrWhiteSpace(secretKey)
+                || string.IsNullOrWhiteSpace(accessKey))
+            {
+                throw new InvalidOperationException("Momo credentials are not configured correctly");
+            }
 
             var requestId = Guid.NewGuid().ToString();
             var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var orderId = $"BOOKING{request.BookingId}{timestamp}";
+            var orderInfo = request.OrderDescription ?? $"Flight booking #{request.BookingId}";
 
-            var requestData = new
-            {
-                partnerCode,
-                requestId,
-                amount = (long)request.Amount,
-                orderId = $"BOOKING{request.BookingId}{timestamp}",
-                orderInfo = request.OrderDescription ?? $"Flight booking #{request.BookingId}",
-                returnUrl = request.ReturnUrl,
-                notifyUrl,
-                requestType = "captureMoMoWallet",
-                signature = ""
-            };
+            var amount = Convert.ToInt64(decimal.Round(request.Amount, 0, MidpointRounding.AwayFromZero));
 
             // Generate signature
-            var signatureData = $"accessKey=&amount={(long)request.Amount}&extraData=&orderId={requestData.orderId}&orderInfo={requestData.orderInfo}&partnerCode={partnerCode}&requestId={requestId}&requestType=captureMoMoWallet";
+            var signatureData = $"accessKey={accessKey}&amount={amount}&extraData=&ipnUrl={notifyUrl}&orderId={orderId}&orderInfo={orderInfo}&partnerCode={partnerCode}&redirectUrl={returnUrl}&requestId={requestId}&requestType={requestType}";
             var signature = SignData(signatureData, secretKey);
 
             // Create request payload
@@ -57,12 +63,14 @@ public class MomoPaymentProvider : IPaymentProvider
             {
                 partnerCode,
                 requestId,
-                amount = (long)request.Amount,
-                orderId = requestData.orderId,
-                orderInfo = requestData.orderInfo,
-                returnUrl = request.ReturnUrl,
-                notifyUrl,
-                requestType = "captureMoMoWallet",
+                amount,
+                orderId,
+                orderInfo,
+                redirectUrl = returnUrl,
+                ipnUrl = notifyUrl,
+                requestType,
+                extraData = string.Empty,
+                lang = "vi",
                 signature
             };
 
@@ -82,16 +90,30 @@ public class MomoPaymentProvider : IPaymentProvider
             var responseContent = await response.Content.ReadAsStringAsync();
             var momoResponse = JsonSerializer.Deserialize<JsonElement>(responseContent);
 
-            var paymentLink = momoResponse.GetProperty("payUrl").GetString() ?? "";
-            var qrCode = momoResponse.GetProperty("qrCodeUrl").GetString();
+            var paymentLink = momoResponse.TryGetProperty("payUrl", out var payUrlElement)
+                ? payUrlElement.GetString() ?? string.Empty
+                : string.Empty;
+
+            var deeplink = momoResponse.TryGetProperty("deeplink", out var deeplinkElement)
+                ? deeplinkElement.GetString()
+                : null;
+
+            var qrCode = momoResponse.TryGetProperty("qrCodeUrl", out var qrCodeElement)
+                ? qrCodeElement.GetString()
+                : paymentLink;
+
+            if (string.IsNullOrWhiteSpace(paymentLink))
+            {
+                throw new InvalidOperationException($"Momo response missing payUrl. Response: {responseContent}");
+            }
 
             _logger.LogInformation("Momo payment link generated: {RequestId}", requestId);
 
             return new PaymentProviderResponse
             {
                 PaymentLink = paymentLink,
-                QrCode = qrCode,
-                TransactionId = requestId,
+                QrCode = string.IsNullOrWhiteSpace(qrCode) ? paymentLink : qrCode,
+                TransactionId = orderId,
                 ExpiresAt = DateTime.UtcNow.AddHours(1)
             };
         }
@@ -106,10 +128,17 @@ public class MomoPaymentProvider : IPaymentProvider
     {
         try
         {
-            var secretKey = _config["Payment:Momo:SecretKey"];
+            var secretKey = ResolveConfig("Payment:Momo:SecretKey", "MomoAPI:SecretKey");
+            if (string.IsNullOrWhiteSpace(secretKey)
+                || string.IsNullOrWhiteSpace(signature)
+                || string.IsNullOrWhiteSpace(data))
+            {
+                return false;
+            }
+
             var expectedSignature = SignData(data, secretKey);
-            
-            return signature == expectedSignature;
+
+            return FixedTimeEquals(signature, expectedSignature);
         }
         catch (Exception ex)
         {
@@ -155,5 +184,25 @@ public class MomoPaymentProvider : IPaymentProvider
             var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(data));
             return Convert.ToHexString(hash).ToLower();
         }
+    }
+
+    private string? ResolveConfig(string primaryKey, string fallbackKey)
+    {
+        var primary = _config[primaryKey];
+        if (!string.IsNullOrWhiteSpace(primary))
+        {
+            return primary;
+        }
+
+        return _config[fallbackKey];
+    }
+
+    private static bool FixedTimeEquals(string left, string right)
+    {
+        var leftBytes = Encoding.UTF8.GetBytes(left.Trim());
+        var rightBytes = Encoding.UTF8.GetBytes(right.Trim());
+
+        return leftBytes.Length == rightBytes.Length
+            && CryptographicOperations.FixedTimeEquals(leftBytes, rightBytes);
     }
 }

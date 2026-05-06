@@ -21,46 +21,52 @@ public class SmtpEmailService : IEmailService
 
     public async Task SendEmailAsync(string email, string subject, string htmlContent)
     {
-        try
+        // Execute email sending in a background task so it doesn't block the HTTP request
+        _ = Task.Run(async () =>
         {
-            if (!IsValidEmail(email))
+            try
             {
-                _logger.LogWarning("Invalid email format: {Email}", email);
-                throw new ArgumentException("Invalid email format", nameof(email));
+                if (!IsValidEmail(email))
+                {
+                    _logger.LogWarning("Invalid email format: {Email}", email);
+                    return;
+                }
+
+                var smtpHost = _config["Smtp:Host"] ?? throw new InvalidOperationException("SMTP Host is not configured");
+                var smtpPort = int.Parse(_config["Smtp:Port"] ?? "587");
+                var smtpUsername = _config["Smtp:Username"];
+                var smtpPassword = _config["Smtp:Password"];
+                var fromEmail = _config["Smtp:FromEmail"] ?? smtpUsername;
+
+                using var smtpClient = new SmtpClient(smtpHost, smtpPort)
+                {
+                    EnableSsl = true,
+                    Credentials = new NetworkCredential(smtpUsername, smtpPassword),
+                    Timeout = 10000
+                };
+
+                using var mailMessage = new MailMessage
+                {
+                    From = new MailAddress(fromEmail),
+                    Subject = subject,
+                    Body = htmlContent,
+                    IsBodyHtml = true
+                };
+
+                mailMessage.To.Add(email);
+
+                await smtpClient.SendMailAsync(mailMessage);
+
+                _logger.LogInformation("Email sent successfully to {Email}", email);
             }
-
-            var smtpHost = _config["Smtp:Host"] ?? throw new InvalidOperationException("SMTP Host is not configured");
-            var smtpPort = int.Parse(_config["Smtp:Port"] ?? "587");
-            var smtpUsername = _config["Smtp:Username"];
-            var smtpPassword = _config["Smtp:Password"];
-            var fromEmail = _config["Smtp:FromEmail"] ?? smtpUsername;
-
-            using var smtpClient = new SmtpClient(smtpHost, smtpPort)
+            catch (Exception ex)
             {
-                EnableSsl = true,
-                Credentials = new NetworkCredential(smtpUsername, smtpPassword),
-                Timeout = 10000
-            };
+                _logger.LogError(ex, "Failed to send email to {Email}", email);
+            }
+        });
 
-            using var mailMessage = new MailMessage
-            {
-                From = new MailAddress(fromEmail),
-                Subject = subject,
-                Body = htmlContent,
-                IsBodyHtml = true
-            };
-
-            mailMessage.To.Add(email);
-
-            await smtpClient.SendMailAsync(mailMessage);
-
-            _logger.LogInformation("Email sent successfully to {Email}", email);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to send email to {Email}", email);
-            throw;
-        }
+        // Resolve immediately so the caller isn't blocked by the SMTP process
+        await Task.CompletedTask;
     }
 
     public async Task SendVerificationEmailAsync(string email, string verificationCode)

@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>VNPAY URL Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body>
+    <h2>VNPAY URL Generator Test</h2>
+    <button onclick="generateUrl()">Generate Test URL</button>
+    <div id="result" style="margin-top: 20px; white-space: pre-wrap; font-family: monospace;"></div>
+
+    <script>
+        function generateUrl() {
+            const config = {
+                tmnCode: '751LLV1O',
+                hashSecret: 'M18OLB311F6XE1XFA9B9GKJ01TYK2FDJ',
+                baseUrl: 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
+                returnUrl: 'http://localhost:5042/api/v1/payments/vnpay-return'
+            };
+
+            const now = new Date();
+            const createDate = formatDate(now);
+            const expireDate = formatDate(new Date(now.getTime() + 15 * 60000));
+            const txnRef = 'TEST' + Date.now();
+
+            // Parameters MUST be sorted alphabetically
+            const params = {
+                'vnp_Amount': '10000000',  // 100,000 VND * 100
+                'vnp_Command': 'pay',
+                'vnp_CreateDate': createDate,
+                'vnp_CurrCode': 'VND',
+                'vnp_ExpireDate': expireDate,
+                'vnp_IpAddr': '127.0.0.1',
+                'vnp_Locale': 'vn',
+                'vnp_OrderInfo': 'Test thanh toan',
+                'vnp_OrderType': 'other',
+                'vnp_ReturnUrl': config.returnUrl,
+                'vnp_TmnCode': config.tmnCode,
+                'vnp_TxnRef': txnRef,
+                'vnp_Version': '2.1.0'
+            };
+
+            // Build hash data (no encoding)
+            const sortedKeys = Object.keys(params).sort();
+            const hashData = sortedKeys.map(key => `${key}=${params[key]}`).join('&');
+            
+            // Create HMAC SHA512
+            const hash = CryptoJS.HmacSHA512(hashData, config.hashSecret);
+            const secureHash = hash.toString(CryptoJS.enc.Hex);
+
+            // Build URL (with encoding)
+            const queryString = sortedKeys.map(key => 
+                `${key}=${encodeURIComponent(params[key])}`
+            ).join('&');
+            const paymentUrl = `${config.baseUrl}?${queryString}&vnp_SecureHash=${secureHash}`;
+
+            const result = `
+Config:
+  TmnCode: ${config.tmnCode}
+  HashSecret: ${config.hashSecret}
+  BaseUrl: ${config.baseUrl}
+
+Parameters:
+${JSON.stringify(params, null, 2)}
+
+Hash Data (for signature):
+${hashData}
+
+Secure Hash:
+${secureHash}
+
+Payment URL:
+${paymentUrl}
+
+URL Length: ${paymentUrl.length} characters
+
+Click to test:
+<a href="${paymentUrl}" target="_blank">Open VNPAY Payment</a>
+            `;
+
+            document.getElementById('result').innerHTML = result;
+        }
+
+        function formatDate(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            return `${year}${month}${day}${hours}${minutes}${seconds}`;
+        }
+    </script>
+</body>
+</html>

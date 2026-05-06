@@ -67,19 +67,19 @@ public class SecurityHeadersMiddleware
     public async Task InvokeAsync(HttpContext context)
     {
         // Prevent clickjacking
-        context.Response.Headers.Add("X-Frame-Options", "DENY");
+        context.Response.Headers.Append("X-Frame-Options", "DENY");
 
         // Prevent content sniffing
-        context.Response.Headers.Add("X-Content-Type-Options", "nosniff");
+        context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
 
         // Enable XSS protection
-        context.Response.Headers.Add("X-XSS-Protection", "1; mode=block");
+        context.Response.Headers.Append("X-XSS-Protection", "1; mode=block");
 
         // Referrer policy
-        context.Response.Headers.Add("Referrer-Policy", "strict-origin-when-cross-origin");
+        context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
 
         // Content Security Policy
-        context.Response.Headers.Add("Content-Security-Policy", "default-src 'self'");
+        context.Response.Headers.Append("Content-Security-Policy", "default-src 'self'");
 
         // Remove sensitive headers
         context.Response.Headers.Remove("Server");
@@ -143,7 +143,7 @@ public class RateLimitingMiddleware
                 ipAddress, limitData.Count);
 
             context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-            context.Response.Headers.Add("Retry-After", WindowSeconds.ToString());
+            context.Response.Headers.Append("Retry-After", WindowSeconds.ToString());
             await context.Response.WriteAsJsonAsync(new { message = "Rate limit exceeded. Please try again later." });
             return;
         }

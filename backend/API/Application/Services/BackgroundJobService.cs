@@ -2,16 +2,23 @@ namespace API.Application.Services;
 
 using API.Application.Interfaces;
 using API.Domain.Entities;
+using API.Infrastructure.ExternalServices;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 
 public class BackgroundJobService : IBackgroundJobService
 {
+    private const int MaxRefundRetryAttempts = 5;
+    private static readonly ConcurrentQueue<VnpayRefundJob> RefundQueue = new();
+
     private readonly ILogger<BackgroundJobService> _logger;
     private readonly IPricingService _pricingService;
     private readonly IBookingRepository _bookingRepository;
     private readonly IBookingPassengerRepository _passengerRepository;
     private readonly IFlightSeatInventoryRepository _seatInventoryRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPaymentRepository _paymentRepository;
+    private readonly VnpayPaymentProvider _vnpayPaymentProvider;
 
     public BackgroundJobService(
         ILogger<BackgroundJobService> logger,
@@ -19,7 +26,9 @@ public class BackgroundJobService : IBackgroundJobService
         IBookingRepository bookingRepository,
         IBookingPassengerRepository passengerRepository,
         IFlightSeatInventoryRepository seatInventoryRepository,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IPaymentRepository paymentRepository,
+        VnpayPaymentProvider vnpayPaymentProvider)
     {
         _logger = logger;
         _pricingService = pricingService;
@@ -27,6 +36,8 @@ public class BackgroundJobService : IBackgroundJobService
         _passengerRepository = passengerRepository;
         _seatInventoryRepository = seatInventoryRepository;
         _unitOfWork = unitOfWork;
+        _paymentRepository = paymentRepository;
+        _vnpayPaymentProvider = vnpayPaymentProvider;
     }
 
     public async Task ReleaseSeatHoldsAsync()
@@ -36,10 +47,9 @@ public class BackgroundJobService : IBackgroundJobService
             _logger.LogInformation("Starting seat hold release job");
 
             var activeInventories = await _seatInventoryRepository.GetActiveInventoriesAsync();
-            
+
             foreach (var inventory in activeInventories)
             {
-                // Check if there are expired pending bookings for this inventory
                 var expiredBookings = await _bookingRepository.GetExpiredPendingBookingsAsync(
                     inventory.FlightId, inventory.SeatClassId);
 
@@ -47,36 +57,33 @@ public class BackgroundJobService : IBackgroundJobService
                 {
                     try
                     {
-                        await _unitOfWork.BeginTransactionAsync();
-
-                        var passengers = await _passengerRepository.GetByBookingIdAsync(booking.Id);
-                        if (passengers.Count == 0)
+                        await _unitOfWork.ExecuteInTransactionAsync(async () =>
                         {
-                            await _unitOfWork.RollbackAsync();
-                            continue;
-                        }
+                            var passengers = await _passengerRepository.GetByBookingIdAsync(booking.Id);
+                            if (passengers.Count == 0)
+                            {
+                                return;
+                            }
 
-                        var seatInventory = await _seatInventoryRepository.GetByIdAsync(
-                            passengers.First().FlightSeatInventoryId);
+                            var seatInventory = await _seatInventoryRepository.GetByIdAsync(
+                                passengers.First().FlightSeatInventoryId);
 
-                        if (seatInventory != null)
-                        {
-                            seatInventory.ReleaseHeldSeats(passengers.Count);
-                            await _seatInventoryRepository.UpdateAsync(seatInventory);
-                        }
+                            if (seatInventory != null)
+                            {
+                                seatInventory.ReleaseHeldSeats(passengers.Count);
+                                await _seatInventoryRepository.UpdateAsync(seatInventory);
+                            }
 
-                        booking.Status = (int)BookingStatus.Cancelled;
-                        booking.UpdatedAt = DateTime.UtcNow;
-                        await _bookingRepository.UpdateAsync(booking);
+                            booking.Status = (int)BookingStatus.Cancelled;
+                            booking.UpdatedAt = DateTime.UtcNow;
+                            await _bookingRepository.UpdateAsync(booking);
+                        });
 
-                        await _unitOfWork.CommitAsync();
-                        _logger.LogInformation(
-                            "Released seats for expired booking {BookingId}", booking.Id);
+                        _logger.LogInformation("Released seats for expired booking {BookingId}", booking.Id);
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Error releasing seats for booking {BookingId}", booking.Id);
-                        await _unitOfWork.RollbackAsync();
                     }
                 }
             }
@@ -95,7 +102,6 @@ public class BackgroundJobService : IBackgroundJobService
         {
             _logger.LogInformation("Starting booking expiration job");
 
-            var now = DateTime.UtcNow;
             var expiredBookings = await _bookingRepository.GetExpiredPendingBookingsAsync();
 
             if (expiredBookings.Count == 0)
@@ -108,35 +114,33 @@ public class BackgroundJobService : IBackgroundJobService
             {
                 try
                 {
-                    await _unitOfWork.BeginTransactionAsync();
-
-                    var passengers = await _passengerRepository.GetByBookingIdAsync(booking.Id);
-                    if (passengers.Count == 0)
+                    await _unitOfWork.ExecuteInTransactionAsync(async () =>
                     {
-                        await _unitOfWork.RollbackAsync();
-                        continue;
-                    }
+                        var passengers = await _passengerRepository.GetByBookingIdAsync(booking.Id);
+                        if (passengers.Count == 0)
+                        {
+                            return;
+                        }
 
-                    var seatInventory = await _seatInventoryRepository.GetByIdAsync(
-                        passengers.First().FlightSeatInventoryId);
+                        var seatInventory = await _seatInventoryRepository.GetByIdAsync(
+                            passengers.First().FlightSeatInventoryId);
 
-                    if (seatInventory != null)
-                    {
-                        seatInventory.ReleaseHeldSeats(passengers.Count);
-                        await _seatInventoryRepository.UpdateAsync(seatInventory);
-                    }
+                        if (seatInventory != null)
+                        {
+                            seatInventory.ReleaseHeldSeats(passengers.Count);
+                            await _seatInventoryRepository.UpdateAsync(seatInventory);
+                        }
 
-                    booking.Status = (int)BookingStatus.Cancelled;
-                    booking.UpdatedAt = DateTime.UtcNow;
-                    await _bookingRepository.UpdateAsync(booking);
+                        booking.Status = (int)BookingStatus.Cancelled;
+                        booking.UpdatedAt = DateTime.UtcNow;
+                        await _bookingRepository.UpdateAsync(booking);
+                    });
 
-                    await _unitOfWork.CommitAsync();
                     _logger.LogInformation("Expired booking {BookingId}", booking.Id);
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error expiring booking {BookingId}", booking.Id);
-                    await _unitOfWork.RollbackAsync();
                 }
             }
 
@@ -148,11 +152,6 @@ public class BackgroundJobService : IBackgroundJobService
         }
     }
 
-    /// <summary>
-    /// Process expired bookings: Release held seats if booking hasn't been paid
-    /// Called by: Hangfire background job or scheduled task
-    /// State transition: Pending + Expired -> Held seats released to Available
-    /// </summary>
     public async Task ProcessExpiredBookingsAsync()
     {
         try
@@ -176,52 +175,34 @@ public class BackgroundJobService : IBackgroundJobService
             {
                 try
                 {
-                    await _unitOfWork.BeginTransactionAsync();
-
-                    var passengers = await _passengerRepository.GetByBookingIdAsync(booking.Id);
-                    if (passengers.Count == 0)
+                    await _unitOfWork.ExecuteInTransactionAsync(async () =>
                     {
-                        _logger.LogWarning("Expired booking has no passengers: {BookingId}", booking.Id);
-                        await _unitOfWork.RollbackAsync();
-                        continue;
-                    }
+                        var passengers = await _passengerRepository.GetByBookingIdAsync(booking.Id);
+                        if (passengers.Count == 0)
+                        {
+                            _logger.LogWarning("Expired booking has no passengers: {BookingId}", booking.Id);
+                            return;
+                        }
 
-                    var seatInventory = await _seatInventoryRepository.GetByIdAsync(
-                        passengers.First().FlightSeatInventoryId);
+                        var seatInventory = await _seatInventoryRepository.GetByIdAsync(
+                            passengers.First().FlightSeatInventoryId);
 
-                    if (seatInventory != null)
-                    {
-                        try
+                        if (seatInventory != null)
                         {
                             seatInventory.ReleaseHeldSeats(passengers.Count);
                             await _seatInventoryRepository.UpdateAsync(seatInventory);
-
-                            _logger.LogInformation(
-                                "Released {PassengerCount} held seats for expired booking {BookingId}",
-                                passengers.Count, booking.Id);
                         }
-                        catch (InvalidOperationException ex)
-                        {
-                            _logger.LogError(ex, 
-                                "Error releasing held seats for expired booking {BookingId}. " +
-                                "Current held seats: {HeldSeats}, passengers: {PassengerCount}",
-                                booking.Id, seatInventory.HeldSeats, passengers.Count);
-                            await _unitOfWork.RollbackAsync();
-                            continue;
-                        }
-                    }
 
-                    booking.Status = (int)BookingStatus.Cancelled;
-                    booking.UpdatedAt = DateTime.UtcNow;
-                    await _bookingRepository.UpdateAsync(booking);
+                        booking.Status = (int)BookingStatus.Cancelled;
+                        booking.UpdatedAt = DateTime.UtcNow;
+                        await _bookingRepository.UpdateAsync(booking);
+                    });
 
-                    await _unitOfWork.CommitAsync();
                     expiredCount++;
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error processing expired booking {BookingId}", booking.Id);
-                    await _unitOfWork.RollbackAsync();
                 }
             }
 
@@ -305,10 +286,80 @@ public class BackgroundJobService : IBackgroundJobService
         }
     }
 
+    public void EnqueueVnpayRefund(int bookingId, string reason)
+    {
+        try
+        {
+            var job = new VnpayRefundJob
+            {
+                BookingId = bookingId,
+                Reason = string.IsNullOrWhiteSpace(reason) ? $"Refund booking #{bookingId}" : reason.Trim(),
+                EnqueuedAt = DateTime.UtcNow,
+                RetryCount = 0,
+                NextAttemptAt = DateTime.UtcNow
+            };
+
+            RefundQueue.Enqueue(job);
+            _logger.LogInformation("Enqueued VNPAY refund job for booking {BookingId}", bookingId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error enqueuing VNPAY refund job for booking {BookingId}", bookingId);
+        }
+    }
+
+    public async Task ProcessVnpayRefundQueueAsync(CancellationToken cancellationToken = default)
+    {
+        while (!cancellationToken.IsCancellationRequested && RefundQueue.TryDequeue(out var job))
+        {
+            if (job.NextAttemptAt > DateTime.UtcNow)
+            {
+                RefundQueue.Enqueue(job);
+                continue;
+            }
+
+            var success = await ProcessSingleVnpayRefundAsync(job, cancellationToken);
+            if (success)
+            {
+                continue;
+            }
+
+            if (job.RetryCount >= MaxRefundRetryAttempts)
+            {
+                await MarkRefundFailedAsync(job.BookingId);
+                _logger.LogError(
+                    "VNPAY refund permanently failed after {RetryCount} retries for booking {BookingId}",
+                    job.RetryCount,
+                    job.BookingId);
+                continue;
+            }
+
+            job.RetryCount++;
+            job.NextAttemptAt = DateTime.UtcNow.AddSeconds(Math.Pow(2, job.RetryCount));
+            RefundQueue.Enqueue(job);
+
+            _logger.LogWarning(
+                "VNPAY refund failed for booking {BookingId}. Retry {RetryCount}/{MaxRetries} at {NextAttempt}",
+                job.BookingId,
+                job.RetryCount,
+                MaxRefundRetryAttempts,
+                job.NextAttemptAt);
+        }
+    }
+
     public void StartRecurringJobs()
     {
         try
         {
+            _ = Task.Run(async () =>
+            {
+                while (true)
+                {
+                    await ProcessVnpayRefundQueueAsync();
+                    await Task.Delay(TimeSpan.FromSeconds(10));
+                }
+            });
+
             _logger.LogInformation("Recurring jobs started");
         }
         catch (Exception ex)
@@ -327,7 +378,9 @@ public class BackgroundJobService : IBackgroundJobService
                 { "ExpireBookings", "Scheduled" },
                 { "UpdatePrices", "Scheduled" },
                 { "BookingReminders", "Scheduled" },
-                { "RefundNotifications", "Scheduled" }
+                { "RefundNotifications", "Scheduled" },
+                { "GenerateReports", "Scheduled" },
+                { "VnpayRefundQueueSize", RefundQueue.Count.ToString() }
             };
         }
         catch (Exception ex)
@@ -335,5 +388,97 @@ public class BackgroundJobService : IBackgroundJobService
             _logger.LogError(ex, "Error getting job status");
             return [];
         }
+    }
+
+    private async Task<bool> ProcessSingleVnpayRefundAsync(VnpayRefundJob job, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var booking = await _bookingRepository.GetByIdAsync(job.BookingId);
+            if (booking == null)
+            {
+                _logger.LogWarning("Cannot process VNPAY refund. Booking not found: {BookingId}", job.BookingId);
+                return true;
+            }
+
+            var payment = (await _paymentRepository.GetByBookingIdAsync(job.BookingId))
+                .FirstOrDefault(p => p.Status == 1 && string.Equals(p.Provider, "VNPAY", StringComparison.OrdinalIgnoreCase));
+
+            if (payment == null || string.IsNullOrWhiteSpace(payment.TransactionRef))
+            {
+                _logger.LogWarning("No completed VNPAY payment found for booking {BookingId}", job.BookingId);
+                return true;
+            }
+
+            var request = new VnpayRefundRequest
+            {
+                TxnRef = payment.TransactionRef,
+                TransactionDate = (payment.PaidAt ?? payment.CreatedAt).ToString("yyyyMMddHHmmss"),
+                Amount = payment.Amount,
+                OrderInfo = job.Reason,
+                CreateBy = "system-worker"
+            };
+
+            var response = await _vnpayPaymentProvider.ProcessRefundAsync(request, cancellationToken);
+            if (!response.Success)
+            {
+                _logger.LogWarning(
+                    "VNPAY refund API failed for booking {BookingId}. Code: {Code}, Message: {Message}",
+                    job.BookingId,
+                    response.ResponseCode,
+                    response.Message);
+                return false;
+            }
+
+            await _unitOfWork.ExecuteInTransactionAsync(async () =>
+            {
+                payment.Status = 3;
+                payment.UpdatedAt = DateTime.UtcNow;
+                await _paymentRepository.UpdateAsync(payment);
+
+                booking.Status = (int)BookingStatus.Refunded;
+                booking.UpdatedAt = DateTime.UtcNow;
+                await _bookingRepository.UpdateAsync(booking);
+            });
+
+            _logger.LogInformation("VNPAY refund success for booking {BookingId}. TxnRef: {TxnRef}", job.BookingId, request.TxnRef);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error processing VNPAY refund for booking {BookingId}", job.BookingId);
+            return false;
+        }
+    }
+
+    private async Task MarkRefundFailedAsync(int bookingId)
+    {
+        try
+        {
+            var payment = (await _paymentRepository.GetByBookingIdAsync(bookingId))
+                .FirstOrDefault(p => p.Status == 1 && string.Equals(p.Provider, "VNPAY", StringComparison.OrdinalIgnoreCase));
+
+            if (payment == null)
+            {
+                return;
+            }
+
+            payment.Status = 4;
+            payment.UpdatedAt = DateTime.UtcNow;
+            await _paymentRepository.UpdateAsync(payment);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error marking refund failed for booking {BookingId}", bookingId);
+        }
+    }
+
+    private sealed class VnpayRefundJob
+    {
+        public int BookingId { get; set; }
+        public string Reason { get; set; } = null!;
+        public int RetryCount { get; set; }
+        public DateTime EnqueuedAt { get; set; }
+        public DateTime NextAttemptAt { get; set; }
     }
 }

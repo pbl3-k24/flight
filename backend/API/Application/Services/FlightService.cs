@@ -51,13 +51,13 @@ public class FlightService : IFlightService
                 throw new ValidationException("Departure and arrival airports cannot be the same");
             }
 
-            if (criteria.DepartureDate < DateTime.UtcNow.Date)
+            if (criteria.DepartureDate.Date < DateTime.UtcNow.AddDays(-1).Date)
             {
                 throw new ValidationException("Departure date cannot be in the past");
             }
 
             // Check cache
-            var cacheKey = $"flight-search:{criteria.DepartureAirportId}:{criteria.ArrivalAirportId}:{criteria.DepartureDate:yyyy-MM-dd}";
+            var cacheKey = $"flight-search:{criteria.DepartureAirportId}:{criteria.ArrivalAirportId}:{criteria.DepartureDate:yyyy-MM-dd}:{criteria.PassengerCount}:{criteria.SeatPreference}:{criteria.FlightNumber}";
             var cachedResult = await _cache.GetStringAsync(cacheKey);
             if (!string.IsNullOrEmpty(cachedResult))
             {
@@ -72,10 +72,23 @@ public class FlightService : IFlightService
                 criteria.DepartureDate,
                 criteria.DepartureDate.AddDays(1)); // Allow ±1 day for flexibility
 
+            if (!string.IsNullOrWhiteSpace(criteria.FlightNumber))
+            {
+                var flightNumber = criteria.FlightNumber.Trim().ToUpperInvariant();
+                flights = flights
+                    .Where(f => string.Equals(f.FlightNumber, flightNumber, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
             var results = new List<FlightSearchResponse>();
 
             foreach (var flight in flights)
             {
+                if (flight.Status != 0)
+                {
+                    continue;
+                }
+
                 var response = new FlightSearchResponse
                 {
                     FlightId = flight.Id,
@@ -100,6 +113,12 @@ public class FlightService : IFlightService
                     var availableSeats = inventory.AvailableSeats;
                     var currentPrice = inventory.CurrentPrice;
 
+                    // Filter out seat classes that don't have enough seats
+                    if (criteria.PassengerCount > 0 && availableSeats < criteria.PassengerCount)
+                    {
+                        continue;
+                    }
+
                     // Apply promotions if applicable
                     if (criteria.PassengerCount > 0)
                     {
@@ -119,7 +138,7 @@ public class FlightService : IFlightService
                         results.Add(response);
                     }
                 }
-                else
+                else if (response.PricesByClass.Count > 0)
                 {
                     results.Add(response);
                 }
@@ -128,12 +147,15 @@ public class FlightService : IFlightService
             // Sort by price (ascending)
             results = results.OrderBy(f => f.PricesByClass.Values.DefaultIfEmpty(decimal.MaxValue).Min()).ToList();
 
-            // Cache results for 30 minutes
-            var cacheOptions = new DistributedCacheEntryOptions
+            // Cache results for 30 minutes only if there are results
+            if (results.Count > 0)
             {
-                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
-            };
-            await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(results), cacheOptions);
+                var cacheOptions = new DistributedCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+                };
+                await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(results), cacheOptions);
+            }
 
             _logger.LogInformation("Flight search completed: {Count} flights found", results.Count);
 
@@ -253,6 +275,11 @@ public class FlightService : IFlightService
 
             foreach (var flight in flights)
             {
+                if (flight.Status != 0)
+                {
+                    continue;
+                }
+
                 var response = new FlightSearchResponse
                 {
                     FlightId = flight.Id,

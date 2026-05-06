@@ -19,7 +19,9 @@ public class Aircraft
     // Navigation properties
     public virtual ICollection<AircraftSeatTemplate> SeatTemplates { get; set; } = [];
 
-    public virtual ICollection<Flight> Flights { get; set; } = [];
+    // NOTE: Flights now reference Aircraft through FlightDefinition.DefaultAircraftId or Flight.ActualAircraftId
+    // This navigation is no longer used
+    // public virtual ICollection<Flight> Flights { get; set; } = [];
 
     // Domain methods
     public int GetTotalSeatsByClass(SeatClass seatClass)

@@ -1,0 +1,9 @@
+### Test VNPay URL Generation
+POST http://localhost:5042/api/v1/payments/test-vnpay
+Content-Type: application/json
+
+{
+  "amount": 100000,
+  "bookingId": 1,
+  "orderDescription": "Thanh toan booking TEST001"
+}

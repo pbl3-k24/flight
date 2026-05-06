@@ -13,6 +13,8 @@ public class FlightSearchDto
     public int PassengerCount { get; set; }
 
     public int? SeatPreference { get; set; } // Nullable, can filter by seat class
+
+    public string? FlightNumber { get; set; }
 }
 
 public class FlightSearchResponse

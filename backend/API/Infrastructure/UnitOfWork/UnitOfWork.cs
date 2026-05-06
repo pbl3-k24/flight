@@ -30,6 +30,9 @@ public class UnitOfWork : IUnitOfWork
     private ITicketRepository? _tickets;
     private INotificationLogRepository? _notificationLogs;
     private IAuditLogRepository? _auditLogs;
+    private IFlightScheduleTemplateRepository? _flightScheduleTemplates;
+    private IFlightTemplateDetailRepository? _flightTemplateDetails;
+    private IFlightDefinitionRepository? _flightDefinitions;
 
     public UnitOfWork(FlightBookingDbContext context, ILoggerFactory loggerFactory)
     {
@@ -54,6 +57,9 @@ public class UnitOfWork : IUnitOfWork
     public ITicketRepository Tickets => _tickets ??= new TicketRepository(_context, _loggerFactory.CreateLogger<TicketRepository>());
     public INotificationLogRepository NotificationLogs => _notificationLogs ??= new NotificationLogRepository(_context, _loggerFactory.CreateLogger<NotificationLogRepository>());
     public IAuditLogRepository AuditLogs => _auditLogs ??= new AuditLogRepository(_context, _loggerFactory.CreateLogger<AuditLogRepository>());
+    public IFlightScheduleTemplateRepository FlightScheduleTemplates => _flightScheduleTemplates ??= new FlightScheduleTemplateRepository(_context);
+    public IFlightTemplateDetailRepository FlightTemplateDetails => _flightTemplateDetails ??= new FlightTemplateDetailRepository(_context);
+    public IFlightDefinitionRepository FlightDefinitions => _flightDefinitions ??= new FlightDefinitionRepository(_context);
 
     /// <summary>
     /// Begins a database transaction for atomic operations.
@@ -106,6 +112,59 @@ public class UnitOfWork : IUnitOfWork
             _loggerFactory.CreateLogger<UnitOfWork>().LogError(ex, "Error rolling back transaction");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Executes a transactional operation using the configured execution strategy.
+    /// This is required when using retry execution strategies like NpgsqlRetryingExecutionStrategy.
+    /// </summary>
+    public async Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> operation)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var result = await operation();
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                _loggerFactory.CreateLogger<UnitOfWork>().LogInformation("Transaction committed successfully");
+                return result;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                _loggerFactory.CreateLogger<UnitOfWork>().LogWarning("Transaction rolled back");
+                throw;
+            }
+        });
+    }
+
+    /// <summary>
+    /// Executes a transactional operation using the configured execution strategy (void return).
+    /// This is required when using retry execution strategies like NpgsqlRetryingExecutionStrategy.
+    /// </summary>
+    public async Task ExecuteInTransactionAsync(Func<Task> operation)
+    {
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                await operation();
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                _loggerFactory.CreateLogger<UnitOfWork>().LogInformation("Transaction committed successfully");
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                _loggerFactory.CreateLogger<UnitOfWork>().LogWarning("Transaction rolled back");
+                throw;
+            }
+        });
     }
 
     /// <summary>

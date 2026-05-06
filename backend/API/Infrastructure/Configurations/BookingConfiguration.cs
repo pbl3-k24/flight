@@ -110,7 +110,7 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
 
         builder.HasCheckConstraint(
             "CK_Booking_Status_Valid",
-            "\"Status\" IN (0, 1, 2, 3)");
+            "\"Status\" IN (0, 1, 2, 3, 4)");
 
         builder.HasCheckConstraint(
             "CK_Booking_ContactEmail_Default",

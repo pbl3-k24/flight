@@ -18,6 +18,9 @@ public interface IUnitOfWork : IDisposable, IAsyncDisposable
     ITicketRepository Tickets { get; }
     INotificationLogRepository NotificationLogs { get; }
     IAuditLogRepository AuditLogs { get; }
+    IFlightScheduleTemplateRepository FlightScheduleTemplates { get; }
+    IFlightTemplateDetailRepository FlightTemplateDetails { get; }
+    IFlightDefinitionRepository FlightDefinitions { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 
@@ -36,4 +39,16 @@ public interface IUnitOfWork : IDisposable, IAsyncDisposable
     /// Rolls back the current transaction, discarding all changes.
     /// </summary>
     Task RollbackAsync();
+
+    /// <summary>
+    /// Executes a transactional operation using the configured execution strategy.
+    /// This is required when using retry execution strategies like NpgsqlRetryingExecutionStrategy.
+    /// </summary>
+    Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> operation);
+
+    /// <summary>
+    /// Executes a transactional operation using the configured execution strategy (void return).
+    /// This is required when using retry execution strategies like NpgsqlRetryingExecutionStrategy.
+    /// </summary>
+    Task ExecuteInTransactionAsync(Func<Task> operation);
 }

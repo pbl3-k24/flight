@@ -14,7 +14,7 @@ public class Booking
 
     public int? ReturnFlightId { get; set; }
 
-    public int Status { get; set; } = 0; // 0=Pending, 1=Confirmed, 2=CheckedIn, 3=Cancelled
+    public int Status { get; set; } = 0; // 0=Pending, 1=Confirmed, 2=CheckedIn, 3=Cancelled, 4=Refunded
 
     public string ContactEmail { get; set; } = null!;
 
@@ -56,7 +56,7 @@ public class Booking
 
     public virtual ICollection<BookingPassenger> Passengers { get; set; } = [];
 
-    public virtual Payment? Payment { get; set; }
+    public virtual ICollection<Payment> Payments { get; set; } = []; // Changed from Payment? to ICollection<Payment>
 
     public virtual Promotion? Promotion { get; set; }
 

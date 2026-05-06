@@ -41,4 +41,9 @@ public interface IPaymentService
     /// <returns>List of payment attempts</returns>
     /// <exception cref="UnauthorizedException">Thrown if user is not owner and not admin</exception>
     Task<List<PaymentHistoryResponse>> GetPaymentHistoryAsync(int bookingId, int userId, bool isAdmin = false);
+
+    /// <summary>
+    /// Processes VNPAY callback by finding payment via TransactionRef.
+    /// </summary>
+    Task<bool> ProcessVnpayCallbackAsync(PaymentCallbackDto callback);
 }

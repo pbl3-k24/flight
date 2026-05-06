@@ -55,16 +55,11 @@ public class BookingCodeGenerator
     private static string GenerateCryptoRandomCode()
     {
         var result = new char[CodeLength];
+        var data = RandomNumberGenerator.GetBytes(CodeLength);
 
-        using (var rng = new RNGCryptoServiceProvider())
+        for (int i = 0; i < CodeLength; i++)
         {
-            var data = new byte[CodeLength];
-            rng.GetBytes(data);
-
-            for (int i = 0; i < CodeLength; i++)
-            {
-                result[i] = ValidChars[data[i] % ValidChars.Length];
-            }
+            result[i] = ValidChars[data[i] % ValidChars.Length];
         }
 
         return new string(result);

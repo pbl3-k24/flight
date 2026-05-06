@@ -49,7 +49,7 @@ public class BookingsController : ControllerBase
             _logger.LogInformation("Booking creation requested by user {UserId}", userId);
 
             var booking = await _bookingService.CreateBookingAsync(userId, dto);
-            return CreatedAtAction(nameof(GetBookingAsync), new { id = booking.BookingId }, booking);
+            return CreatedAtRoute(nameof(GetBookingAsync), new { id = booking.BookingId }, booking);
         }
         catch (ValidationException ex)
         {
@@ -73,7 +73,7 @@ public class BookingsController : ControllerBase
     /// </summary>
     /// <param name="id">Booking ID</param>
     /// <returns>Booking details</returns>
-    [HttpGet("{id}")]
+    [HttpGet("{id}", Name = nameof(GetBookingAsync))]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

@@ -23,7 +23,7 @@ public class Route
 
     public virtual Airport ArrivalAirport { get; set; } = null!;
 
-    public virtual ICollection<Flight> Flights { get; set; } = [];
+    // Flights are now linked through FlightDefinition, not directly to Route
 
     // Domain methods
     public double GetDurationInHours() => EstimatedDurationMinutes / 60.0;

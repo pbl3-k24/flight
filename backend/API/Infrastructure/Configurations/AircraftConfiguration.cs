@@ -37,10 +37,7 @@ public class AircraftConfiguration : IEntityTypeConfiguration<Aircraft>
             .HasForeignKey(st => st.AircraftId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasMany(a => a.Flights)
-            .WithOne(f => f.Aircraft)
-            .HasForeignKey(f => f.AircraftId)
-            .OnDelete(DeleteBehavior.Restrict);
+        // NOTE: Aircraft.Flights navigation removed - Flights now reference Aircraft through FlightDefinition or ActualAircraftId
 
         // Add CHECK constraints
         builder.HasCheckConstraint(

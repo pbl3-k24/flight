@@ -15,6 +15,44 @@ public class CreateFlightDto
     public bool IsActive { get; set; } = true;
 }
 
+public class WeeklyFlightPatternDto
+{
+    public string? FlightNumber { get; set; }
+
+    public string FlightNumberPrefix { get; set; } = null!;
+
+    public int RouteId { get; set; }
+
+    public int AircraftId { get; set; }
+
+    /// <summary>
+    /// 0=Sunday ... 6=Saturday
+    /// </summary>
+    public int DayOfWeek { get; set; }
+
+    public TimeOnly DepartureTimeOfDay { get; set; }
+
+    public TimeOnly ArrivalTimeOfDay { get; set; }
+
+    public bool IsActive { get; set; } = true;
+}
+
+public class CreateWeeklyScheduleDto
+{
+    /// <summary>
+    /// Monday of the template week (UTC)
+    /// </summary>
+    public DateOnly WeekStartDate { get; set; }
+
+    /// <summary>
+    /// Number of additional weeks auto-generated from template week.
+    /// Default 12.
+    /// </summary>
+    public int AutoGenerateWeeks { get; set; } = 12;
+
+    public List<WeeklyFlightPatternDto> Flights { get; set; } = [];
+}
+
 public class UpdateFlightDto
 {
     public string? FlightNumber { get; set; }

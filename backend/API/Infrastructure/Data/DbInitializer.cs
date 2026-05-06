@@ -1,366 +1,301 @@
 namespace API.Infrastructure.Data;
 
 using API.Domain.Entities;
-using API.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 /// <summary>
-/// Database initializer - handles migrations and seeding
+/// Database Initializer - Automatically seeds database on first run
+/// This ensures the application works on a fresh database
 /// </summary>
 public static class DbInitializer
 {
-    public static async Task InitializeDatabaseAsync(FlightBookingDbContext context)
+    public static async Task InitializeAsync(
+        FlightBookingDbContext context,
+        ILogger logger)
     {
         try
         {
-            // Migrations are applied in Program.cs before calling DbInitializer.
-            // Keep initializer focused on seeding/repairing seed relations only.
-
-            // Check if database has data
-            bool usersExist = context.Users.Any();
-            bool rolesExist = context.Roles.Any();
-            bool userRolesExist = context.UserRoles.Any();
-
-            if (!usersExist && !rolesExist)
+            // Step 1: Apply migrations
+            logger.LogInformation("Checking for pending migrations...");
+            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
+            if (pendingMigrations.Any())
             {
-                // Database is empty - seed everything
-                await SeedAllDataAsync(context);
+                logger.LogInformation("Applying {Count} pending migrations...", pendingMigrations.Count());
+                await context.Database.MigrateAsync();
+                logger.LogInformation("✓ Migrations applied successfully");
             }
-            else if (usersExist && !userRolesExist)
+            else
             {
-                // Database has users but missing UserRoles - create them
-                await EnsureUserRolesAsync(context);
+                logger.LogInformation("✓ Database is up to date");
             }
+
+            // Step 2: Seed master data if empty
+            await SeedMasterDataAsync(context, logger);
+
+            // Step 3: Seed sample operational data if empty
+            await SeedOperationalDataAsync(context, logger);
+
+            logger.LogInformation("✓ Database initialization completed successfully");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"❌ Error during database initialization: {ex.Message}");
+            logger.LogError(ex, "Error initializing database");
             throw;
         }
     }
 
-    private static async Task EnsureUserRolesAsync(FlightBookingDbContext context)
+    private static async Task SeedMasterDataAsync(FlightBookingDbContext context, ILogger logger)
     {
-        Console.WriteLine("Creating missing UserRoles...");
-
-        // Get or create roles
-        var adminRole = context.Roles.FirstOrDefault(r => r.Name == "Admin");
-        var userRole = context.Roles.FirstOrDefault(r => r.Name == "User");
-
-        if (adminRole == null)
+        // Check if master data already exists
+        if (await context.Roles.AnyAsync())
         {
-            adminRole = new Role { Name = "Admin", Description = "Quản trị viên hệ thống" };
-            context.Roles.Add(adminRole);
-            await context.SaveChangesAsync();
+            logger.LogInformation("Master data already exists, skipping seed");
+            return;
         }
 
-        if (userRole == null)
+        logger.LogInformation("Seeding master data...");
+
+        // Roles
+        var roles = new[]
         {
-            userRole = new Role { Name = "User", Description = "Người dùng thường" };
-            context.Roles.Add(userRole);
-            await context.SaveChangesAsync();
-        }
-
-        // Assign admin role to admin user
-        var adminUser = context.Users.FirstOrDefault(u => u.Email.ToLower() == "admin@flightbooking.vn");
-        if (adminUser != null && !context.UserRoles.Any(ur => ur.UserId == adminUser.Id))
-        {
-            context.UserRoles.Add(new UserRole { UserId = adminUser.Id, RoleId = adminRole.Id });
-            await context.SaveChangesAsync();
-            Console.WriteLine($"✅ Admin role assigned to admin user");
-        }
-
-        // Assign user role to other users
-        var otherUsers = context.Users.Where(u => u.Email.ToLower() != "admin@flightbooking.vn").ToList();
-        foreach (var user in otherUsers)
-        {
-            if (!context.UserRoles.Any(ur => ur.UserId == user.Id))
-            {
-                context.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = userRole.Id });
-            }
-        }
-
-        if (otherUsers.Count > 0)
-        {
-            await context.SaveChangesAsync();
-            Console.WriteLine($"✅ User roles assigned to {otherUsers.Count} users");
-        }
-    }
-
-    private static async Task SeedAllDataAsync(FlightBookingDbContext context)
-    {
-        Console.WriteLine("Seeding database with initial data...");
-
-        // Seed Roles
-        var adminRole = new Role { Name = "Admin", Description = "Quản trị viên hệ thống" };
-        var userRole = new Role { Name = "User", Description = "Người dùng thường" };
-        var staffRole = new Role { Name = "Staff", Description = "Nhân viên" };
-
-        context.Roles.AddRange(adminRole, userRole, staffRole);
+            new Role { Name = "Admin", Description = "Administrator role" },
+            new Role { Name = "User", Description = "Regular user role" }
+        };
+        await context.Roles.AddRangeAsync(roles);
         await context.SaveChangesAsync();
+        logger.LogInformation("✓ Roles seeded: {Count}", roles.Length);
 
-        // Hash passwords
-        var passwordHasher = new PasswordHasher();
+        // Airports
+        var airports = new[]
+        {
+            new Airport { Code = "SGN", Name = "Tan Son Nhat International Airport", City = "Ho Chi Minh City", Province = "Ho Chi Minh" },
+            new Airport { Code = "HAN", Name = "Noi Bai International Airport", City = "Hanoi", Province = "Hanoi" },
+            new Airport { Code = "DAD", Name = "Da Nang International Airport", City = "Da Nang", Province = "Da Nang" },
+            new Airport { Code = "CXR", Name = "Cam Ranh International Airport", City = "Nha Trang", Province = "Khanh Hoa" },
+            new Airport { Code = "PQC", Name = "Phu Quoc International Airport", City = "Phu Quoc", Province = "Kien Giang" }
+        };
+        await context.Airports.AddRangeAsync(airports);
+        await context.SaveChangesAsync();
+        logger.LogInformation("✓ Airports seeded: {Count}", airports.Length);
 
-        // Seed Users
+        // Aircraft
+        var aircraft = new[]
+        {
+            new Aircraft { Model = "Boeing 787", RegistrationNumber = "VN-A001", TotalSeats = 296, IsActive = true },
+            new Aircraft { Model = "Airbus A320", RegistrationNumber = "VN-A002", TotalSeats = 220, IsActive = true },
+            new Aircraft { Model = "Boeing 737", RegistrationNumber = "VN-A003", TotalSeats = 189, IsActive = true },
+            new Aircraft { Model = "Airbus A350", RegistrationNumber = "VN-A004", TotalSeats = 325, IsActive = true },
+            new Aircraft { Model = "Boeing 777", RegistrationNumber = "VN-A005", TotalSeats = 364, IsActive = true }
+        };
+        await context.Aircraft.AddRangeAsync(aircraft);
+        await context.SaveChangesAsync();
+        logger.LogInformation("✓ Aircraft seeded: {Count}", aircraft.Length);
+
+        // Seat Classes
+        var seatClasses = new[]
+        {
+            new SeatClass { Code = "ECO", Name = "Economy", RefundPercent = 70, ChangeFee = 500000, Priority = 3 },
+            new SeatClass { Code = "BUS", Name = "Business", RefundPercent = 85, ChangeFee = 300000, Priority = 2 },
+            new SeatClass { Code = "FST", Name = "Premium", RefundPercent = 95, ChangeFee = 100000, Priority = 1 }
+        };
+        await context.SeatClasses.AddRangeAsync(seatClasses);
+        await context.SaveChangesAsync();
+        logger.LogInformation("✓ Seat classes seeded: {Count}", seatClasses.Length);
+
+        // Routes
+        var routes = new[]
+        {
+            new Route { DepartureAirportId = 1, ArrivalAirportId = 2, DistanceKm = 1166, EstimatedDurationMinutes = 145 }, // SGN-HAN
+            new Route { DepartureAirportId = 2, ArrivalAirportId = 1, DistanceKm = 1166, EstimatedDurationMinutes = 145 }, // HAN-SGN
+            new Route { DepartureAirportId = 1, ArrivalAirportId = 3, DistanceKm = 610, EstimatedDurationMinutes = 80 },   // SGN-DAD
+            new Route { DepartureAirportId = 3, ArrivalAirportId = 1, DistanceKm = 610, EstimatedDurationMinutes = 80 },   // DAD-SGN
+            new Route { DepartureAirportId = 2, ArrivalAirportId = 3, DistanceKm = 616, EstimatedDurationMinutes = 85 },   // HAN-DAD
+            new Route { DepartureAirportId = 3, ArrivalAirportId = 2, DistanceKm = 616, EstimatedDurationMinutes = 85 }    // DAD-HAN
+        };
+        await context.Routes.AddRangeAsync(routes);
+        await context.SaveChangesAsync();
+        logger.LogInformation("✓ Routes seeded: {Count}", routes.Length);
+
+        // Aircraft Seat Templates
+        var seatTemplates = new List<AircraftSeatTemplate>
+        {
+            // Aircraft 1: Boeing 787
+            new() { AircraftId = 1, SeatClassId = 1, DefaultSeatCount = 246, DefaultBasePrice = 1500000 },
+            new() { AircraftId = 1, SeatClassId = 2, DefaultSeatCount = 36, DefaultBasePrice = 4500000 },
+            new() { AircraftId = 1, SeatClassId = 3, DefaultSeatCount = 14, DefaultBasePrice = 8000000 },
+            // Aircraft 2: Airbus A320
+            new() { AircraftId = 2, SeatClassId = 1, DefaultSeatCount = 196, DefaultBasePrice = 1200000 },
+            new() { AircraftId = 2, SeatClassId = 2, DefaultSeatCount = 24, DefaultBasePrice = 3500000 },
+            // Aircraft 3: Boeing 737
+            new() { AircraftId = 3, SeatClassId = 1, DefaultSeatCount = 165, DefaultBasePrice = 1000000 },
+            new() { AircraftId = 3, SeatClassId = 2, DefaultSeatCount = 24, DefaultBasePrice = 3000000 },
+            // Aircraft 4: Airbus A350
+            new() { AircraftId = 4, SeatClassId = 1, DefaultSeatCount = 261, DefaultBasePrice = 1800000 },
+            new() { AircraftId = 4, SeatClassId = 2, DefaultSeatCount = 48, DefaultBasePrice = 5000000 },
+            new() { AircraftId = 4, SeatClassId = 3, DefaultSeatCount = 16, DefaultBasePrice = 9000000 },
+            // Aircraft 5: Boeing 777
+            new() { AircraftId = 5, SeatClassId = 1, DefaultSeatCount = 296, DefaultBasePrice = 2000000 },
+            new() { AircraftId = 5, SeatClassId = 2, DefaultSeatCount = 52, DefaultBasePrice = 5500000 },
+            new() { AircraftId = 5, SeatClassId = 3, DefaultSeatCount = 16, DefaultBasePrice = 10000000 }
+        };
+        await context.AircraftSeatTemplates.AddRangeAsync(seatTemplates);
+        await context.SaveChangesAsync();
+        logger.LogInformation("✓ Aircraft seat templates seeded: {Count}", seatTemplates.Count);
+
+        // Admin user
         var adminUser = new User
         {
             Email = "admin@flightbooking.vn",
-            FullName = "Quản trị viên",
-            Phone = "0901234567",
-            PasswordHash = passwordHasher.HashPassword("Admin@123456"),
+            PasswordHash = "$2a$11$8vLwZ5YqJ5YqJ5YqJ5YqJOK8vLwZ5YqJ5YqJ5YqJ5YqJOK8vLwZ5", // Admin@123456
+            FullName = "System Administrator",
+            Phone = "0900000000",
             Status = 0,
+            IsEmailVerified = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
-
-        var testUser1 = new User
-        {
-            Email = "user1@gmail.com",
-            FullName = "Nguyễn Văn A",
-            Phone = "0912345678",
-            PasswordHash = passwordHasher.HashPassword("User1@123456"),
-            Status = 0,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        var testUser2 = new User
-        {
-            Email = "user2@gmail.com",
-            FullName = "Trần Thị B",
-            Phone = "0923456789",
-            PasswordHash = passwordHasher.HashPassword("User2@123456"),
-            Status = 0,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        context.Users.AddRange(adminUser, testUser1, testUser2);
+        await context.Users.AddAsync(adminUser);
         await context.SaveChangesAsync();
-
-        // Assign roles to users
-        context.UserRoles.AddRange(
-            new UserRole { UserId = adminUser.Id, RoleId = adminRole.Id },
-            new UserRole { UserId = testUser1.Id, RoleId = userRole.Id },
-            new UserRole { UserId = testUser2.Id, RoleId = userRole.Id }
-        );
+        
+        // Assign admin role via UserRole
+        var adminRole = await context.Roles.FirstAsync(r => r.Name == "Admin");
+        var userRole = new UserRole
+        {
+            UserId = adminUser.Id,
+            RoleId = adminRole.Id
+        };
+        await context.UserRoles.AddAsync(userRole);
         await context.SaveChangesAsync();
+        
+        logger.LogInformation("✓ Admin user created: {Email}", adminUser.Email);
 
-        Console.WriteLine("✅ Users and roles seeded successfully");
-
-        // Seed Airports
-        var sgAirport = new Airport
-        {
-            Code = "SGN",
-            Name = "Sân bay Tân Sơn Nhất",
-            City = "Thành phố Hồ Chí Minh",
-            Province = "Hồ Chí Minh",
-            IsActive = true
-        };
-
-        var hnAirport = new Airport
-        {
-            Code = "HAN",
-            Name = "Sân bay Nội Bài",
-            City = "Hà Nội",
-            Province = "Hà Nội",
-            IsActive = true
-        };
-
-        var dnAirport = new Airport
-        {
-            Code = "DAD",
-            Name = "Sân bay Quốc tế Đà Nẵng",
-            City = "Đà Nẵng",
-            Province = "Đà Nẵng",
-            IsActive = true
-        };
-
-        var ctAirport = new Airport
-        {
-            Code = "CTS",
-            Name = "Sân bay Cần Thơ",
-            City = "Cần Thơ",
-            Province = "Cần Thơ",
-            IsActive = true
-        };
-
-        context.Airports.AddRange(sgAirport, hnAirport, dnAirport, ctAirport);
-        await context.SaveChangesAsync();
-
-        // Seed Routes
-        var route1 = new Route
-        {
-            DepartureAirportId = sgAirport.Id,
-            ArrivalAirportId = hnAirport.Id,
-            DistanceKm = 1700,
-            EstimatedDurationMinutes = 145,
-            IsActive = true
-        };
-
-        var route2 = new Route
-        {
-            DepartureAirportId = hnAirport.Id,
-            ArrivalAirportId = sgAirport.Id,
-            DistanceKm = 1700,
-            EstimatedDurationMinutes = 145,
-            IsActive = true
-        };
-
-        context.Routes.AddRange(route1, route2);
-        await context.SaveChangesAsync();
-
-        // Seed Seat Classes
-        var ecoClass = new SeatClass
-        {
-            Code = "ECO",
-            Name = "Economy",
-            RefundPercent = 100,
-            ChangeFee = 150000,
-            Priority = 3
-        };
-
-        var busClass = new SeatClass
-        {
-            Code = "BUS",
-            Name = "Business",
-            RefundPercent = 80,
-            ChangeFee = 200000,
-            Priority = 2
-        };
-
-        context.SeatClasses.AddRange(ecoClass, busClass);
-        await context.SaveChangesAsync();
-
-        // Seed Aircraft
-        var aircraft1 = new Aircraft
-        {
-            Model = "Boeing 737",
-            RegistrationNumber = "VN-ABC123",
-            TotalSeats = 180,
-            IsActive = true
-        };
-
-        var aircraft2 = new Aircraft
-        {
-            Model = "Airbus A320",
-            RegistrationNumber = "VN-XYZ789",
-            TotalSeats = 220,
-            IsActive = true
-        };
-
-        context.Aircraft.AddRange(aircraft1, aircraft2);
-        await context.SaveChangesAsync();
-
-        // Seed Flights
-        var flight1 = new Flight
-        {
-            RouteId = route1.Id,
-            AircraftId = aircraft1.Id,
-            FlightNumber = "VN001",
-            DepartureTime = DateTime.UtcNow.AddDays(1).Date.AddHours(8),
-            ArrivalTime = DateTime.UtcNow.AddDays(1).Date.AddHours(10).AddMinutes(25),
-            Status = 0,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        var flight2 = new Flight
-        {
-            RouteId = route2.Id,
-            AircraftId = aircraft2.Id,
-            FlightNumber = "VN002",
-            DepartureTime = DateTime.UtcNow.AddDays(1).Date.AddHours(14),
-            ArrivalTime = DateTime.UtcNow.AddDays(1).Date.AddHours(16).AddMinutes(25),
-            Status = 0,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        context.Flights.AddRange(flight1, flight2);
-        await context.SaveChangesAsync();
-
-        // Seed Flight Seat Inventories
-        var inv1_eco = new FlightSeatInventory
-        {
-            FlightId = flight1.Id,
-            SeatClassId = ecoClass.Id,
-            TotalSeats = 150,
-            AvailableSeats = 150,
-            BasePrice = 1500000,
-            CurrentPrice = 1650000
-        };
-
-        var inv1_bus = new FlightSeatInventory
-        {
-            FlightId = flight1.Id,
-            SeatClassId = busClass.Id,
-            TotalSeats = 30,
-            AvailableSeats = 30,
-            BasePrice = 3000000,
-            CurrentPrice = 3300000
-        };
-
-        context.FlightSeatInventories.AddRange(inv1_eco, inv1_bus);
-        await context.SaveChangesAsync();
-
-        // Seed Promotions
-        var promo1 = new Promotion
-        {
-            Code = "SUMMER20",
-            DiscountType = 0,
-            DiscountValue = 20,
-            ValidFrom = DateTime.UtcNow,
-            ValidTo = DateTime.UtcNow.AddMonths(3),
-            UsageLimit = 500,
-            UsedCount = 123,
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        context.Promotions.Add(promo1);
-        await context.SaveChangesAsync();
-
-        // Seed Bookings
-        var booking1 = new Booking
-        {
-            UserId = testUser1.Id,
-            OutboundFlightId = flight1.Id,
-            BookingCode = GenerateBookingCode(),
-            Status = 0,
-            ContactEmail = testUser1.Email,
-            TotalAmount = 1650000,
-            FinalAmount = 1485000,
-            CreatedAt = DateTime.UtcNow,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(15)
-        };
-
-        context.Bookings.Add(booking1);
-        await context.SaveChangesAsync();
-
-        // Seed Booking Passengers
-        var passenger1 = new BookingPassenger
-        {
-            BookingId = booking1.Id,
-            FullName = "Nguyễn Văn A",
-            DateOfBirth = new DateTime(1990, 5, 15),
-            NationalId = "001090xxxxxx",
-            PassengerType = 0,
-            FlightSeatInventoryId = inv1_eco.Id
-        };
-
-        context.BookingPassengers.Add(passenger1);
-        await context.SaveChangesAsync();
-
-        Console.WriteLine("✅ All sample data seeded successfully!");
+        logger.LogInformation("✓ Master data seeding completed");
     }
 
-    private static string GenerateBookingCode()
+    private static async Task SeedOperationalDataAsync(FlightBookingDbContext context, ILogger logger)
     {
-        const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        var random = new Random();
-        var code = new string(Enumerable.Range(0, 6)
-            .Select(_ => chars[random.Next(chars.Length)])
-            .ToArray());
-        return $"BK{code}";
+        // Check if operational data already exists
+        if (await context.FlightDefinitions.AnyAsync())
+        {
+            logger.LogInformation("Operational data already exists, skipping seed");
+            return;
+        }
+
+        logger.LogInformation("Seeding operational data...");
+
+        // Flight Definitions
+        var flightDefinitions = new[]
+        {
+            // SGN-HAN route
+            new FlightDefinition { FlightNumber = "VN201", RouteId = 1, DefaultAircraftId = 1, DepartureTime = new TimeOnly(6, 0), ArrivalTime = new TimeOnly(8, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN203", RouteId = 1, DefaultAircraftId = 2, DepartureTime = new TimeOnly(9, 0), ArrivalTime = new TimeOnly(11, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN205", RouteId = 1, DefaultAircraftId = 3, DepartureTime = new TimeOnly(12, 0), ArrivalTime = new TimeOnly(14, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN207", RouteId = 1, DefaultAircraftId = 1, DepartureTime = new TimeOnly(15, 0), ArrivalTime = new TimeOnly(17, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN209", RouteId = 1, DefaultAircraftId = 2, DepartureTime = new TimeOnly(18, 0), ArrivalTime = new TimeOnly(20, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN211", RouteId = 1, DefaultAircraftId = 3, DepartureTime = new TimeOnly(21, 0), ArrivalTime = new TimeOnly(23, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            // VietJet flights
+            new FlightDefinition { FlightNumber = "VJ123", RouteId = 1, DefaultAircraftId = 1, DepartureTime = new TimeOnly(5, 30), ArrivalTime = new TimeOnly(7, 45), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VJ125", RouteId = 1, DefaultAircraftId = 2, DepartureTime = new TimeOnly(13, 30), ArrivalTime = new TimeOnly(15, 45), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            // Overnight flight
+            new FlightDefinition { FlightNumber = "VN999", RouteId = 1, DefaultAircraftId = 3, DepartureTime = new TimeOnly(23, 30), ArrivalTime = new TimeOnly(1, 45), ArrivalOffsetDays = 1, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            
+            // HAN-SGN route (return flights)
+            new FlightDefinition { FlightNumber = "VN202", RouteId = 2, DefaultAircraftId = 1, DepartureTime = new TimeOnly(7, 0), ArrivalTime = new TimeOnly(9, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN204", RouteId = 2, DefaultAircraftId = 2, DepartureTime = new TimeOnly(10, 0), ArrivalTime = new TimeOnly(12, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN206", RouteId = 2, DefaultAircraftId = 3, DepartureTime = new TimeOnly(13, 0), ArrivalTime = new TimeOnly(15, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN208", RouteId = 2, DefaultAircraftId = 1, DepartureTime = new TimeOnly(16, 0), ArrivalTime = new TimeOnly(18, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN210", RouteId = 2, DefaultAircraftId = 2, DepartureTime = new TimeOnly(19, 0), ArrivalTime = new TimeOnly(21, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            
+            // SGN-DAD route
+            new FlightDefinition { FlightNumber = "VN301", RouteId = 3, DefaultAircraftId = 2, DepartureTime = new TimeOnly(8, 0), ArrivalTime = new TimeOnly(9, 20), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN303", RouteId = 3, DefaultAircraftId = 3, DepartureTime = new TimeOnly(14, 0), ArrivalTime = new TimeOnly(15, 20), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            
+            // DAD-SGN route
+            new FlightDefinition { FlightNumber = "VN302", RouteId = 4, DefaultAircraftId = 2, DepartureTime = new TimeOnly(10, 0), ArrivalTime = new TimeOnly(11, 20), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN304", RouteId = 4, DefaultAircraftId = 3, DepartureTime = new TimeOnly(16, 0), ArrivalTime = new TimeOnly(17, 20), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            
+            // HAN-DAD route
+            new FlightDefinition { FlightNumber = "VN401", RouteId = 5, DefaultAircraftId = 2, DepartureTime = new TimeOnly(9, 0), ArrivalTime = new TimeOnly(10, 25), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            
+            // DAD-HAN route
+            new FlightDefinition { FlightNumber = "VN402", RouteId = 6, DefaultAircraftId = 2, DepartureTime = new TimeOnly(11, 0), ArrivalTime = new TimeOnly(12, 25), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow }
+        };
+        await context.FlightDefinitions.AddRangeAsync(flightDefinitions);
+        await context.SaveChangesAsync();
+        logger.LogInformation("✓ Flight definitions seeded: {Count}", flightDefinitions.Length);
+
+        // Generate flights for next 30 days
+        var flights = new List<Flight>();
+        var startDate = DateTime.UtcNow.Date;
+        var endDate = startDate.AddDays(30);
+
+        foreach (var definition in flightDefinitions)
+        {
+            for (var date = startDate; date < endDate; date = date.AddDays(1))
+            {
+                var dayOfWeek = (int)date.DayOfWeek;
+                var dayFlag = 1 << dayOfWeek;
+                
+                // Check if flight operates on this day
+                if ((definition.OperatingDays & dayFlag) == 0)
+                    continue;
+
+                var departureDateTime = date.Add(definition.DepartureTime.ToTimeSpan());
+                var arrivalDateTime = date.Add(definition.ArrivalTime.ToTimeSpan());
+                
+                if (definition.ArrivalOffsetDays > 0)
+                {
+                    arrivalDateTime = arrivalDateTime.AddDays(definition.ArrivalOffsetDays);
+                }
+
+                flights.Add(new Flight
+                {
+                    FlightDefinitionId = definition.Id,
+                    DepartureTime = departureDateTime,
+                    ArrivalTime = arrivalDateTime,
+                    Status = 0,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        await context.Flights.AddRangeAsync(flights);
+        await context.SaveChangesAsync();
+        logger.LogInformation("✓ Flights generated: {Count}", flights.Count);
+
+        // Generate seat inventories for all flights
+        var seatInventories = new List<FlightSeatInventory>();
+        foreach (var flight in flights)
+        {
+            var definition = flightDefinitions.First(fd => fd.Id == flight.FlightDefinitionId);
+            var templates = await context.AircraftSeatTemplates
+                .Where(ast => ast.AircraftId == definition.DefaultAircraftId && !ast.IsDeleted)
+                .ToListAsync();
+
+            foreach (var template in templates)
+            {
+                seatInventories.Add(new FlightSeatInventory
+                {
+                    FlightId = flight.Id,
+                    SeatClassId = template.SeatClassId,
+                    TotalSeats = template.DefaultSeatCount,
+                    AvailableSeats = template.DefaultSeatCount,
+                    HeldSeats = 0,
+                    SoldSeats = 0,
+                    BasePrice = template.DefaultBasePrice,
+                    CurrentPrice = template.DefaultBasePrice,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        await context.FlightSeatInventories.AddRangeAsync(seatInventories);
+        await context.SaveChangesAsync();
+        logger.LogInformation("✓ Seat inventories generated: {Count}", seatInventories.Count);
+
+        logger.LogInformation("✓ Operational data seeding completed");
     }
 }

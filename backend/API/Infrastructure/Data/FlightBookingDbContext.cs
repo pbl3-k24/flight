@@ -23,6 +23,7 @@ public class FlightBookingDbContext : DbContext
     public DbSet<Route> Routes { get; set; } = null!;
     public DbSet<SeatClass> SeatClasses { get; set; } = null!;
     public DbSet<AircraftSeatTemplate> AircraftSeatTemplates { get; set; } = null!;
+    public DbSet<FlightDefinition> FlightDefinitions { get; set; } = null!;
     public DbSet<Flight> Flights { get; set; } = null!;
     public DbSet<FlightSeatInventory> FlightSeatInventories { get; set; } = null!;
 
@@ -44,6 +45,10 @@ public class FlightBookingDbContext : DbContext
     // Logging
     public DbSet<NotificationLog> NotificationLogs { get; set; } = null!;
     public DbSet<AuditLog> AuditLogs { get; set; } = null!;
+
+    // Flight Schedule Templates
+    public DbSet<FlightScheduleTemplate> FlightScheduleTemplates { get; set; } = null!;
+    public DbSet<FlightTemplateDetail> FlightTemplateDetails { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

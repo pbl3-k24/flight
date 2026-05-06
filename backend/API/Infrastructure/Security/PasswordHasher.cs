@@ -13,17 +13,22 @@ public class PasswordHasher : IPasswordHasher
 
     public string HashPassword(string password)
     {
-        using (var salt = new Rfc2898DeriveBytes(password, SaltSize, Iterations, Algorithm))
-        {
-            var hash = salt.GetBytes(HashSize);
-            var saltBytes = salt.Salt;
+        // Generate salt
+        byte[] saltBytes = RandomNumberGenerator.GetBytes(SaltSize);
 
-            var hashWithSalt = new byte[SaltSize + HashSize];
-            Array.Copy(saltBytes, 0, hashWithSalt, 0, SaltSize);
-            Array.Copy(hash, 0, hashWithSalt, SaltSize, HashSize);
+        // Hash password with PBKDF2
+        byte[] hash = Rfc2898DeriveBytes.Pbkdf2(
+            password,
+            saltBytes,
+            Iterations,
+            Algorithm,
+            HashSize);
 
-            return Convert.ToBase64String(hashWithSalt);
-        }
+        var hashWithSalt = new byte[SaltSize + HashSize];
+        Array.Copy(saltBytes, 0, hashWithSalt, 0, SaltSize);
+        Array.Copy(hash, 0, hashWithSalt, SaltSize, HashSize);
+
+        return Convert.ToBase64String(hashWithSalt);
     }
 
     public bool VerifyPassword(string password, string hash)
@@ -40,16 +45,18 @@ public class PasswordHasher : IPasswordHasher
             var saltBytes = new byte[SaltSize];
             Array.Copy(hashBytes, 0, saltBytes, 0, SaltSize);
 
-            using (var pbkdf2 = new Rfc2898DeriveBytes(password, saltBytes, Iterations, Algorithm))
-            {
-                var hashToCompare = pbkdf2.GetBytes(HashSize);
+            byte[] hashToCompare = Rfc2898DeriveBytes.Pbkdf2(
+                password,
+                saltBytes,
+                Iterations,
+                Algorithm,
+                HashSize);
 
-                for (int i = 0; i < HashSize; i++)
+            for (int i = 0; i < HashSize; i++)
+            {
+                if (hashBytes[i + SaltSize] != hashToCompare[i])
                 {
-                    if (hashBytes[i + SaltSize] != hashToCompare[i])
-                    {
-                        return false;
-                    }
+                    return false;
                 }
             }
 

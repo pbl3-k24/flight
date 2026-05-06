@@ -27,6 +27,8 @@ public class AdvancedSearchFilterDto
 
     public int? MinSeatsAvailable { get; set; }
 
+    public string? FlightNumber { get; set; }
+
     // Booking Filters
     public int? BookingStatus { get; set; }
 
