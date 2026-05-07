@@ -6,11 +6,24 @@ public class BookingPassenger
 
     public int BookingId { get; set; }
 
+    // Passenger personal information
+    public string FirstName { get; set; } = null!;
+
+    public string LastName { get; set; } = null!;
+
     public string FullName { get; set; } = null!;
+
+    public string Email { get; set; } = null!;
+
+    public string Phone { get; set; } = null!;
 
     public string? Gender { get; set; }
 
     public DateTime? DateOfBirth { get; set; }
+
+    public string? Nationality { get; set; }
+
+    public string? PassportNumber { get; set; }
 
     public string? NationalId { get; set; }
 

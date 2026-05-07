@@ -339,24 +339,28 @@ public class FlightTemplateService : IFlightTemplateService
 
     private async Task CreateSeatInventoryForFlightAsync(Flight flight, int aircraftId)
     {
-        var aircraft = await _unitOfWork.Aircraft.GetByIdAsync(aircraftId);
+        // Lấy aircraft kèm seat templates
+        var aircraft = await _unitOfWork.Aircraft.GetByIdWithSeatTemplatesAsync(aircraftId);
         if (aircraft == null)
         {
             _logger.LogWarning("Aircraft {AircraftId} not found, skipping seat inventory creation", aircraftId);
             return;
         }
 
-        // Get aircraft seat templates
-        var allAircraft = await _unitOfWork.Aircraft.GetAllAsync();
-        var aircraftWithTemplates = allAircraft.FirstOrDefault(a => a.Id == aircraftId);
-
-        if (aircraftWithTemplates?.SeatTemplates == null || !aircraftWithTemplates.SeatTemplates.Any())
+        if (aircraft.SeatTemplates == null || !aircraft.SeatTemplates.Any())
         {
-            _logger.LogWarning("No seat templates found for aircraft {AircraftId}", aircraftId);
+            _logger.LogWarning("No seat templates found for aircraft {AircraftId} ({Model})", 
+                aircraftId, aircraft.Model);
             return;
         }
 
-        foreach (var template in aircraftWithTemplates.SeatTemplates.Where(t => !t.IsDeleted))
+        // Tạo FlightSeatInventory cho mỗi SeatClass dựa trên AircraftSeatTemplate
+        var activeTemplates = aircraft.SeatTemplates.Where(t => !t.IsDeleted).ToList();
+        
+        _logger.LogInformation("Creating {Count} seat inventories for flight {FlightId} using aircraft {AircraftId} ({Model})",
+            activeTemplates.Count, flight.Id, aircraftId, aircraft.Model);
+
+        foreach (var template in activeTemplates)
         {
             var inventory = new FlightSeatInventory
             {
@@ -373,6 +377,12 @@ public class FlightTemplateService : IFlightTemplateService
             };
 
             await _unitOfWork.FlightSeatInventories.CreateAsync(inventory);
+            
+            _logger.LogDebug("Created seat inventory: FlightId={FlightId}, SeatClass={SeatClass}, TotalSeats={TotalSeats}, BasePrice={BasePrice}",
+                flight.Id, 
+                template.SeatClass?.Name ?? "Unknown",
+                template.DefaultSeatCount,
+                template.DefaultBasePrice);
         }
     }
 

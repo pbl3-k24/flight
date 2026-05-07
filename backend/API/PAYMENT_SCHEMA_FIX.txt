@@ -1,0 +1,48 @@
+================================================================================
+                    PAYMENT SCHEMA FIX - HOÀN THÀNH
+================================================================================
+
+## VẤN ĐỀ
+Khi initiate payment, API throw exception:
+"column "CreatedBy" of relation "Payments" does not exist"
+
+Entity Payment có các properties:
+- CreatedBy
+- UpdatedBy
+- Currency
+- IsDeleted
+- DeletedAt
+- Version
+
+Nhưng bảng Payments trong database THIẾU các cột này.
+
+## GIẢI PHÁP
+Chạy migration: fix_payments_schema.sql
+
+Thêm các cột:
+- CreatedBy (INTEGER, nullable)
+- UpdatedBy (INTEGER, nullable)
+- Currency (VARCHAR(10), default 'VND')
+- IsDeleted (BOOLEAN, default FALSE)
+- DeletedAt (TIMESTAMP, nullable)
+- Version (INTEGER, default 0)
+
+## KẾT QUẢ
+✓ Schema đã được fix
+✓ Payment có thể được tạo thành công
+✓ Frontend sẽ nhận được PaymentLink
+
+================================================================================
+                    TEST PAYMENT
+================================================================================
+
+Bây giờ có thể test payment:
+
+1. Tạo booking
+2. Initiate payment
+3. Nhận payment link
+4. Redirect đến VNPAY
+
+Script test: ./test_payment_initiate.ps1
+
+================================================================================

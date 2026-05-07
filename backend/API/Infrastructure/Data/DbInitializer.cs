@@ -16,19 +16,21 @@ public static class DbInitializer
     {
         try
         {
-            // Step 1: Apply migrations
-            logger.LogInformation("Checking for pending migrations...");
-            var pendingMigrations = await context.Database.GetPendingMigrationsAsync();
-            if (pendingMigrations.Any())
+            // Step 1: Check database connection (migrations disabled - using DatabaseSchemaSync instead)
+            logger.LogInformation("Checking database connection...");
+            var canConnect = await context.Database.CanConnectAsync();
+            if (canConnect)
             {
-                logger.LogInformation("Applying {Count} pending migrations...", pendingMigrations.Count());
-                await context.Database.MigrateAsync();
-                logger.LogInformation("✓ Migrations applied successfully");
+                logger.LogInformation("✓ Database connection successful");
             }
             else
             {
-                logger.LogInformation("✓ Database is up to date");
+                logger.LogWarning("Cannot connect to database");
+                throw new InvalidOperationException("Cannot connect to database");
             }
+            
+            // Note: EF Migrations are disabled. Use DatabaseSchemaSync in Program.cs instead
+            // This prevents conflicts between manual schema changes and EF migrations
 
             // Step 2: Seed master data if empty
             await SeedMasterDataAsync(context, logger);

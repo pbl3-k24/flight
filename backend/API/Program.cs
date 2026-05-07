@@ -176,7 +176,8 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Apply database migrations only — data seeding is done once manually via seed_real_data.sql
+// ✅ CRITICAL: Schema sync MUST complete BEFORE HostedServices start
+// This ensures BackgroundJobService doesn't query before columns are added
 using (var scope = app.Services.CreateScope())
 {
     var scopedProvider = scope.ServiceProvider;
@@ -187,55 +188,59 @@ using (var scope = app.Services.CreateScope())
     {
         var dbContext = scopedProvider.GetRequiredService<FlightBookingDbContext>();
         
-        // Use DbInitializer for automatic database setup
+        logger.LogInformation("Checking database connection...");
+        
+        // Check if database exists
+        var canConnect = await dbContext.Database.CanConnectAsync();
+        if (!canConnect)
+        {
+            logger.LogWarning("Cannot connect to database. Creating database...");
+            await dbContext.Database.EnsureCreatedAsync();
+            logger.LogInformation("✓ Database created successfully");
+        }
+        else
+        {
+            logger.LogInformation("✓ Database connection established");
+            
+            // Use smart schema sync to detect and apply only missing columns
+            await DatabaseSchemaSync.SyncSchemaAsync(dbContext, logger);
+        }
+
+        // Use DbInitializer for seeding data (if needed)
         await DbInitializer.InitializeAsync(dbContext, logger);
 
-        // Force synchronize database schema without using EF Migrations to avoid "Index already exists" conflicts
-        // This acts as an automated patch for missing constraints or adjusted parameter types
+        // Apply additional schema patches for constraints and type conversions
+        logger.LogInformation("Applying schema patches...");
         await dbContext.Database.ExecuteSqlRawAsync(@"
-            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""Users"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-
             -- Fix DateOfBirth and PassportExpiryDate types for Users Registration
-            ALTER TABLE ""Users"" ALTER COLUMN ""DateOfBirth"" TYPE timestamp with time zone USING ""DateOfBirth""::timestamp with time zone;
-            ALTER TABLE ""Users"" ALTER COLUMN ""PassportExpiryDate"" TYPE timestamp with time zone USING ""PassportExpiryDate""::timestamp with time zone;
+            DO $$ 
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'Users' AND column_name = 'DateOfBirth'
+                    AND data_type != 'timestamp with time zone'
+                ) THEN
+                    ALTER TABLE ""Users"" ALTER COLUMN ""DateOfBirth"" TYPE timestamp with time zone 
+                    USING ""DateOfBirth""::timestamp with time zone;
+                END IF;
 
-            ALTER TABLE ""Roles"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""Roles"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""Routes"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""Routes"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""Airports"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""Airports"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""Aircraft"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""Aircraft"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""SeatClasses"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""SeatClasses"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""Flights"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""Flights"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""FlightSeatInventories"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""FlightSeatInventories"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""AircraftSeatTemplates"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""AircraftSeatTemplates"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""Bookings"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""BookingServices"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""BookingServices"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""Tickets"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""Tickets"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""Payments"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""Payments"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""RefundPolicies"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""RefundPolicies"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""RefundRequests"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""RefundRequests"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
-            ALTER TABLE ""Promotions"" ADD COLUMN IF NOT EXISTS ""IsDeleted"" boolean NOT NULL DEFAULT FALSE;
-            ALTER TABLE ""Promotions"" ADD COLUMN IF NOT EXISTS ""DeletedAt"" timestamp with time zone NULL;
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'Users' AND column_name = 'PassportExpiryDate'
+                    AND data_type != 'timestamp with time zone'
+                ) THEN
+                    ALTER TABLE ""Users"" ALTER COLUMN ""PassportExpiryDate"" TYPE timestamp with time zone 
+                    USING ""PassportExpiryDate""::timestamp with time zone;
+                END IF;
+            END $$;
 
+            -- Update Payment status constraint
             ALTER TABLE ""Payments"" DROP CONSTRAINT IF EXISTS ""CK_Payment_Status_Valid"";
             ALTER TABLE ""Payments"" ADD CONSTRAINT ""CK_Payment_Status_Valid"" CHECK (""Status"" IN (0, 1, 2, 3, 4));
         ");
         
-        logger.LogInformation("✓ Database schema patches applied");
+        logger.LogInformation("✓ Schema patches applied successfully");
+        logger.LogInformation("✓ Database initialization complete - ready to start services");
     }
     catch (Exception ex)
     {

@@ -1,0 +1,29 @@
+### =====================================================
+### TEST FLIGHT SEARCH API
+### =====================================================
+
+@baseUrl = http://localhost:5042/api/v1
+
+### =====================================================
+### 1. Search flights SGN -> HAN (today)
+### =====================================================
+GET {{baseUrl}}/Flights/search?departureAirportId=1&arrivalAirportId=2&departureDate=2026-05-07&passengerCount=1
+Authorization: Bearer {{$dotenv JWT_TOKEN}}
+
+### =====================================================
+### 2. Search flights HAN -> SGN (today)
+### =====================================================
+GET {{baseUrl}}/Flights/search?departureAirportId=2&arrivalAirportId=1&departureDate=2026-05-07&passengerCount=1
+Authorization: Bearer {{$dotenv JWT_TOKEN}}
+
+### =====================================================
+### 3. Search flights SGN -> HAN (tomorrow)
+### =====================================================
+GET {{baseUrl}}/Flights/search?departureAirportId=1&arrivalAirportId=2&departureDate=2026-05-08&passengerCount=2
+Authorization: Bearer {{$dotenv JWT_TOKEN}}
+
+### =====================================================
+### 4. Get flight details
+### =====================================================
+GET {{baseUrl}}/Flights/1
+Authorization: Bearer {{$dotenv JWT_TOKEN}}

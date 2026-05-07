@@ -159,8 +159,14 @@ public class BookingService : IBookingService
                     var passenger = new BookingPassenger
                     {
                         BookingId = createdBooking.Id,
+                        FirstName = passengerDto.FirstName,
+                        LastName = passengerDto.LastName,
                         FullName = $"{passengerDto.FirstName} {passengerDto.LastName}".Trim(),
+                        Email = passengerDto.Email,
+                        Phone = passengerDto.Phone,
                         DateOfBirth = passengerDto.DateOfBirth,
+                        Nationality = passengerDto.Nationality,
+                        PassportNumber = passengerDto.PassportNumber,
                         PassengerType = (int)PassengerType.Adult,
                         FlightSeatInventoryId = outboundInventory.Id
                     };
@@ -404,11 +410,11 @@ public class BookingService : IBookingService
             Passengers = passengers.Select(p => new PassengerDetail
             {
                 PassengerId = p.Id,
-                FirstName = p.FullName.Split(' ').FirstOrDefault() ?? "",
-                LastName = p.FullName.Split(' ').Skip(1).FirstOrDefault() ?? "",
-                Email = "",
-                Phone = "",
-                PassportNumber = p.NationalId ?? "",
+                FirstName = p.FirstName,
+                LastName = p.LastName,
+                Email = p.Email,
+                Phone = p.Phone,
+                PassportNumber = p.PassportNumber ?? "",
                 Status = "Confirmed"
             }).ToList()
         };

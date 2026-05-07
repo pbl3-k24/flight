@@ -1,0 +1,59 @@
+### =====================================================
+### TEST LOGIN API
+### =====================================================
+
+@baseUrl = http://localhost:5042/api/v1
+
+### =====================================================
+### 1. Login as Admin
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "admin@test.com",
+  "password": "Test@123"
+}
+
+### =====================================================
+### 2. Login as Customer
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "customer@test.com",
+  "password": "Test@123"
+}
+
+### =====================================================
+### 3. Login with wrong password (should fail)
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "admin@test.com",
+  "password": "WrongPassword"
+}
+
+### =====================================================
+### 4. Register new user
+### =====================================================
+POST {{baseUrl}}/Users/register
+Content-Type: application/json
+
+{
+  "email": "newuser@test.com",
+  "password": "Test@123",
+  "fullName": "New User",
+  "phone": "0123456789"
+}
+
+### =====================================================
+### NOTES:
+### - Chạy create_test_user.sql trước để tạo test users
+### - Default password: Test@123
+### - Admin email: admin@test.com
+### - Customer email: customer@test.com
+### =====================================================

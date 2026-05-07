@@ -1,0 +1,67 @@
+### =====================================================
+### TEST LOGIN - Với users có BCrypt hash
+### =====================================================
+
+@baseUrl = http://localhost:5042/api/v1
+
+### =====================================================
+### 1. Login as Admin
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "admin@flightbooking.vn",
+  "password": "Test@123"
+}
+
+### =====================================================
+### 2. Login as Customer 1
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "user1@gmail.com",
+  "password": "Test@123"
+}
+
+### =====================================================
+### 3. Login as Customer 2
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "user2@gmail.com",
+  "password": "Test@123"
+}
+
+### =====================================================
+### 4. Login as Đức Nhân
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "ducnhan@gmail.com",
+  "password": "Test@123"
+}
+
+### =====================================================
+### 5. Test Wrong Password (should fail)
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "admin@flightbooking.vn",
+  "password": "WrongPassword"
+}
+
+### =====================================================
+### NOTES:
+### - Tất cả users đều dùng password: Test@123
+### - Password đã được hash bằng BCrypt trong database
+### - Hash: $2a$11$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYIq.Zu3u6u
+### =====================================================

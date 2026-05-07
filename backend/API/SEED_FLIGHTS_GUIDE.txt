@@ -1,0 +1,212 @@
+================================================================================
+HƯỚNG DẪN TẠO DỮ LIỆU MẪU - FLIGHTDEFINITIONS & FLIGHTS
+================================================================================
+
+## MỤC ĐÍCH
+Tạo dữ liệu mẫu đầy đủ cho hệ thống đặt vé máy bay bao gồm:
+- FlightDefinitions: Định nghĩa chuyến bay (số hiệu, giờ bay, tuyến đường)
+- Flights: Chuyến bay thực tế cho 30 ngày tới
+- FlightSeatInventories: Kho ghế cho mỗi chuyến bay
+
+## CÁC FILE LIÊN QUAN
+
+1. seed_flight_definitions_and_flights.sql
+   - File SQL chính chứa tất cả logic tạo dữ liệu
+   - Tự động tạo ~600 chuyến bay cho 30 ngày tới
+
+2. run_seed_flights.ps1
+   - Script PowerShell để chạy file SQL
+   - Tự động kết nối database và thực thi
+
+3. create_missing_tables.sql
+   - Tạo bảng FlightDefinitions nếu chưa có
+   - Chạy file này TRƯỚC nếu bảng chưa tồn tại
+
+## CÁCH SỬ DỤNG
+
+### Phương án 1: Sử dụng Docker (Khuyến nghị)
+
+1. Copy file SQL vào container:
+   ```powershell
+   docker cp seed_flight_definitions_and_flights.sql pbl3-postgres:/tmp/
+   ```
+
+2. Chạy SQL trong container:
+   ```powershell
+   docker exec -i pbl3-postgres psql -U postgres -d flight_booking -f /tmp/seed_flight_definitions_and_flights.sql
+   ```
+
+### Phương án 2: Sử dụng PowerShell Script
+
+```powershell
+.\run_seed_flights.ps1
+```
+
+### Phương án 3: Sử dụng psql trực tiếp
+
+```bash
+psql -h localhost -U postgres -d flight_booking -f seed_flight_definitions_and_flights.sql
+```
+
+### Phương án 4: Copy-paste vào pgAdmin hoặc DBeaver
+
+1. Mở file seed_flight_definitions_and_flights.sql
+2. Copy toàn bộ nội dung
+3. Paste vào SQL Editor
+4. Execute
+
+## DỮ LIỆU ĐƯỢC TẠO
+
+### FlightDefinitions (~20 records)
+
+**HAN → SGN (8 chuyến/ngày):**
+- VN201: 06:00 → 08:15 (Vietnam Airlines)
+- VN203: 09:00 → 11:15
+- VN205: 12:00 → 14:15
+- VN207: 15:00 → 17:15
+- VN209: 18:00 → 20:15
+- VN211: 21:00 → 23:15
+- VJ123: 05:30 → 07:45 (VietJet)
+- VJ125: 13:30 → 15:45 (VietJet)
+
+**SGN → HAN (7 chuyến/ngày):**
+- VN202: 06:00 → 08:15
+- VN204: 09:00 → 11:15
+- VN206: 12:00 → 14:15
+- VN208: 15:00 → 17:15
+- VN210: 18:00 → 20:15
+- VJ124: 05:30 → 07:45 (VietJet)
+- VJ126: 13:30 → 15:45 (VietJet)
+
+**HAN → DAD (2 chuyến/ngày):**
+- VN301: 07:00 → 08:20 (Thứ 2-6 only)
+- VN303: 14:00 → 15:20 (Hàng ngày)
+
+**DAD → HAN (2 chuyến/ngày):**
+- VN302: 09:00 → 10:20 (Thứ 2-6 only)
+- VN304: 16:00 → 17:20 (Hàng ngày)
+
+**Chuyến bay đêm:**
+- VN999: 23:30 → 01:45+1 (qua đêm)
+
+### Flights (~600 records)
+- Tự động tạo cho 30 ngày tới
+- Mỗi FlightDefinition tạo 1 Flight/ngày (nếu hoạt động)
+- Ví dụ: VN201 sẽ có 30 flights (mỗi ngày 1 chuyến)
+
+### FlightSeatInventories (~1800 records)
+- Mỗi Flight có 3 hạng ghế (Economy, Business, First Class)
+- Số ghế và giá lấy từ AircraftSeatTemplates
+- Tất cả ghế đều available ban đầu
+
+## OPERATING DAYS (Ngày hoạt động)
+
+OperatingDays là một số nguyên biểu diễn các ngày trong tuần:
+- 1 = Monday
+- 2 = Tuesday
+- 4 = Wednesday
+- 8 = Thursday
+- 16 = Friday
+- 32 = Saturday
+- 64 = Sunday
+
+**Ví dụ:**
+- 127 = 1+2+4+8+16+32+64 = Hàng ngày
+- 31 = 1+2+4+8+16 = Thứ 2-6 (Mon-Fri)
+- 96 = 32+64 = Cuối tuần (Sat-Sun)
+
+## KIỂM TRA DỮ LIỆU
+
+### Đếm tổng số records:
+```sql
+SELECT 'FlightDefinitions' as "Table", COUNT(*) FROM "FlightDefinitions"
+UNION ALL
+SELECT 'Flights', COUNT(*) FROM "Flights" WHERE "FlightDefinitionId" IS NOT NULL
+UNION ALL
+SELECT 'FlightSeatInventories', COUNT(*) FROM "FlightSeatInventories";
+```
+
+### Xem flights hôm nay:
+```sql
+SELECT 
+    fd."FlightNumber",
+    f."DepartureTime",
+    f."ArrivalTime",
+    sc."Name" as "SeatClass",
+    fsi."AvailableSeats",
+    fsi."BasePrice"
+FROM "Flights" f
+INNER JOIN "FlightDefinitions" fd ON f."FlightDefinitionId" = fd."Id"
+INNER JOIN "FlightSeatInventories" fsi ON fsi."FlightId" = f."Id"
+INNER JOIN "SeatClasses" sc ON sc."Id" = fsi."SeatClassId"
+WHERE DATE(f."DepartureTime") = CURRENT_DATE
+ORDER BY f."DepartureTime", fd."FlightNumber";
+```
+
+### Xem thống kê theo ngày:
+```sql
+SELECT 
+    DATE(f."DepartureTime") as "Date",
+    COUNT(*) as "TotalFlights"
+FROM "Flights" f
+WHERE f."FlightDefinitionId" IS NOT NULL
+GROUP BY DATE(f."DepartureTime")
+ORDER BY DATE(f."DepartureTime");
+```
+
+## XÓA DỮ LIỆU (NẾU CẦN)
+
+```sql
+-- Xóa tất cả dữ liệu liên quan
+DELETE FROM "FlightSeatInventories" 
+WHERE "FlightId" IN (
+    SELECT "Id" FROM "Flights" WHERE "FlightDefinitionId" IS NOT NULL
+);
+
+DELETE FROM "Flights" WHERE "FlightDefinitionId" IS NOT NULL;
+DELETE FROM "FlightDefinitions";
+```
+
+## LƯU Ý QUAN TRỌNG
+
+1. **Yêu cầu trước khi chạy:**
+   - Bảng Routes phải có dữ liệu (RouteId 1-4)
+   - Bảng Aircraft phải có dữ liệu (AircraftId 1-3)
+   - Bảng SeatClasses phải có dữ liệu
+   - Bảng AircraftSeatTemplates phải có dữ liệu
+
+2. **Script sẽ tự động:**
+   - Tạo bảng FlightDefinitions nếu chưa có
+   - Xóa dữ liệu cũ trước khi insert
+   - Tạo flights cho 30 ngày tới
+   - Tạo seat inventory cho mỗi flight
+
+3. **Thời gian chạy:**
+   - Khoảng 5-10 giây để tạo ~2400 records
+
+4. **Chạy lại script:**
+   - An toàn để chạy nhiều lần
+   - Sẽ xóa và tạo lại dữ liệu mới
+
+## TROUBLESHOOTING
+
+### Lỗi: "relation FlightDefinitions does not exist"
+→ Chạy file create_missing_tables.sql trước
+
+### Lỗi: "foreign key violation"
+→ Kiểm tra Routes, Aircraft, SeatClasses có dữ liệu chưa
+
+### Lỗi: "duplicate key value"
+→ Chạy phần DELETE trước để xóa dữ liệu cũ
+
+### Không có flights được tạo
+→ Kiểm tra AircraftSeatTemplates có dữ liệu chưa
+
+## HỖ TRỢ
+
+Nếu gặp vấn đề, kiểm tra:
+1. Database connection string
+2. Dữ liệu master data (Routes, Aircraft, SeatClasses)
+3. Log output từ script
+
+================================================================================

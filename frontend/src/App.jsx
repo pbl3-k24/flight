@@ -11,6 +11,7 @@ import {
   cancelBooking,
   getBestPromotion,
   getFlightDefinitions,
+  getAircrafts,
   getFlightTemplates,
   getFlightScheduleTemplate,
   createFlightTemplate,
@@ -196,6 +197,8 @@ function App() {
   // Template management states
   const [flightDefinitions, setFlightDefinitions] = useState([])
   const [isLoadingFlightDefinitions, setIsLoadingFlightDefinitions] = useState(false)
+  const [aircrafts, setAircrafts] = useState([])
+  const [isLoadingAircrafts, setIsLoadingAircrafts] = useState(false)
   const [flightTemplates, setFlightTemplates] = useState([])
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState(null)
@@ -535,6 +538,39 @@ function App() {
     }
 
     fetchFlightDefinitions()
+
+    return () => {
+      cancelled = true
+    }
+  }, [screen, isAdmin])
+
+  // Load aircrafts khi vào màn hình templates
+  useEffect(() => {
+    let cancelled = false
+
+    if (screen !== 'templates' || !isAdmin) return undefined
+
+    const fetchAircrafts = async () => {
+      console.log('🔄 Loading aircrafts...')
+      setIsLoadingAircrafts(true)
+      try {
+        const aircraftList = await getAircrafts()
+        console.log('✅ Aircrafts loaded:', aircraftList)
+        if (!cancelled) {
+          setAircrafts(Array.isArray(aircraftList) ? aircraftList : [])
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.error('❌ Không thể tải danh sách máy bay:', error)
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingAircrafts(false)
+        }
+      }
+    }
+
+    fetchAircrafts()
 
     return () => {
       cancelled = true
@@ -1551,7 +1587,7 @@ function App() {
 
                     return {
                       routeId: slot.flightDefinition.routeId,
-                      aircraftId: slot.flightDefinition.defaultAircraftId || 1,
+                      aircraftId: slot.flightDefinition.selectedAircraftId || slot.flightDefinition.defaultAircraftId || 1,
                       dayOfWeek: slot.dayOfWeek,
                       departureTime: formatTime(slot.flightDefinition.departureTime),
                       arrivalTime: formatTime(slot.flightDefinition.arrivalTime),
@@ -1831,11 +1867,40 @@ function App() {
                   <p className="text-slate-500">
                     {def.departureTime} - {def.arrivalTime}
                   </p>
+                  
+                  {/* Chọn máy bay */}
+                  <select
+                    id={`aircraft-${def.id}`}
+                    className="mt-2 w-full rounded border border-slate-300 px-2 py-1 text-xs"
+                    defaultValue=""
+                  >
+                    <option value="">
+                      {isLoadingAircrafts ? 'Đang tải...' : `Chọn máy bay... (${aircrafts.length})`}
+                    </option>
+                    {aircrafts.map((aircraft) => (
+                      <option key={aircraft.id || aircraft.aircraftId} value={aircraft.id || aircraft.aircraftId}>
+                        {aircraft.registrationNumber || aircraft.model || `Aircraft ${aircraft.id || aircraft.aircraftId}`}
+                      </option>
+                    ))}
+                  </select>
+                  
+                  {/* Chọn thứ */}
                   <select
                     className="mt-2 w-full rounded border border-slate-300 px-2 py-1 text-xs"
                     onChange={(e) => {
                       const dayOfWeek = parseInt(e.target.value, 10)
                       if (dayOfWeek >= 0) {
+                        // Lấy aircraft được chọn
+                        const aircraftSelect = document.getElementById(`aircraft-${def.id}`)
+                        const selectedAircraftId = aircraftSelect ? parseInt(aircraftSelect.value, 10) : null
+                        
+                        if (!selectedAircraftId) {
+                          setApiError('Vui lòng chọn máy bay trước!')
+                          setTimeout(() => setApiError(''), 3000)
+                          e.target.value = ''
+                          return
+                        }
+                        
                         // Kiểm tra trùng
                         const isDuplicate = templateSlots.some(
                           (slot) => slot.flightDefinition.id === def.id && slot.dayOfWeek === dayOfWeek
@@ -1851,13 +1916,14 @@ function App() {
                           ...prev,
                           {
                             id: `${def.id}-${dayOfWeek}-${Date.now()}`,
-                            flightDefinition: def,
+                            flightDefinition: { ...def, selectedAircraftId },
                             dayOfWeek,
                           },
                         ])
                         setAdminNotice(`✅ Đã thêm ${def.flightNumber} vào ${getWeekdayName(dayOfWeek)}`)
                         setTimeout(() => setAdminNotice(''), 2000)
                         e.target.value = ''
+                        aircraftSelect.value = ''
                       }
                     }}
                   >
@@ -1903,6 +1969,11 @@ function App() {
                         <p className="text-xs text-slate-500">
                           {slot.flightDefinition.departureTime?.substring(0, 5)}
                         </p>
+                        {slot.flightDefinition.selectedAircraftId && (
+                          <p className="text-xs text-green-700 font-medium">
+                            ✈️ Aircraft ID: {slot.flightDefinition.selectedAircraftId}
+                          </p>
+                        )}
                         <button
                           type="button"
                           onClick={() => {

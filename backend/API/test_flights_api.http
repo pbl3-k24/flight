@@ -1,0 +1,115 @@
+### =====================================================
+### TEST FLIGHTS API - After Seeding Data
+### =====================================================
+
+@baseUrl = http://localhost:5042/api/v1
+@token = YOUR_JWT_TOKEN_HERE
+
+### =====================================================
+### 1. Search Flights - HAN to SGN Today
+### =====================================================
+GET {{baseUrl}}/flights/search?departureAirportCode=HAN&arrivalAirportCode=SGN&departureDate={{$datetime 'yyyy-MM-dd'}}&passengers=1
+Content-Type: application/json
+
+### =====================================================
+### 2. Search Flights - SGN to HAN Tomorrow
+### =====================================================
+GET {{baseUrl}}/flights/search?departureAirportCode=SGN&arrivalAirportCode=HAN&departureDate={{$datetime 'yyyy-MM-dd' 1 'd'}}&passengers=2
+Content-Type: application/json
+
+### =====================================================
+### 3. Search Flights - HAN to DAD (Next Week)
+### =====================================================
+GET {{baseUrl}}/flights/search?departureAirportCode=HAN&arrivalAirportCode=DAD&departureDate={{$datetime 'yyyy-MM-dd' 7 'd'}}&passengers=1
+Content-Type: application/json
+
+### =====================================================
+### 4. Get Flight Details by ID (Replace with actual ID)
+### =====================================================
+GET {{baseUrl}}/flights/1
+Content-Type: application/json
+
+### =====================================================
+### 5. Get Available Seats for Flight
+### =====================================================
+GET {{baseUrl}}/flights/1/seats
+Content-Type: application/json
+
+### =====================================================
+### 6. Admin - Get All FlightDefinitions
+### =====================================================
+GET {{baseUrl}}/admin/flight-definitions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+### =====================================================
+### 7. Admin - Get FlightDefinition by ID
+### =====================================================
+GET {{baseUrl}}/admin/flight-definitions/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+### =====================================================
+### 8. Admin - Get Flights by Definition
+### =====================================================
+GET {{baseUrl}}/admin/flight-definitions/1/flights?startDate={{$datetime 'yyyy-MM-dd'}}&endDate={{$datetime 'yyyy-MM-dd' 7 'd'}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+### =====================================================
+### 9. Admin - Get All Flights (Paginated)
+### =====================================================
+GET {{baseUrl}}/admin/FlightsAdmin?page=1&pageSize=20
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+### =====================================================
+### 10. Search Round Trip - HAN to SGN and back
+### =====================================================
+GET {{baseUrl}}/flights/search?departureAirportCode=HAN&arrivalAirportCode=SGN&departureDate={{$datetime 'yyyy-MM-dd' 3 'd'}}&returnDate={{$datetime 'yyyy-MM-dd' 10 'd'}}&passengers=2&tripType=1
+Content-Type: application/json
+
+### =====================================================
+### 11. Get Flights by Date Range
+### =====================================================
+GET {{baseUrl}}/flights?startDate={{$datetime 'yyyy-MM-dd'}}&endDate={{$datetime 'yyyy-MM-dd' 7 'd'}}
+Content-Type: application/json
+
+### =====================================================
+### 12. Get Popular Routes
+### =====================================================
+GET {{baseUrl}}/flights/popular-routes
+Content-Type: application/json
+
+### =====================================================
+### 13. Check Seat Availability
+### =====================================================
+POST {{baseUrl}}/flights/check-availability
+Content-Type: application/json
+
+{
+  "flightId": 1,
+  "seatClassId": 1,
+  "passengerCount": 2
+}
+
+### =====================================================
+### 14. Get Flight Statistics (Admin)
+### =====================================================
+GET {{baseUrl}}/admin/flights/statistics?startDate={{$datetime 'yyyy-MM-dd'}}&endDate={{$datetime 'yyyy-MM-dd' 30 'd'}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+### =====================================================
+### 15. Search Flights with Filters
+### =====================================================
+GET {{baseUrl}}/flights/search?departureAirportCode=HAN&arrivalAirportCode=SGN&departureDate={{$datetime 'yyyy-MM-dd'}}&passengers=1&minPrice=1000000&maxPrice=3000000&seatClass=Economy
+Content-Type: application/json
+
+### =====================================================
+### NOTES:
+### - Replace {{token}} with actual JWT token from login
+### - Replace flight IDs with actual IDs from database
+### - Dates are auto-generated using {{$datetime}} variable
+### - Use REST Client extension in VS Code to run these requests
+### =====================================================

@@ -85,6 +85,22 @@ public class AircraftRepository : IAircraftRepository
         }
     }
 
+    public async Task<Aircraft?> GetByIdWithSeatTemplatesAsync(int id)
+    {
+        try
+        {
+            return await _context.Aircraft
+                .Include(a => a.SeatTemplates)
+                    .ThenInclude(st => st.SeatClass)
+                .FirstOrDefaultAsync(a => a.Id == id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting aircraft with seat templates by id: {Id}", id);
+            throw;
+        }
+    }
+
     public async Task<IEnumerable<Aircraft>> GetAllAsync()
     {
         try

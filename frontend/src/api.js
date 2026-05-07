@@ -162,6 +162,11 @@ export const getFlightDefinitions = (activeOnly = true) => {
   return makeRequest(`/admin/flight-definitions?activeOnly=${activeOnly}`)
 }
 
+export const getAircrafts = () => {
+  console.log('🔍 Fetching aircrafts from /admin/aircraft...')
+  return makeRequest('/admin/aircraft?page=1&pageSize=100&includeDeleted=false')
+}
+
 export const getFlightTemplates = () => {
   return makeRequest('/admin/flight-templates')
 }

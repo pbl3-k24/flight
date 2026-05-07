@@ -1,0 +1,68 @@
+### =====================================================
+### GIẢI PHÁP: REGISTER USER MỚI VỚI PASSWORD HASH ĐÚNG
+### =====================================================
+
+@baseUrl = http://localhost:5042/api/v1
+
+### =====================================================
+### BƯỚC 1: Register Admin User
+### =====================================================
+POST {{baseUrl}}/Users/register
+Content-Type: application/json
+
+{
+  "email": "admin@test.com",
+  "password": "Test@123",
+  "fullName": "Admin User",
+  "phone": "0901234567"
+}
+
+### =====================================================
+### BƯỚC 2: Login với user vừa tạo
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "admin@test.com",
+  "password": "Test@123"
+}
+
+### =====================================================
+### BƯỚC 3: Register Customer User
+### =====================================================
+POST {{baseUrl}}/Users/register
+Content-Type: application/json
+
+{
+  "email": "customer@test.com",
+  "password": "Test@123",
+  "fullName": "Customer User",
+  "phone": "0912345678"
+}
+
+### =====================================================
+### BƯỚC 4: Login as Customer
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "customer@test.com",
+  "password": "Test@123"
+}
+
+### =====================================================
+### TẠI SAO USERS CŨ KHÔNG ĐĂNG NHẬP ĐƯỢC?
+### =====================================================
+### 
+### Users trong database có PasswordHash = "PasswordHere" (text thuần)
+### Nhưng code đang dùng BCrypt để verify password
+### BCrypt hash có format: $2a$11$xxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+### 
+### GIẢI PHÁP:
+### 1. XÓA users cũ trong database
+### 2. REGISTER users mới qua API (password sẽ được hash đúng)
+### 3. LOGIN với users mới
+### 
+### =====================================================

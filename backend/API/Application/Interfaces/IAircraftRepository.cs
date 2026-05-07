@@ -5,6 +5,8 @@ using API.Domain.Entities;
 public interface IAircraftRepository
 {
     Task<Aircraft?> GetByIdAsync(int id);
+    
+    Task<Aircraft?> GetByIdWithSeatTemplatesAsync(int id);
 
     Task<Aircraft?> GetByRegistrationNumberAsync(string registrationNumber);
 

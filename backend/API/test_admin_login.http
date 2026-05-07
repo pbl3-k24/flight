@@ -1,0 +1,49 @@
+### =====================================================
+### TEST ADMIN LOGIN - BCrypt Fixed
+### =====================================================
+
+@baseUrl = http://localhost:5042/api/v1
+
+### =====================================================
+### 1. Login as Admin
+### Email: admin@flightbooking.vn
+### Password: Admin@123456
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "admin@flightbooking.vn",
+  "password": "Admin@123456"
+}
+
+### =====================================================
+### 2. Register New User (for testing)
+### =====================================================
+POST {{baseUrl}}/Users/register
+Content-Type: application/json
+
+{
+  "email": "testuser@gmail.com",
+  "password": "Test@123456",
+  "fullName": "Test User",
+  "phone": "0987654321"
+}
+
+### =====================================================
+### 3. Login as Test User
+### =====================================================
+POST {{baseUrl}}/Users/login
+Content-Type: application/json
+
+{
+  "email": "testuser@gmail.com",
+  "password": "Test@123456"
+}
+
+### =====================================================
+### NOTES:
+### - Admin account được tạo qua script: create_admin_account.ps1
+### - Password được hash bằng BCrypt tự động khi register
+### - Login trả về JWT token để dùng cho các API khác
+### =====================================================

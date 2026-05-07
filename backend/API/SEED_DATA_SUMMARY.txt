@@ -1,0 +1,217 @@
+================================================================================
+                    TÓM TẮT - HỆ THỐNG SEED DATA
+================================================================================
+
+✅ ĐÃ TẠO CÁC FILE SAU:
+
+1. seed_flight_definitions_and_flights.sql
+   → File SQL chính - tạo tất cả dữ liệu tự động
+   → Tạo ~600 flights cho 30 ngày tới
+   → Tạo seat inventory cho mỗi flight
+
+2. create_missing_tables.sql
+   → Tạo bảng FlightDefinitions, FlightScheduleTemplates, FlightTemplateDetails
+   → Chạy file này TRƯỚC nếu bảng chưa tồn tại
+
+3. verify_seeded_data.sql
+   → Kiểm tra dữ liệu sau khi seed
+   → Hiển thị báo cáo chi tiết với status (✓ OK, ⚠ WARNING, ✗ ISSUE)
+
+4. test_flights_api.http
+   → 15 test cases cho API
+   → Sử dụng với REST Client extension trong VS Code
+
+5. quick_seed.ps1
+   → Script PowerShell chạy tất cả trong 1 lệnh
+   → Tự động: copy files → create tables → seed data → verify
+
+6. README_SEED_DATA.md
+   → Documentation đầy đủ với emoji và formatting
+   → Hướng dẫn troubleshooting
+
+7. SEED_FLIGHTS_GUIDE.txt
+   → Hướng dẫn chi tiết từng bước
+   → Giải thích Operating Days, data structure
+
+================================================================================
+                        CÁCH SỬ DỤNG NHANH NHẤT
+================================================================================
+
+OPTION 1: One-Click Setup (Khuyến nghị)
+----------------------------------------
+.\quick_seed.ps1
+
+→ Script sẽ tự động làm tất cả!
+
+
+OPTION 2: Manual Step-by-Step
+----------------------------------------
+# Bước 1: Copy files
+docker cp create_missing_tables.sql pbl3-postgres:/tmp/
+docker cp seed_flight_definitions_and_flights.sql pbl3-postgres:/tmp/
+docker cp verify_seeded_data.sql pbl3-postgres:/tmp/
+
+# Bước 2: Create tables
+docker exec -i pbl3-postgres psql -U postgres -d flight_booking -f /tmp/create_missing_tables.sql
+
+# Bước 3: Seed data
+docker exec -i pbl3-postgres psql -U postgres -d flight_booking -f /tmp/seed_flight_definitions_and_flights.sql
+
+# Bước 4: Verify
+docker exec -i pbl3-postgres psql -U postgres -d flight_booking -f /tmp/verify_seeded_data.sql
+
+================================================================================
+                            DỮ LIỆU ĐƯỢC TẠO
+================================================================================
+
+FlightDefinitions: ~20 records
+├─ HAN → SGN: 8 chuyến/ngày (VN201-211, VJ123-125)
+├─ SGN → HAN: 7 chuyến/ngày (VN202-210, VJ124-126)
+├─ HAN → DAD: 2 chuyến/ngày (VN301, VN303)
+├─ DAD → HAN: 2 chuyến/ngày (VN302, VN304)
+└─ Overnight: 1 chuyến (VN999)
+
+Flights: ~600 records
+└─ Mỗi FlightDefinition × 30 ngày = 600 flights
+
+FlightSeatInventories: ~1,800 records
+└─ Mỗi Flight × 3 seat classes = 1,800 records
+
+================================================================================
+                            KIỂM TRA NHANH
+================================================================================
+
+# Đếm số records
+SELECT 
+    'FlightDefinitions' as "Table", COUNT(*) as "Count"
+FROM "FlightDefinitions"
+UNION ALL
+SELECT 'Flights', COUNT(*) FROM "Flights" WHERE "FlightDefinitionId" IS NOT NULL
+UNION ALL
+SELECT 'FlightSeatInventories', COUNT(*) FROM "FlightSeatInventories";
+
+# Xem flights hôm nay
+SELECT 
+    fd."FlightNumber",
+    TO_CHAR(f."DepartureTime", 'HH24:MI') as "Time",
+    COUNT(fsi."Id") as "SeatClasses"
+FROM "Flights" f
+INNER JOIN "FlightDefinitions" fd ON f."FlightDefinitionId" = fd."Id"
+LEFT JOIN "FlightSeatInventories" fsi ON fsi."FlightId" = f."Id"
+WHERE DATE(f."DepartureTime") = CURRENT_DATE
+GROUP BY fd."FlightNumber", f."DepartureTime"
+ORDER BY f."DepartureTime";
+
+================================================================================
+                            TEST API
+================================================================================
+
+# Start API
+dotnet run
+
+# Test search endpoint
+curl "http://localhost:5042/api/v1/flights/search?departureAirportCode=HAN&arrivalAirportCode=SGN&departureDate=2026-05-07&passengers=1"
+
+# Hoặc sử dụng file test_flights_api.http với REST Client extension
+
+================================================================================
+                            YÊU CẦU TRƯỚC KHI CHẠY
+================================================================================
+
+✓ Database: flight_booking phải tồn tại
+✓ Tables: Routes, Aircraft, SeatClasses phải có dữ liệu
+✓ AircraftSeatTemplates: Phải có dữ liệu (seat configuration)
+✓ Docker: Container pbl3-postgres phải đang chạy
+
+Kiểm tra:
+---------
+SELECT COUNT(*) FROM "Routes";                -- Phải > 0
+SELECT COUNT(*) FROM "Aircraft";              -- Phải > 0
+SELECT COUNT(*) FROM "SeatClasses";           -- Phải > 0
+SELECT COUNT(*) FROM "AircraftSeatTemplates"; -- Phải > 0
+
+================================================================================
+                            TROUBLESHOOTING
+================================================================================
+
+❌ "relation FlightDefinitions does not exist"
+   → Chạy: create_missing_tables.sql
+
+❌ "foreign key violation"
+   → Kiểm tra Routes, Aircraft, SeatClasses có dữ liệu chưa
+
+❌ Không có flights được tạo
+   → Kiểm tra AircraftSeatTemplates có dữ liệu chưa
+
+❌ "duplicate key value"
+   → Dữ liệu đã tồn tại, script sẽ tự động xóa và tạo lại
+
+================================================================================
+                            OPERATING DAYS
+================================================================================
+
+OperatingDays là một số nguyên biểu diễn các ngày trong tuần:
+
+Monday    = 1
+Tuesday   = 2
+Wednesday = 4
+Thursday  = 8
+Friday    = 16
+Saturday  = 32
+Sunday    = 64
+
+Ví dụ:
+------
+127 = 1+2+4+8+16+32+64 = Hàng ngày (Every day)
+31  = 1+2+4+8+16       = Thứ 2-6 (Mon-Fri)
+96  = 32+64            = Cuối tuần (Sat-Sun)
+
+================================================================================
+                            FILES REFERENCE
+================================================================================
+
+📄 SQL Files:
+   • create_missing_tables.sql              - Tạo bảng
+   • seed_flight_definitions_and_flights.sql - Seed data chính
+   • verify_seeded_data.sql                 - Verify data
+
+📄 Scripts:
+   • quick_seed.ps1                         - One-click setup
+   • run_seed_flights.ps1                   - Alternative script
+
+📄 Documentation:
+   • README_SEED_DATA.md                    - Main documentation
+   • SEED_FLIGHTS_GUIDE.txt                 - Detailed guide
+   • SEED_DATA_SUMMARY.txt                  - This file
+
+📄 Testing:
+   • test_flights_api.http                  - API test cases
+
+================================================================================
+                            NEXT STEPS
+================================================================================
+
+1. ✅ Chạy quick_seed.ps1 để tạo dữ liệu
+2. ✅ Verify bằng verify_seeded_data.sql
+3. ✅ Start API: dotnet run
+4. ✅ Test API: Sử dụng test_flights_api.http
+5. ✅ Kiểm tra frontend: Search flights HAN → SGN
+
+================================================================================
+                            SUPPORT
+================================================================================
+
+Nếu gặp vấn đề:
+1. Đọc README_SEED_DATA.md
+2. Đọc SEED_FLIGHTS_GUIDE.txt
+3. Chạy verify_seeded_data.sql để kiểm tra
+4. Kiểm tra log output từ script
+
+================================================================================
+                            HOÀN THÀNH!
+================================================================================
+
+Hệ thống seed data đã sẵn sàng sử dụng.
+Chạy: .\quick_seed.ps1 để bắt đầu!
+
+================================================================================
