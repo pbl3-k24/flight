@@ -14,6 +14,17 @@ public class Ticket
 
     public int? ReplacedByTicketId { get; set; }
 
+    public int BookingId { get; set; }
+    public int PassengerId { get; set; }
+    public int FlightId { get; set; }
+    public string? SeatNumber { get; set; }
+    public int SeatClassId { get; set; }
+    public decimal Price { get; set; }
+    public DateTime? CheckInTime { get; set; }
+    public DateTime? BoardingTime { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+
     // Soft delete
     public bool IsDeleted { get; set; } = false;
     public DateTime? DeletedAt { get; set; }

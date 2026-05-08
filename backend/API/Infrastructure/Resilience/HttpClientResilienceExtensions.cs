@@ -23,7 +23,7 @@ public static class HttpClientResilienceExtensions
         TimeSpan? baseDelay = null,
         Action<HttpClient>? configureHttpClient = null)
     {
-        services.AddHttpClient(httpClientName, configureHttpClient)
+        services.AddHttpClient(httpClientName, configureHttpClient ?? (client => { }))
             .AddPolicyHandler((sp, _) =>
             {
                 var loggerFactory = sp.GetService<ILoggerFactory>();

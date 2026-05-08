@@ -50,7 +50,8 @@ public class PricingService : IPricingService
                 <= 3 => 1.3m,        // Last-minute premium (30%)
                 <= 7 => 1.2m,        // One week: 20% premium
                 <= 14 => 1.0m,       // Two weeks: normal price
-                > 14 => 0.8m         // Early booking: 20% discount
+                > 14 => 0.8m,        // Early booking: 20% discount
+                _ => 1.0m            // Fallback for NaN
             };
 
             // 3. Calculate demand factor (1.0x to 1.15x)

@@ -32,6 +32,8 @@ public class FlightBookingDbContext : DbContext
     public DbSet<BookingPassenger> BookingPassengers { get; set; } = null!;
     public DbSet<BookingService> BookingServices { get; set; } = null!;
     public DbSet<Ticket> Tickets { get; set; } = null!;
+    public DbSet<AdditionalService> AdditionalServices { get; set; } = null!;
+    public DbSet<ClassServiceConfig> ClassServiceConfigs { get; set; } = null!;
 
     // Payment & Refund Management
     public DbSet<Payment> Payments { get; set; } = null!;
@@ -80,7 +82,7 @@ public class FlightBookingDbContext : DbContext
                 var versionProperty = entry.Entity.GetType().GetProperty("Version");
                 if (versionProperty != null && versionProperty.PropertyType == typeof(int))
                 {
-                    versionProperty.SetValue(entry.Entity, (int)versionProperty.GetValue(entry.Entity) + 1);
+                    versionProperty.SetValue(entry.Entity, (int)(versionProperty.GetValue(entry.Entity) ?? 0) + 1);
                 }
             }
         }

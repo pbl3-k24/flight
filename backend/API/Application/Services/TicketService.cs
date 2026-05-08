@@ -12,6 +12,7 @@ public class TicketService : ITicketService
     private readonly IBookingRepository _bookingRepository;
     private readonly IBookingPassengerRepository _passengerRepository;
     private readonly IFlightRepository _flightRepository;
+    private readonly IFlightSeatInventoryRepository _seatInventoryRepository;
     private readonly IEmailService _emailService;
     private readonly ILogger<TicketService> _logger;
 
@@ -20,6 +21,7 @@ public class TicketService : ITicketService
         IBookingRepository bookingRepository,
         IBookingPassengerRepository passengerRepository,
         IFlightRepository flightRepository,
+        IFlightSeatInventoryRepository seatInventoryRepository,
         IEmailService emailService,
         ILogger<TicketService> logger)
     {
@@ -27,6 +29,7 @@ public class TicketService : ITicketService
         _bookingRepository = bookingRepository;
         _passengerRepository = passengerRepository;
         _flightRepository = flightRepository;
+        _seatInventoryRepository = seatInventoryRepository;
         _emailService = emailService;
         _logger = logger;
     }
@@ -42,19 +45,32 @@ public class TicketService : ITicketService
             }
 
             var flight = await _flightRepository.GetByIdAsync(booking.OutboundFlightId);
+            if (flight == null)
+            {
+                throw new NotFoundException("Flight not found");
+            }
             var passengers = await _passengerRepository.GetByBookingIdAsync(bookingId);
             var tickets = new List<TicketResponse>();
 
             int sequenceNumber = 1;
             foreach (var passenger in passengers)
             {
+                var seatInventory = await _seatInventoryRepository.GetByIdAsync(passenger.FlightSeatInventoryId);
                 var ticketNumber = GenerateTicketNumber(booking.BookingCode, sequenceNumber++);
                 var ticket = new Ticket
                 {
                     BookingPassengerId = passenger.Id,
                     TicketNumber = ticketNumber,
                     Status = 0, // Issued
-                    IssuedAt = DateTime.UtcNow
+                    IssuedAt = DateTime.UtcNow,
+                    
+                    BookingId = bookingId,
+                    PassengerId = passenger.Id,
+                    FlightId = flight.Id,
+                    SeatClassId = seatInventory?.SeatClassId ?? 1,
+                    Price = seatInventory?.CurrentPrice ?? 0,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
                 };
 
                 var createdTicket = await _ticketRepository.CreateAsync(ticket);

@@ -4,6 +4,8 @@ using API.Application.Dtos.Booking;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
+using API.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 public class BookingService : IBookingService
@@ -11,14 +13,17 @@ public class BookingService : IBookingService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<BookingService> _logger;
     private readonly IBackgroundJobService _backgroundJobService;
+    private readonly FlightBookingDbContext _dbContext;
 
     public BookingService(
         IUnitOfWork unitOfWork,
         IBackgroundJobService backgroundJobService,
+        FlightBookingDbContext dbContext,
         ILogger<BookingService> logger)
     {
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _backgroundJobService = backgroundJobService ?? throw new ArgumentNullException(nameof(backgroundJobService));
+        _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -131,10 +136,34 @@ public class BookingService : IBookingService
                     throw new ValidationException("Insufficient seats available");
                 }
 
-                // 4. Calculate total amount with seat class pricing
-                var totalAmount = outboundInventory.CurrentPrice * dto.PassengerCount;
+                // 4. Calculate total amount with seat class pricing and additional services
+                var includedServiceIds = await _dbContext.ClassServiceConfigs
+                    .Where(c => c.SeatClassId == dto.SeatClassId && c.IsIncluded)
+                    .Select(c => c.AdditionalServiceId)
+                    .ToListAsync();
 
-                    // 5. Create booking with expiration (1 hour timeout)
+                var allAdditionalServices = await _dbContext.AdditionalServices
+                    .Where(s => !s.IsDeleted)
+                    .ToDictionaryAsync(s => s.Id, s => s);
+
+                decimal additionalServicesTotal = 0;
+                foreach (var passenger in dto.Passengers)
+                {
+                    if (passenger.OptionalServices != null)
+                    {
+                        foreach (var optSvc in passenger.OptionalServices)
+                        {
+                            if (allAdditionalServices.TryGetValue(optSvc.AdditionalServiceId, out var svc))
+                            {
+                                additionalServicesTotal += svc.Price * optSvc.Quantity;
+                            }
+                        }
+                    }
+                }
+
+                var totalAmount = outboundInventory.CurrentPrice * dto.PassengerCount + additionalServicesTotal;
+
+                // 5. Create booking with expiration (1 hour timeout)
                 var booking = new Booking
                 {
                     UserId = userId,
@@ -153,7 +182,7 @@ public class BookingService : IBookingService
 
                 var createdBooking = await _unitOfWork.Bookings.CreateAsync(booking);
 
-                // 6. Create passengers
+                // 6. Create passengers and their services
                 foreach (var passengerDto in dto.Passengers)
                 {
                     var passenger = new BookingPassenger
@@ -172,6 +201,36 @@ public class BookingService : IBookingService
                     };
 
                     await _unitOfWork.BookingPassengers.CreateAsync(passenger);
+
+                    // Add included services
+                    foreach (var includedId in includedServiceIds)
+                    {
+                        _dbContext.BookingServices.Add(new API.Domain.Entities.BookingService
+                        {
+                            BookingPassengerId = passenger.Id,
+                            AdditionalServiceId = includedId,
+                            Quantity = 1,
+                            Price = 0 // Included is free
+                        });
+                    }
+
+                    // Add optional services
+                    if (passengerDto.OptionalServices != null)
+                    {
+                        foreach (var optSvc in passengerDto.OptionalServices)
+                        {
+                            if (allAdditionalServices.TryGetValue(optSvc.AdditionalServiceId, out var svc))
+                            {
+                                _dbContext.BookingServices.Add(new API.Domain.Entities.BookingService
+                                {
+                                    BookingPassengerId = passenger.Id,
+                                    AdditionalServiceId = optSvc.AdditionalServiceId,
+                                    Quantity = optSvc.Quantity,
+                                    Price = svc.Price
+                                });
+                            }
+                        }
+                    }
                 }
 
                 // 7. Hold seats atomically within transaction
@@ -377,6 +436,12 @@ public class BookingService : IBookingService
     {
         var outboundFlight = await _unitOfWork.Flights.GetByIdAsync(booking.OutboundFlightId);
         var passengers = await _unitOfWork.BookingPassengers.GetByBookingIdAsync(booking.Id);
+        var passengerIds = passengers.Select(p => p.Id).ToList();
+        
+        var bookingServices = await _dbContext.BookingServices
+            .Include(bs => bs.AdditionalService)
+            .Where(bs => passengerIds.Contains(bs.BookingPassengerId))
+            .ToListAsync();
 
         var statusString = booking.Status switch
         {
@@ -415,7 +480,16 @@ public class BookingService : IBookingService
                 Email = p.Email,
                 Phone = p.Phone,
                 PassportNumber = p.PassportNumber ?? "",
-                Status = "Confirmed"
+                Status = "Confirmed",
+                Services = bookingServices
+                    .Where(bs => bs.BookingPassengerId == p.Id)
+                    .Select(bs => new BookingServiceDetail
+                    {
+                        AdditionalServiceId = bs.AdditionalServiceId,
+                        ServiceName = bs.AdditionalService?.ServiceName ?? "",
+                        Quantity = bs.Quantity,
+                        Price = bs.Price
+                    }).ToList()
             }).ToList()
         };
 

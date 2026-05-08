@@ -64,6 +64,6 @@ public class FlightTemplateDetailConfiguration : IEntityTypeConfiguration<Flight
         builder.HasIndex(d => d.DayOfWeek);
         
         // Constraints
-        builder.ToTable(t => t.HasCheckConstraint("CK_FlightTemplateDetail_DayOfWeek", "[DayOfWeek] >= 0 AND [DayOfWeek] <= 6"));
+        builder.ToTable(t => t.HasCheckConstraint("CK_FlightTemplateDetail_DayOfWeek", "\"DayOfWeek\" >= 0 AND \"DayOfWeek\" <= 6"));
     }
 }

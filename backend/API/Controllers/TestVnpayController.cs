@@ -46,15 +46,15 @@ public class TestVnpayController : ControllerBase
                 ["vnp_Locale"] = "vn",
                 ["vnp_OrderInfo"] = orderInfo,
                 ["vnp_OrderType"] = "other",
-                ["vnp_ReturnUrl"] = returnUrl,
-                ["vnp_TmnCode"] = tmnCode,
+                ["vnp_ReturnUrl"] = returnUrl ?? "",
+                ["vnp_TmnCode"] = tmnCode ?? "",
                 ["vnp_TxnRef"] = txnRef,
                 ["vnp_Version"] = "2.1.0"
             };
 
             // Hash data
             var hashData = string.Join("&", parameters.Select(p => $"{p.Key}={p.Value}"));
-            var secureHash = CreateHmacSha512(hashSecret, hashData);
+            var secureHash = CreateHmacSha512(hashSecret ?? "", hashData);
 
             // Build URL
             var queryString = string.Join("&", parameters.Select(p => 

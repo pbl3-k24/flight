@@ -1,25 +1,23 @@
 namespace API.Domain.Entities;
 
-public class BookingService
+public class AdditionalService
 {
     public int Id { get; set; }
 
-    public int BookingPassengerId { get; set; }
-
-    public int AdditionalServiceId { get; set; }
-
-    public int Quantity { get; set; }
+    public string ServiceName { get; set; } = null!;
 
     public decimal Price { get; set; }
+
+    public string? Description { get; set; }
 
     // Soft delete
     public bool IsDeleted { get; set; } = false;
     public DateTime? DeletedAt { get; set; }
 
     // Navigation properties
-    public virtual BookingPassenger BookingPassenger { get; set; } = null!;
+    public virtual ICollection<ClassServiceConfig> ClassServiceConfigs { get; set; } = [];
 
-    public virtual AdditionalService AdditionalService { get; set; } = null!;
+    public virtual ICollection<BookingService> BookingServices { get; set; } = [];
 
     public void SoftDelete()
     {

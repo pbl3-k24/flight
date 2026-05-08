@@ -61,6 +61,7 @@ builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
 // Register application services - Phase 2: Flight Search & Booking
 builder.Services.AddScoped<IFlightService, FlightService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
+builder.Services.AddScoped<IAdditionalServiceService, AdditionalServiceService>();
 builder.Services.AddScoped<IPricingService, PricingService>();
 builder.Services.AddScoped<IPromotionService, PromotionService>();
 
@@ -194,52 +195,15 @@ using (var scope = app.Services.CreateScope())
         var canConnect = await dbContext.Database.CanConnectAsync();
         if (!canConnect)
         {
-            logger.LogWarning("Cannot connect to database. Creating database...");
-            await dbContext.Database.EnsureCreatedAsync();
-            logger.LogInformation("✓ Database created successfully");
+            logger.LogWarning("Cannot connect to database. Please ensure the database exists and connection is valid.");
         }
         else
         {
             logger.LogInformation("✓ Database connection established");
             
-            // Use smart schema sync to detect and apply only missing columns
-            await DatabaseSchemaSync.SyncSchemaAsync(dbContext, logger);
+            // Use DbInitializer for seeding data (if needed)
+            await DbInitializer.InitializeAsync(dbContext, logger);
         }
-
-        // Use DbInitializer for seeding data (if needed)
-        await DbInitializer.InitializeAsync(dbContext, logger);
-
-        // Apply additional schema patches for constraints and type conversions
-        logger.LogInformation("Applying schema patches...");
-        await dbContext.Database.ExecuteSqlRawAsync(@"
-            -- Fix DateOfBirth and PassportExpiryDate types for Users Registration
-            DO $$ 
-            BEGIN
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name = 'Users' AND column_name = 'DateOfBirth'
-                    AND data_type != 'timestamp with time zone'
-                ) THEN
-                    ALTER TABLE ""Users"" ALTER COLUMN ""DateOfBirth"" TYPE timestamp with time zone 
-                    USING ""DateOfBirth""::timestamp with time zone;
-                END IF;
-
-                IF EXISTS (
-                    SELECT 1 FROM information_schema.columns 
-                    WHERE table_name = 'Users' AND column_name = 'PassportExpiryDate'
-                    AND data_type != 'timestamp with time zone'
-                ) THEN
-                    ALTER TABLE ""Users"" ALTER COLUMN ""PassportExpiryDate"" TYPE timestamp with time zone 
-                    USING ""PassportExpiryDate""::timestamp with time zone;
-                END IF;
-            END $$;
-
-            -- Update Payment status constraint
-            ALTER TABLE ""Payments"" DROP CONSTRAINT IF EXISTS ""CK_Payment_Status_Valid"";
-            ALTER TABLE ""Payments"" ADD CONSTRAINT ""CK_Payment_Status_Valid"" CHECK (""Status"" IN (0, 1, 2, 3, 4));
-        ");
-        
-        logger.LogInformation("✓ Schema patches applied successfully");
         logger.LogInformation("✓ Database initialization complete - ready to start services");
     }
     catch (Exception ex)

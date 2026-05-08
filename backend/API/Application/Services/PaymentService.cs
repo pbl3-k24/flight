@@ -18,6 +18,7 @@ public class PaymentService : IPaymentService
     private readonly IFlightSeatInventoryRepository _seatInventoryRepository;
     private readonly IBookingPassengerRepository _passengerRepository;
     private readonly IEmailService _emailService;
+    private readonly ITicketService _ticketService;
     private readonly ILogger<PaymentService> _logger;
     private readonly MomoPaymentProvider _momoProvider;
     private readonly VnpayPaymentProvider _vnpayProvider;
@@ -29,6 +30,7 @@ public class PaymentService : IPaymentService
         IFlightSeatInventoryRepository seatInventoryRepository,
         IBookingPassengerRepository passengerRepository,
         IEmailService emailService,
+        ITicketService ticketService,
         ILogger<PaymentService> logger,
         MomoPaymentProvider momoProvider,
         VnpayPaymentProvider vnpayProvider)
@@ -39,6 +41,7 @@ public class PaymentService : IPaymentService
         _seatInventoryRepository = seatInventoryRepository;
         _passengerRepository = passengerRepository;
         _emailService = emailService;
+        _ticketService = ticketService;
         _logger = logger;
         _momoProvider = momoProvider;
         _vnpayProvider = vnpayProvider;
@@ -382,12 +385,13 @@ public class PaymentService : IPaymentService
 
         try
         {
+            await _ticketService.CreateTicketsAsync(bookingId);
             await _emailService.SendBookingConfirmationAsync(booking.ContactEmail, booking);
         }
         catch (Exception ex)
         {
-            // Bắt lỗi gửi mail để không làm rollback transaction của thanh toán
-            _logger.LogWarning(ex, "Payment succeeded but failed to send confirmation email for booking {BookingId}", bookingId);
+            // Bắt lỗi gửi mail hoặc tạo vé để không làm rollback transaction của thanh toán
+            _logger.LogWarning(ex, "Payment succeeded but failed to generate tickets or send confirmation email for booking {BookingId}", bookingId);
         }
 
         _logger.LogInformation(

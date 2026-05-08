@@ -17,6 +17,18 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.Property(t => t.Status)
             .HasDefaultValue(0);
 
+        builder.Property(t => t.BookingId).IsRequired();
+        builder.Property(t => t.PassengerId).IsRequired();
+        builder.Property(t => t.FlightId).IsRequired();
+        builder.Property(t => t.SeatClassId).IsRequired();
+        builder.Property(t => t.Price).HasColumnType("numeric(10,2)").IsRequired();
+        builder.Property(t => t.CreatedAt).IsRequired();
+        builder.Property(t => t.UpdatedAt).IsRequired();
+        
+        builder.Property(t => t.SeatNumber).HasMaxLength(10);
+        builder.Property(t => t.CheckInTime);
+        builder.Property(t => t.BoardingTime);
+
         // Soft delete
         builder.Property(t => t.IsDeleted)
             .HasDefaultValue(false);

@@ -40,6 +40,14 @@ public class CreatePassengerDto
     public string Nationality { get; set; } = null!;
 
     public string PassportNumber { get; set; } = null!;
+
+    public List<PassengerServiceDto>? OptionalServices { get; set; }
+}
+
+public class PassengerServiceDto
+{
+    public int AdditionalServiceId { get; set; }
+    public int Quantity { get; set; }
 }
 
 public class UpdateBookingDto
@@ -119,4 +127,14 @@ public class PassengerDetail
     public string PassportNumber { get; set; } = null!;
 
     public string Status { get; set; } = null!;
+
+    public List<BookingServiceDetail> Services { get; set; } = [];
+}
+
+public class BookingServiceDetail
+{
+    public int AdditionalServiceId { get; set; }
+    public string ServiceName { get; set; } = null!;
+    public int Quantity { get; set; }
+    public decimal Price { get; set; }
 }

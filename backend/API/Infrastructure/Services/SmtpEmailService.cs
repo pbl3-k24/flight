@@ -36,7 +36,7 @@ public class SmtpEmailService : IEmailService
                 var smtpPort = int.Parse(_config["Smtp:Port"] ?? "587");
                 var smtpUsername = _config["Smtp:Username"];
                 var smtpPassword = _config["Smtp:Password"];
-                var fromEmail = _config["Smtp:FromEmail"] ?? smtpUsername;
+                var fromEmail = _config["Smtp:FromEmail"] ?? smtpUsername ?? "noreply@flightbooking.com";
 
                 using var smtpClient = new SmtpClient(smtpHost, smtpPort)
                 {

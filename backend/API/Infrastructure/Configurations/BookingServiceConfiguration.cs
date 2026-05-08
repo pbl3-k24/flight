@@ -10,13 +10,9 @@ public class BookingServiceConfiguration : IEntityTypeConfiguration<BookingServi
     {
         builder.HasKey(b => b.Id);
 
-        builder.Property(b => b.ServiceType)
-            .HasMaxLength(50)
-            .IsRequired();
-
-        builder.Property(b => b.ServiceName)
-            .HasMaxLength(255)
-            .IsRequired();
+        builder.Property(b => b.Quantity)
+            .IsRequired()
+            .HasDefaultValue(1);
 
         builder.Property(b => b.Price)
             .HasPrecision(10, 2)
@@ -34,6 +30,11 @@ public class BookingServiceConfiguration : IEntityTypeConfiguration<BookingServi
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(b => b.BookingPassengerId);
+
+        builder.HasOne(b => b.AdditionalService)
+            .WithMany(a => a.BookingServices)
+            .HasForeignKey(b => b.AdditionalServiceId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.ToTable("BookingServices");
     }
