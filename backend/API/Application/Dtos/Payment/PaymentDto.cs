@@ -23,7 +23,7 @@ public class PaymentResponse
 
     public string? TransactionRef { get; set; }
 
-    public string? PaymentLink { get; set; }
+    public string? PaymentUrl { get; set; }
 
     public string? QrCode { get; set; }
 

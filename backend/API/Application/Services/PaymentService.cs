@@ -93,7 +93,7 @@ public class PaymentService : IPaymentService
                 Amount = booking.FinalAmount,
                 Provider = paymentMethod,
                 TransactionRef = providerResponse.TransactionId,
-                PaymentLink = providerResponse.PaymentLink,
+                PaymentUrl = providerResponse.PaymentLink,
                 QrCode = providerResponse.QrCode ?? providerResponse.PaymentLink,
                 CreatedAt = createdPayment.CreatedAt,
                 ExpiresAt = providerResponse.ExpiresAt
