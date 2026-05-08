@@ -149,7 +149,7 @@ public static class DbInitializer
         var adminUser = new User
         {
             Email = "admin@flightbooking.vn",
-            PasswordHash = "$2a$11$8vLwZ5YqJ5YqJ5YqJ5YqJOK8vLwZ5YqJ5YqJ5YqJ5YqJOK8vLwZ5", // Admin@123456
+            PasswordHash = "$2a$11$d4kTIe9Zrg0dJSyED3FtGuEL7pnX3IBahL9VwZhKIyDLBsV/Qa196", // Admin@123456
             FullName = "System Administrator",
             Phone = "0900000000",
             Status = 0,
