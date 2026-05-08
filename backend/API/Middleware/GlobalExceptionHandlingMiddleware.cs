@@ -25,11 +25,32 @@ public class GlobalExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex,
-                "Unhandled exception {TraceId} at {Method} {Path}",
-                context.TraceIdentifier,
-                context.Request.Method,
-                context.Request.Path);
+            var isBusinessException = ex is ValidationException || 
+                                      ex is NotFoundException || 
+                                      ex is UnauthorizedException || 
+                                      ex is ForbiddenException || 
+                                      ex is ConflictException || 
+                                      ex is RateLimitException || 
+                                      ex is PaymentException;
+
+            if (isBusinessException)
+            {
+                _logger.LogWarning(
+                    "Business logic exception {TraceId} at {Method} {Path}: {Message}",
+                    context.TraceIdentifier,
+                    context.Request.Method,
+                    context.Request.Path,
+                    ex.Message);
+            }
+            else
+            {
+                _logger.LogError(ex,
+                    "Unhandled exception {TraceId} at {Method} {Path}",
+                    context.TraceIdentifier,
+                    context.Request.Method,
+                    context.Request.Path);
+            }
+
             await HandleExceptionAsync(context, ex);
         }
     }

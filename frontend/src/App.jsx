@@ -1456,7 +1456,11 @@ function App() {
                 <div className="text-right">
                   <p
                     className={`text-sm font-semibold ${
-                      isBookingCancelled(item.status) ? 'text-red-600' : 'text-emerald-600'
+                      isBookingCancelled(item.status) 
+                        ? 'text-red-600' 
+                        : item.status?.toLowerCase().includes('pending') || item.status?.toLowerCase().includes('chờ')
+                        ? 'text-yellow-600'
+                        : 'text-emerald-600'
                     }`}
                   >
                     {item.status}
@@ -1468,16 +1472,54 @@ function App() {
                   <p className="text-xs text-slate-500">
                     Hành khách: {item.passengerName || '---'} · {item.passengerCount} vé
                   </p>
-                  {!isBookingCancelled(item.status) && (
-                    <button
-                      type="button"
-                      onClick={() => cancelBookingFromHistory(item)}
-                      disabled={isCancellingBookingId === item.bookingId}
-                      className="mt-3 rounded-xl bg-red-500 px-4 py-2 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-60"
-                    >
-                      {isCancellingBookingId === item.bookingId ? 'Đang hủy...' : 'Hủy vé'}
-                    </button>
-                  )}
+                  <div className="mt-3 flex flex-wrap gap-2 justify-end">
+                    {/* Nút thanh toán cho booking chưa thanh toán */}
+                    {!isBookingCancelled(item.status) && 
+                     (item.status?.toLowerCase().includes('pending') || 
+                      item.status?.toLowerCase().includes('chờ') ||
+                      item.status?.toLowerCase().includes('unpaid')) && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            setHistoryError('')
+                            setHistoryNotice('')
+                            const bookingIdValue = Number(item.bookingId)
+                            if (!Number.isFinite(bookingIdValue) || bookingIdValue <= 0) {
+                              setHistoryError('Mã booking không hợp lệ')
+                              return
+                            }
+                            
+                            setHistoryNotice('Đang chuyển đến trang thanh toán...')
+                            const paymentResponse = await initiatePayment(bookingIdValue, 'VNPAY')
+                            
+                            if (paymentResponse?.paymentUrl) {
+                              // Chuyển hướng trực tiếp sang VNPay
+                              window.location.href = paymentResponse.paymentUrl
+                            } else {
+                              setHistoryError('Không nhận được link thanh toán từ server')
+                            }
+                          } catch (error) {
+                            setHistoryError(error.message || 'Lỗi khi khởi tạo thanh toán')
+                          }
+                        }}
+                        className="rounded-xl bg-green-600 px-4 py-2 text-xs font-semibold text-white hover:bg-green-700"
+                      >
+                        💳 Thanh toán ngay
+                      </button>
+                    )}
+                    {/* Nút hủy vé */}
+                    {!isBookingCancelled(item.status) && (
+                      <button
+                        type="button"
+                        onClick={() => cancelBookingFromHistory(item)}
+                        disabled={isCancellingBookingId === item.bookingId}
+                        className="rounded-xl bg-red-500 px-4 py-2 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-60"
+                      >
+                        {isCancellingBookingId === item.bookingId ? 'Đang hủy...' : 'Hủy vé'}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </article>
@@ -1500,14 +1542,20 @@ function App() {
         </div>
 
         {adminNotice && (
-          <div className="mb-4 rounded-xl bg-blue-50 px-4 py-3 text-sm text-[#1E40AF]">
-            {adminNotice}
+          <div className="mb-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-[#1E40AF]">
+            <div className="flex items-start gap-2">
+              <span className="text-lg">ℹ️</span>
+              <div className="flex-1">{adminNotice}</div>
+            </div>
           </div>
         )}
 
         {apiError && (
-          <div className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-            {apiError}
+          <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+            <div className="flex items-start gap-2">
+              <span className="text-lg">⚠️</span>
+              <div className="flex-1 whitespace-pre-wrap">{apiError}</div>
+            </div>
           </div>
         )}
 
@@ -1782,6 +1830,9 @@ function App() {
                   type="button"
                   onClick={async () => {
                     try {
+                      setApiError('')
+                      setAdminNotice('')
+                      
                       // Validate dữ liệu trước khi gửi
                       const templateId = Number(generateFormData.templateId)
                       const numberOfWeeks = Number(generateFormData.numberOfWeeks)
@@ -1804,18 +1855,63 @@ function App() {
                       // Chuyển date sang ISO datetime với timezone UTC
                       const weekStartDateTime = new Date(generateFormData.weekStartDate + 'T00:00:00Z').toISOString()
 
+                      setAdminNotice('⏳ Đang sinh chuyến bay từ template...')
+                      
                       const result = await generateFlightsFromTemplate({
                         templateId: templateId,
                         weekStartDate: weekStartDateTime, // ISO datetime với timezone
                         numberOfWeeks: numberOfWeeks,
                       })
+                      
+                      console.log('📊 Result from API:', result)
+                      
+                      // Kiểm tra nếu có lỗi trong response (backend trả 200 nhưng có error)
+                      if (result.error || result.message?.includes('trùng') || result.message?.includes('đã tồn tại')) {
+                        const errorMsg = result.error || result.message || 'Có lỗi xảy ra khi sinh chuyến bay'
+                        setApiError(`❌ ${errorMsg}`)
+                        setAdminNotice('')
+                        return
+                      }
+                      
+                      // Thành công
                       setAdminNotice(
-                        `✅ Thành công! Đã sinh ${result.totalFlightsGenerated} chuyến bay! ` +
+                        `✅ Thành công! Đã sinh ${result.totalFlightsGenerated || 0} chuyến bay! ` +
                         (result.totalFlightsSkipped > 0 ? `(Bỏ qua ${result.totalFlightsSkipped} chuyến trùng)` : '')
                       )
                       setSelectedTemplate(null)
                     } catch (error) {
-                      setApiError(error.message || 'Lỗi khi sinh chuyến bay')
+                      console.error('❌ Lỗi khi sinh chuyến bay:', error)
+                      
+                      // Xử lý các loại lỗi khác nhau
+                      let errorMessage = 'Lỗi khi sinh chuyến bay'
+                      
+                      if (error.message) {
+                        // Kiểm tra lỗi trùng chuyến bay
+                        if (error.message.includes('trùng') || error.message.includes('đã tồn tại')) {
+                          errorMessage = `❌ ${error.message}`
+                        } 
+                        // Kiểm tra lỗi validation
+                        else if (error.message.includes('ValidationException') || error.message.includes('validation')) {
+                          errorMessage = `⚠️ Lỗi dữ liệu: ${error.message}`
+                        }
+                        // Lỗi khác
+                        else {
+                          errorMessage = `❌ ${error.message}`
+                        }
+                      }
+                      
+                      // Hiển thị chi tiết lỗi từ response body nếu có
+                      if (error.responseBody) {
+                        console.log('📋 Chi tiết lỗi:', error.responseBody)
+                        if (error.responseBody.detail) {
+                          errorMessage = `❌ ${error.responseBody.detail}`
+                        } else if (error.responseBody.title) {
+                          errorMessage = `❌ ${error.responseBody.title}`
+                        }
+                      }
+                      
+                      setApiError(errorMessage)
+                      setAdminNotice('')
                     }
                   }}
                   className="w-full rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700"

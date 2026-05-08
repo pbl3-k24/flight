@@ -1,6 +1,7 @@
 namespace API.Controllers;
 
 using API.Application.Dtos.FlightTemplate;
+using API.Application.Exceptions;
 using API.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -175,6 +176,10 @@ public class FlightTemplateController : ControllerBase
             var result = await _flightTemplateService.GenerateFlightsFromTemplateAsync(dto);
 
             return Ok(result);
+        }
+        catch (ValidationException)
+        {
+            throw; // Let GlobalExceptionHandlingMiddleware handle it (returns 400)
         }
         catch (Exception ex)
         {

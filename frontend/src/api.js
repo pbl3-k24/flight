@@ -60,13 +60,24 @@ const makeRequest = async (endpoint, options = {}) => {
         clearAuthToken()
       } catch (e) {}
     }
-    const apiError = new Error(error.detail || `API Error: ${response.statusText}`)
+    const apiError = new Error(error.detail || error.message || `API Error: ${response.statusText}`)
     apiError.status = response.status
     apiError.responseBody = error
     throw apiError
   }
 
-  return response.json()
+  const data = await response.json()
+  
+  // Kiểm tra nếu response có error (backend trả 200 nhưng có ValidationException)
+  if (data.error || data.message) {
+    console.warn('⚠️ API returned error in response body:', data)
+    const apiError = new Error(data.error || data.message)
+    apiError.status = response.status
+    apiError.responseBody = data
+    throw apiError
+  }
+  
+  return data
 }
 
 export const searchFlights = (searchParams) => {
