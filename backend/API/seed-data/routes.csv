@@ -1,0 +1,5 @@
+RouteCode,DepartureAirportCode,ArrivalAirportCode,DistanceKm,EstimatedDurationMinutes,IsActive
+SGN-HAN,SGN,HAN,1166,145,true
+HAN-SGN,HAN,SGN,1166,145,true
+SGN-DAD,SGN,DAD,610,80,true
+DAD-SGN,DAD,SGN,610,80,true

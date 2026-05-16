@@ -1,4 +1,5 @@
-const API_BASE_URL = 'http://localhost:5042/api/v1'
+const API_ROOT_URL = 'http://localhost:5042'
+const API_BASE_URL = `${API_ROOT_URL}/api/v1`
 
 let authToken = null
 
@@ -27,8 +28,8 @@ const toLocalDateTimeString = (dateValue) => {
   return date.toISOString()
 }
 
-const makeRequest = async (endpoint, options = {}) => {
-  const url = `${API_BASE_URL}${endpoint}`
+const makeRequestWithBase = async (baseUrl, endpoint, options = {}) => {
+  const url = `${baseUrl}${endpoint}`
   const headers = {
     'Content-Type': 'application/json',
     ...options.headers,
@@ -78,6 +79,39 @@ const makeRequest = async (endpoint, options = {}) => {
   }
   
   return data
+}
+
+const makeRequest = async (endpoint, options = {}) =>
+  makeRequestWithBase(API_BASE_URL, endpoint, options)
+
+export const getServices = () => {
+  console.log('🔍 Fetching services...')
+  return makeRequest('/additional-services').then((data) => {
+    if (Array.isArray(data)) return data
+    if (Array.isArray(data?.items)) return data.items
+    if (Array.isArray(data?.data)) return data.data
+    if (Array.isArray(data?.$values)) return data.$values
+    return []
+  })
+}
+
+export const getSeatClassServices = (seatClassId) =>
+  makeRequest(`/additional-services/by-seat-class/${seatClassId}`)
+
+export const addServiceToBooking = (bookingId, passengerId, additionalServiceId, quantity = 1) => {
+  console.log('➕ Adding service to booking passenger:', {
+    bookingId,
+    passengerId,
+    additionalServiceId,
+    quantity,
+  })
+  return makeRequest(`/bookings/${bookingId}/passengers/${passengerId}/services`, {
+    method: 'POST',
+    body: JSON.stringify({
+      additionalServiceId,
+      quantity,
+    }),
+  })
 }
 
 export const searchFlights = (searchParams) => {

@@ -1,5 +1,6 @@
 using API.Application.Interfaces;
 using API.Application.Services;
+using API.Extensions;
 using API.Infrastructure.Data;
 using API.Infrastructure.ExternalServices;
 using API.Infrastructure.Repositories;
@@ -7,11 +8,16 @@ using API.Infrastructure.Security;
 using API.Infrastructure.Services;
 using API.Infrastructure.UnitOfWork;
 using API.Middleware;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
 
 // Add services to the container.
 builder.Services.AddSwaggerGen(options =>
@@ -47,7 +53,10 @@ builder.Services.AddControllers();
 builder.Services.AddHttpClient(); // Add HttpClient for payment providers
 
 // Register Phase 7: Security & Validation
-builder.Services.AddDataProtection();
+var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "DataProtectionKeys");
+Directory.CreateDirectory(dataProtectionKeysPath);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
 builder.Services.AddScoped<IDataProtectionService, DataProtectionService>();
 builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 builder.Services.AddScoped<AuditService>();
@@ -57,6 +66,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.AddScoped<IPasswordHasher, PasswordHasher>();
+builder.Services.AddScoped<ICsvSeedService, CsvSeedService>();
 
 // Register application services - Phase 2: Flight Search & Booking
 builder.Services.AddScoped<IFlightService, FlightService>();
@@ -71,9 +81,7 @@ builder.Services.AddScoped<ITicketService, TicketService>();
 builder.Services.AddScoped<IRefundService, RefundService>();
 
 // Register application services - Phase 4: Admin Management
-// TODO: FlightAdminService needs refactoring for FlightDefinition
-// Temporary stub to prevent controller errors
-builder.Services.AddScoped<IFlightAdminService, FlightAdminServiceStub>();
+builder.Services.AddScoped<IFlightAdminService, FlightAdminService>();
 builder.Services.AddScoped<IBookingAdminService, BookingAdminService>();
 builder.Services.AddScoped<IUserAdminService, UserAdminService>();
 builder.Services.AddScoped<IPromotionAdminService, PromotionAdminService>();
@@ -94,18 +102,14 @@ builder.Services.AddScoped<IRealtimeDashboardService, RealtimeDashboardService>(
 builder.Services.AddScoped<IPerformanceAnalyticsService, PerformanceAnalyticsService>();
 
 // Register payment providers
-builder.Services.AddScoped<MomoPaymentProvider>();
 builder.Services.AddScoped<VnpayPaymentProvider>();
 
-// Register repositories - All Phases
-// NOTE: IMPORTANT - Repository implementations are REQUIRED for functionality
-// Phase 1 repositories (already implemented)
+// Register repositories
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IEmailVerificationTokenRepository, EmailVerificationTokenRepository>();
 builder.Services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
 
-// Phase 2-6 repositories (temporary placeholders - need real implementation)
-// Repository registrations - all with actual implementations
+// Repository registrations
 builder.Services.AddScoped<IFlightRepository, FlightRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IFlightSeatInventoryRepository, FlightSeatInventoryRepository>();
@@ -167,20 +171,30 @@ builder.Services.AddHostedService<API.Application.Services.VnpayRefundHostedServ
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("FrontendOnly", policy =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
+        var allowedOrigins = builder.Configuration
+            .GetSection("Cors:AllowedOrigins")
+            .Get<string[]>() ?? [];
+
+        if (allowedOrigins.Length == 0)
+        {
+            // Safe fallback for local demo only when not configured.
+            allowedOrigins = ["http://localhost:3000", "http://localhost:5173"];
+        }
+
+        policy.WithOrigins(allowedOrigins)
+            .AllowAnyMethod()
+            .AllowAnyHeader();
     });
 });
 
 var app = builder.Build();
 
-// ✅ CRITICAL: Schema sync MUST complete BEFORE HostedServices start
-// This ensures BackgroundJobService doesn't query before columns are added
-using (var scope = app.Services.CreateScope())
+var databaseStartupEnabled = builder.Configuration.GetValue("DatabaseStartup:Enabled", false);
+if (databaseStartupEnabled)
 {
+    using var scope = app.Services.CreateScope();
     var scopedProvider = scope.ServiceProvider;
     var logger = scopedProvider.GetRequiredService<ILoggerFactory>()
         .CreateLogger("DatabaseInitialization");
@@ -188,11 +202,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var dbContext = scopedProvider.GetRequiredService<FlightBookingDbContext>();
-        
-        logger.LogInformation("Checking database connection...");
-        
-        // Check if database exists
         var canConnect = await dbContext.Database.CanConnectAsync();
+
         if (!canConnect)
         {
             logger.LogWarning("Cannot connect to database. Please ensure the database exists and connection is valid.");
@@ -200,28 +211,40 @@ using (var scope = app.Services.CreateScope())
         else
         {
             logger.LogInformation("✓ Database connection established");
-            
-            // Use DbInitializer for seeding data (if needed)
-            await DbInitializer.InitializeAsync(dbContext, logger);
+
+            var schemaSyncEnabled = builder.Configuration.GetValue("DatabaseStartup:SchemaSync", false);
+            if (schemaSyncEnabled)
+            {
+                await DatabaseSchemaSync.SyncSchemaAsync(dbContext, logger);
+            }
+
+            var initializerEnabled = builder.Configuration.GetValue("DatabaseStartup:InitialSeed", false);
+            if (initializerEnabled)
+            {
+                await DbInitializer.InitializeAsync(dbContext, logger);
+            }
+
+            await app.SeedCsvDataAsync();
         }
-        logger.LogInformation("✓ Database initialization complete - ready to start services");
+
+        logger.LogInformation("✓ Database startup tasks completed");
     }
     catch (Exception ex)
     {
         logger.LogError(ex, "Failed to initialize database");
 
-        // In PRODUCTION: Fail hard - don't allow app to run without database
         if (!app.Environment.IsDevelopment())
         {
-            logger.LogCritical("Database initialization failed in PRODUCTION environment. " +
-                "Application startup aborted to prevent serving with broken database.");
+            logger.LogCritical("Database startup tasks failed in PRODUCTION environment. Application startup aborted.");
             throw;
         }
 
-        // In DEVELOPMENT: Allow to continue with warning
-        logger.LogWarning("Running in DEVELOPMENT mode without database. " +
-            "Database operations will fail.");
+        logger.LogWarning("Running in DEVELOPMENT mode without database startup tasks.");
     }
+}
+else
+{
+    app.Logger.LogInformation("Database startup tasks are disabled. DB schema, initialization, and CSV seed are controlled externally.");
 }
 
 // Generate search test data
@@ -266,7 +289,7 @@ app.UseSecurityHeaders();
 app.UseRateLimiting();
 app.UseRequestLogging();
 
-app.UseCors("AllowAll");
+app.UseCors("FrontendOnly");
 
 // JWT Authentication middleware - MUST be BEFORE UseHttpsRedirection
 // so Authorization header is processed before any redirects

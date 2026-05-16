@@ -14,9 +14,17 @@ public class PromotionUsageConfiguration : IEntityTypeConfiguration<PromotionUsa
             .HasPrecision(10, 2)
             .IsRequired();
 
+        builder.Property(p => p.UserId)
+            .IsRequired();
+
         builder.HasOne(p => p.Promotion)
             .WithMany(pr => pr.PromotionUsages)
             .HasForeignKey(p => p.PromotionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(p => p.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(p => p.Booking)
@@ -24,8 +32,10 @@ public class PromotionUsageConfiguration : IEntityTypeConfiguration<PromotionUsa
             .HasForeignKey(p => p.BookingId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(p => new { p.PromotionId, p.BookingId }).IsUnique();
-        builder.HasIndex(p => p.BookingId);
+        builder.HasIndex(p => new { p.PromotionId, p.UserId }).IsUnique();
+        builder.HasIndex(p => p.BookingId).IsUnique();
+        builder.HasIndex(p => p.PromotionId);
+        builder.HasIndex(p => p.UserId);
 
         builder.ToTable("PromotionUsages");
     }

@@ -1,0 +1,3 @@
+AircraftCode,Model,TotalSeats,IsActive
+VN-A320-001,Airbus A320,180,true
+VN-B787-001,Boeing 787-9,300,true

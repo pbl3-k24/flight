@@ -1,0 +1,5 @@
+FlightDefinitionCode,RouteCode,AircraftCode,DepartureTime,ArrivalTime,ArrivalOffsetDays,IsActive
+VN201,SGN-HAN,VN-A320-001,06:00,08:25,0,true
+VN202,HAN-SGN,VN-A320-001,09:30,11:55,0,true
+VN301,SGN-DAD,VN-B787-001,13:00,14:20,0,true
+VN999,SGN-HAN,VN-B787-001,23:30,01:45,1,true

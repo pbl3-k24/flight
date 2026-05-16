@@ -25,6 +25,12 @@ public interface IFlightAdminService
     Task<bool> DeleteFlightAsync(int flightId);
 
     /// <summary>
+    /// Cancels a flight and all affected bookings, queues refunds for paid bookings,
+    /// and sends cancellation notifications.
+    /// </summary>
+    Task<CancelFlightAdminResponse> CancelFlightAsync(int flightId, CancelFlightAdminDto dto);
+
+    /// <summary>
     /// Gets all flights with filters.
     /// </summary>
     Task<List<FlightManagementResponse>> GetFlightsAsync(int page = 1, int pageSize = 20);

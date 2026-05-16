@@ -4,6 +4,8 @@ public class Route
 {
     public int Id { get; set; }
 
+    public string Code { get; set; } = null!;
+
     public int DepartureAirportId { get; set; }
 
     public int ArrivalAirportId { get; set; }

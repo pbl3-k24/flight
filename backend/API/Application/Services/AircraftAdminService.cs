@@ -41,7 +41,7 @@ public class AircraftAdminService : IAircraftAdminService
             // Count active flights for this aircraft
             var flights = await _unitOfWork.Flights.GetAllAsync();
             var activeFlightsCount = flights.Count(f => 
-                (f.ActualAircraftId == ac.Id || f.FlightDefinition.DefaultAircraftId == ac.Id) &&
+                f.AircraftId == ac.Id &&
                 f.DepartureTime > DateTime.UtcNow);
 
             response.Add(MapToResponse(ac, activeFlightsCount));
@@ -63,7 +63,7 @@ public class AircraftAdminService : IAircraftAdminService
         // Count active flights
         var flights = await _unitOfWork.Flights.GetAllAsync();
         var activeFlightsCount = flights.Count(f => 
-            (f.ActualAircraftId == aircraftId || f.FlightDefinition.DefaultAircraftId == aircraftId) &&
+            f.AircraftId == aircraftId &&
             f.DepartureTime > DateTime.UtcNow);
 
         return MapToResponse(aircraft, activeFlightsCount);
@@ -227,7 +227,7 @@ public class AircraftAdminService : IAircraftAdminService
         // Count active flights
         var flights = await _unitOfWork.Flights.GetAllAsync();
         var activeFlightsCount = flights.Count(f => 
-            (f.ActualAircraftId == aircraftId || f.FlightDefinition.DefaultAircraftId == aircraftId) &&
+            f.AircraftId == aircraftId &&
             f.DepartureTime > DateTime.UtcNow);
 
         return MapToResponse(aircraft, activeFlightsCount);
@@ -246,7 +246,7 @@ public class AircraftAdminService : IAircraftAdminService
         // Check if aircraft has active flights
         var flights = await _unitOfWork.Flights.GetAllAsync();
         var hasActiveFlights = flights.Any(f => 
-            (f.ActualAircraftId == aircraftId || f.FlightDefinition.DefaultAircraftId == aircraftId) &&
+            f.AircraftId == aircraftId &&
             f.DepartureTime > DateTime.UtcNow);
 
         if (hasActiveFlights)
@@ -298,7 +298,7 @@ public class AircraftAdminService : IAircraftAdminService
 
         var flights = await _unitOfWork.Flights.GetAllAsync();
         var aircraftFlights = flights.Where(f => 
-            f.ActualAircraftId == aircraftId || f.FlightDefinition.DefaultAircraftId == aircraftId).ToList();
+            f.AircraftId == aircraftId).ToList();
 
         var totalFlights = aircraftFlights.Count;
         var activeFlights = aircraftFlights.Count(f => f.DepartureTime > DateTime.UtcNow);

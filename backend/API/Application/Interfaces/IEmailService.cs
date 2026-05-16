@@ -20,6 +20,11 @@ public interface IEmailService
     Task SendPasswordResetEmailAsync(string email, string resetCode);
 
     /// <summary>
+    /// Sends a password change OTP email.
+    /// </summary>
+    Task SendPasswordChangeOtpEmailAsync(string email, string otpCode);
+
+    /// <summary>
     /// Sends a booking confirmation email.
     /// </summary>
     Task SendBookingConfirmationAsync(string email, Booking booking);

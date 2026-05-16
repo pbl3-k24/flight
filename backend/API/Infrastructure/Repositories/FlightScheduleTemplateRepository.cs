@@ -24,13 +24,18 @@ public class FlightScheduleTemplateRepository : IFlightScheduleTemplateRepositor
     {
         return await _context.FlightScheduleTemplates
             .Include(t => t.Details)
-                .ThenInclude(d => d.Route)
-                    .ThenInclude(r => r.DepartureAirport)
+                .ThenInclude(d => d.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.DepartureAirport)
             .Include(t => t.Details)
-                .ThenInclude(d => d.Route)
-                    .ThenInclude(r => r.ArrivalAirport)
+                .ThenInclude(d => d.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
+                        .ThenInclude(r => r.ArrivalAirport)
             .Include(t => t.Details)
-                .ThenInclude(d => d.Aircraft)
+                .ThenInclude(d => d.FlightDefinition)
+                    .ThenInclude(fd => fd.DefaultAircraft)
+            .Include(t => t.Details)
+                .ThenInclude(d => d.AircraftOverride)
             .FirstOrDefaultAsync(t => t.Id == id);
     }
 
@@ -45,13 +50,18 @@ public class FlightScheduleTemplateRepository : IFlightScheduleTemplateRepositor
     {
         return await _context.FlightScheduleTemplates
             .Include(t => t.Details)
-                .ThenInclude(d => d.Route)
+                .ThenInclude(d => d.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
                     .ThenInclude(r => r.DepartureAirport)
             .Include(t => t.Details)
-                .ThenInclude(d => d.Route)
+                .ThenInclude(d => d.FlightDefinition)
+                    .ThenInclude(fd => fd.Route)
                     .ThenInclude(r => r.ArrivalAirport)
             .Include(t => t.Details)
-                .ThenInclude(d => d.Aircraft)
+                .ThenInclude(d => d.FlightDefinition)
+                    .ThenInclude(fd => fd.DefaultAircraft)
+            .Include(t => t.Details)
+                .ThenInclude(d => d.AircraftOverride)
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
     }

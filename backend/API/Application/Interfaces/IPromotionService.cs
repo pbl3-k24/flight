@@ -22,7 +22,8 @@ public interface IPromotionService
     /// </summary>
     /// <param name="promotionId">Promotion ID</param>
     /// <param name="bookingId">Booking ID</param>
+    /// <param name="userId">User ID</param>
     /// <param name="discountAmount">Discount amount applied</param>
     /// <returns>True if recorded successfully</returns>
-    Task<bool> RecordPromotionUsageAsync(int promotionId, int bookingId, decimal discountAmount);
+    Task<bool> RecordPromotionUsageAsync(int promotionId, int bookingId, int userId, decimal discountAmount);
 }

@@ -1,11 +1,8 @@
 namespace API.Infrastructure.Security;
 
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using System.Security.Claims;
 using System.Text.Encodings.Web;
 using API.Application.Interfaces;
 
@@ -36,11 +33,8 @@ public class JwtAuthenticationHandler : AuthenticationHandler<AuthenticationSche
         {
             // Extract token from Authorization header
             var authHeader = Request.Headers.Authorization.ToString();
-            _logger.LogInformation("Authorization Header: {AuthHeader}", authHeader);
-
             if (string.IsNullOrEmpty(authHeader))
             {
-                _logger.LogWarning("No Authorization header found");
                 return Task.FromResult(AuthenticateResult.NoResult());
             }
 
@@ -51,8 +45,6 @@ public class JwtAuthenticationHandler : AuthenticationHandler<AuthenticationSche
             }
 
             var token = authHeader.Substring("Bearer ".Length).Trim();
-            _logger.LogInformation("Extracted token (first 50 chars): {Token}...", token.Substring(0, Math.Min(50, token.Length)));
-
             // Validate token using JwtTokenService
             var principal = _jwtTokenService.ValidateToken(token);
 
@@ -61,9 +53,6 @@ public class JwtAuthenticationHandler : AuthenticationHandler<AuthenticationSche
                 _logger.LogWarning("Invalid or expired token");
                 return Task.FromResult(AuthenticateResult.Fail("Invalid or expired token"));
             }
-
-            _logger.LogInformation("Token validated successfully. Principal claims: {Claims}", 
-                string.Join(", ", principal.Claims.Select(c => $"{c.Type}={c.Value}")));
 
             // Create authentication ticket
             var ticket = new AuthenticationTicket(principal, Scheme.Name);

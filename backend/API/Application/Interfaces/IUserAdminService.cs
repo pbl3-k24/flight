@@ -17,17 +17,17 @@ public interface IUserAdminService
     /// <summary>
     /// Updates user status (Active/Inactive/Suspended).
     /// </summary>
-    Task<bool> UpdateUserStatusAsync(int userId, UpdateUserStatusDto dto);
+    Task<bool> UpdateUserStatusAsync(int actorAdminId, int userId, UpdateUserStatusDto dto);
 
     /// <summary>
     /// Assigns a role to a user.
     /// </summary>
-    Task<bool> AssignRoleAsync(int userId, AssignRoleDto dto);
+    Task<bool> AssignRoleAsync(int actorAdminId, int userId, AssignRoleDto dto);
 
     /// <summary>
     /// Removes a role from a user.
     /// </summary>
-    Task<bool> RemoveRoleAsync(int userId, int roleId);
+    Task<bool> RemoveRoleAsync(int actorAdminId, int userId, int roleId);
 
     /// <summary>
     /// Gets user booking history.

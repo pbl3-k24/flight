@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 
 public class UserAdminService : IUserAdminService
 {
+    private const string AdminRoleName = "Admin";
     private readonly IUserRepository _userRepository;
     private readonly IRoleRepository _roleRepository;
     private readonly IBookingRepository _bookingRepository;
@@ -65,7 +66,7 @@ public class UserAdminService : IUserAdminService
         }
     }
 
-    public async Task<bool> UpdateUserStatusAsync(int userId, UpdateUserStatusDto dto)
+    public async Task<bool> UpdateUserStatusAsync(int actorAdminId, int userId, UpdateUserStatusDto dto)
     {
         try
         {
@@ -73,6 +74,22 @@ public class UserAdminService : IUserAdminService
             if (user == null)
             {
                 throw new NotFoundException("User not found");
+            }
+
+            var adminRole = await _roleRepository.GetByNameAsync(AdminRoleName)
+                ?? throw new NotFoundException("Admin role not found");
+            var founderAdminId = await GetFounderAdminIdAsync(adminRole.Id);
+
+            var targetIsAdmin = await _userRepository.UserHasRoleAsync(userId, adminRole.Id);
+            var isDeactivating = dto.Status != 0;
+            if (targetIsAdmin && isDeactivating && actorAdminId != founderAdminId)
+            {
+                throw new UnauthorizedException("Only the first admin can deactivate admin accounts");
+            }
+
+            if (userId == founderAdminId && isDeactivating)
+            {
+                throw new ValidationException("Cannot deactivate the first admin account");
             }
 
             user.Status = dto.Status;
@@ -89,7 +106,7 @@ public class UserAdminService : IUserAdminService
         }
     }
 
-    public async Task<bool> AssignRoleAsync(int userId, AssignRoleDto dto)
+    public async Task<bool> AssignRoleAsync(int actorAdminId, int userId, AssignRoleDto dto)
     {
         try
         {
@@ -105,8 +122,16 @@ public class UserAdminService : IUserAdminService
                 throw new NotFoundException("Role not found");
             }
 
-            // Add role to user (implementation depends on UserRole entity)
-            // This is a simplified version - actual implementation would depend on the schema
+            if (role.Name.Equals(AdminRoleName, StringComparison.OrdinalIgnoreCase))
+            {
+                var founderAdminId = await GetFounderAdminIdAsync(role.Id);
+                if (actorAdminId != founderAdminId)
+                {
+                    throw new UnauthorizedException("Only the first admin can assign Admin role");
+                }
+            }
+
+            await _userRepository.AddRoleAsync(userId, dto.RoleId);
 
             _logger.LogInformation("Role assigned to user: {UserId}, Role: {RoleId}", userId, dto.RoleId);
             return true;
@@ -118,7 +143,7 @@ public class UserAdminService : IUserAdminService
         }
     }
 
-    public async Task<bool> RemoveRoleAsync(int userId, int roleId)
+    public async Task<bool> RemoveRoleAsync(int actorAdminId, int userId, int roleId)
     {
         try
         {
@@ -128,7 +153,27 @@ public class UserAdminService : IUserAdminService
                 throw new NotFoundException("User not found");
             }
 
-            // Remove role from user
+            var role = await _roleRepository.GetByIdAsync(roleId);
+            if (role == null)
+            {
+                throw new NotFoundException("Role not found");
+            }
+
+            if (role.Name.Equals(AdminRoleName, StringComparison.OrdinalIgnoreCase))
+            {
+                var founderAdminId = await GetFounderAdminIdAsync(roleId);
+                if (actorAdminId != founderAdminId)
+                {
+                    throw new UnauthorizedException("Only the first admin can remove Admin role");
+                }
+
+                if (userId == founderAdminId)
+                {
+                    throw new ValidationException("Cannot remove Admin role from the first admin");
+                }
+            }
+
+            await _userRepository.RemoveRoleAsync(userId, roleId);
             _logger.LogInformation("Role removed from user: {UserId}, Role: {RoleId}", userId, roleId);
             return true;
         }
@@ -164,7 +209,7 @@ public class UserAdminService : IUserAdminService
                     BookingCode = booking.BookingCode,
                     UserEmail = user?.Email ?? "Unknown",
                     UserName = user?.FullName ?? "Unknown",
-                    PassengerCount = 1,
+                    PassengerCount = booking.Passengers?.Count ?? 0,
                     Amount = booking.FinalAmount,
                     BookingStatus = booking.Status,
                     BookingStatusName = statusName,
@@ -207,5 +252,21 @@ public class UserAdminService : IUserAdminService
             TotalSpent = totalSpent,
             CreatedAt = user.CreatedAt
         };
+    }
+
+    private async Task<int> GetFounderAdminIdAsync(int adminRoleId)
+    {
+        var users = await _userRepository.GetAllWithRolesAsync();
+        var founderAdmin = users
+            .Where(u => u.UserRoles.Any(ur => ur.RoleId == adminRoleId))
+            .OrderBy(u => u.Id)
+            .FirstOrDefault();
+
+        if (founderAdmin == null)
+        {
+            throw new ValidationException("No admin account exists in the system");
+        }
+
+        return founderAdmin.Id;
     }
 }

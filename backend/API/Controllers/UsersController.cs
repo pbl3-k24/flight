@@ -60,7 +60,7 @@ public class UsersController : ControllerBase
     public async Task<IActionResult> VerifyEmailAsync([FromQuery] string code)
     {
         _logger.LogInformation("Email verification request received");
-        await _authService.VerifyEmailAsync(null!, code);
+        await _authService.VerifyEmailAsync(string.Empty, code);
         return Ok(new { message = "Email verified successfully" });
     }
 
@@ -77,6 +77,37 @@ public class UsersController : ControllerBase
         var userId = User.GetUserIdOrThrow();
         _logger.LogInformation("Password change request for authenticated user");
         await _authService.ChangePasswordAsync(userId, dto);
+        return Ok(new { message = "Password changed successfully" });
+    }
+
+    /// <summary>
+    /// Sends an OTP to the authenticated user's email for password change.
+    /// </summary>
+    [Authorize]
+    [HttpPost("change-password/request-otp")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> RequestChangePasswordOtpAsync()
+    {
+        var userId = User.GetUserIdOrThrow();
+        _logger.LogInformation("Password change OTP request for authenticated user");
+        await _authService.RequestChangePasswordOtpAsync(userId);
+        return Ok(new { message = "OTP has been sent to your email" });
+    }
+
+    /// <summary>
+    /// Changes the password for the authenticated user using an email OTP.
+    /// </summary>
+    [Authorize]
+    [HttpPost("change-password/confirm")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ConfirmChangePasswordOtpAsync([FromBody] ConfirmChangePasswordOtpDto dto)
+    {
+        var userId = User.GetUserIdOrThrow();
+        _logger.LogInformation("Password change OTP confirmation for authenticated user");
+        await _authService.ConfirmChangePasswordOtpAsync(userId, dto);
         return Ok(new { message = "Password changed successfully" });
     }
 

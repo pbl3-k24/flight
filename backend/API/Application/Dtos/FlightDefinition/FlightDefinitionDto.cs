@@ -9,7 +9,6 @@ public class FlightDefinitionDto
     public TimeOnly DepartureTime { get; set; }
     public TimeOnly ArrivalTime { get; set; }
     public int ArrivalOffsetDays { get; set; }
-    public int OperatingDays { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -22,7 +21,6 @@ public class FlightDefinitionDto
     
     // Computed
     public bool IsOvernightFlight { get; set; }
-    public string? OperatingDaysText { get; set; }
 }
 
 public class CreateFlightDefinitionDto
@@ -33,7 +31,6 @@ public class CreateFlightDefinitionDto
     public TimeOnly DepartureTime { get; set; }
     public TimeOnly ArrivalTime { get; set; }
     public int ArrivalOffsetDays { get; set; } = 0;
-    public int OperatingDays { get; set; } = 127; // Default: every day
     public bool IsActive { get; set; } = true;
 }
 
@@ -44,6 +41,5 @@ public class UpdateFlightDefinitionDto
     public TimeOnly DepartureTime { get; set; }
     public TimeOnly ArrivalTime { get; set; }
     public int ArrivalOffsetDays { get; set; }
-    public int OperatingDays { get; set; }
     public bool IsActive { get; set; }
 }

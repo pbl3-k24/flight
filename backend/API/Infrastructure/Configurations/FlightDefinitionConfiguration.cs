@@ -32,9 +32,6 @@ public class FlightDefinitionConfiguration : IEntityTypeConfiguration<FlightDefi
         builder.Property(fd => fd.ArrivalOffsetDays)
             .HasDefaultValue(0);
 
-        builder.Property(fd => fd.OperatingDays)
-            .HasDefaultValue(127); // Every day
-
         builder.Property(fd => fd.IsActive)
             .HasDefaultValue(true);
 

@@ -35,6 +35,21 @@ public interface IAuthService
     Task<bool> ChangePasswordAsync(int userId, ChangePasswordDto dto);
 
     /// <summary>
+    /// Sends a password change OTP to the authenticated user's email address.
+    /// </summary>
+    /// <param name="userId">The user ID</param>
+    /// <returns>True if OTP creation succeeds</returns>
+    Task<bool> RequestChangePasswordOtpAsync(int userId);
+
+    /// <summary>
+    /// Changes the authenticated user's password after validating an email OTP.
+    /// </summary>
+    /// <param name="userId">The user ID</param>
+    /// <param name="dto">Contains OTP code and new password</param>
+    /// <returns>True if password change successful</returns>
+    Task<bool> ConfirmChangePasswordOtpAsync(int userId, ConfirmChangePasswordOtpDto dto);
+
+    /// <summary>
     /// Initiates a password reset process by sending a reset email.
     /// </summary>
     /// <param name="email">User's email address</param>

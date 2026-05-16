@@ -76,6 +76,8 @@ public static class DatabaseSchemaSync
                 logger.LogInformation("✓ Schema is already up to date - no changes needed");
             }
 
+            await ApplyPostSyncDataFixesAsync(dbContext, logger);
+
             await connection.CloseAsync();
         }
         catch (Exception ex)
@@ -83,6 +85,53 @@ public static class DatabaseSchemaSync
             logger.LogError(ex, "Failed to synchronize database schema");
             throw;
         }
+    }
+
+    private static async Task ApplyPostSyncDataFixesAsync(FlightBookingDbContext dbContext, ILogger logger)
+    {
+        logger.LogInformation("Applying post-sync data fixes...");
+
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            UPDATE ""Routes"" r
+            SET ""Code"" = da.""Code"" || '-' || aa.""Code""
+            FROM ""Airports"" da, ""Airports"" aa
+            WHERE r.""DepartureAirportId"" = da.""Id""
+              AND r.""ArrivalAirportId"" = aa.""Id""
+              AND (r.""Code"" IS NULL OR btrim(r.""Code"") = '');
+        ");
+
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            UPDATE ""Flights"" f
+            SET
+                ""FlightNumber"" = COALESCE(f.""FlightNumber"", fd.""FlightNumber""),
+                ""RouteId"" = COALESCE(f.""RouteId"", fd.""RouteId""),
+                ""AircraftId"" = COALESCE(f.""AircraftId"", f.""ActualAircraftId"", fd.""DefaultAircraftId""),
+                ""ArrivalOffsetDays"" = COALESCE(f.""ArrivalOffsetDays"", fd.""ArrivalOffsetDays"", 0)
+            FROM ""FlightDefinitions"" fd
+            WHERE f.""FlightDefinitionId"" = fd.""Id""
+              AND (f.""FlightNumber"" IS NULL OR f.""RouteId"" IS NULL OR f.""AircraftId"" IS NULL);
+        ");
+
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            UPDATE ""FlightScheduleTemplates""
+            SET ""Code"" = 'TPL_' || ""Id""
+            WHERE ""Code"" IS NULL OR btrim(""Code"") = '';
+        ");
+
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            ALTER TABLE ""FlightTemplateDetails""
+                DROP COLUMN IF EXISTS ""RouteId"",
+                DROP COLUMN IF EXISTS ""AircraftId"",
+                DROP COLUMN IF EXISTS ""DepartureTime"",
+                DROP COLUMN IF EXISTS ""ArrivalTime"",
+                DROP COLUMN IF EXISTS ""FlightNumberPrefix"",
+                DROP COLUMN IF EXISTS ""FlightNumberSuffix"";
+        ");
+
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            ALTER TABLE ""FlightDefinitions""
+                DROP COLUMN IF EXISTS ""OperatingDays"";
+        ");
     }
 
     private static async Task<HashSet<string>> GetExistingTablesAsync(System.Data.Common.DbConnection connection)
@@ -191,6 +240,10 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
             {
                 ["Id"] = "integer NOT NULL",
                 ["FlightDefinitionId"] = "integer NULL", // Allow NULL initially, will be populated later
+                ["FlightNumber"] = "varchar(20) NULL",
+                ["RouteId"] = "integer NULL",
+                ["AircraftId"] = "integer NULL",
+                ["ArrivalOffsetDays"] = "integer NOT NULL DEFAULT 0",
                 ["DepartureTime"] = "timestamp with time zone NOT NULL",
                 ["ArrivalTime"] = "timestamp with time zone NOT NULL",
                 ["ActualAircraftId"] = "integer NULL",
@@ -250,7 +303,7 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
                 ["BookingId"] = "integer NOT NULL",
                 ["Amount"] = "numeric(10,2) NOT NULL",
                 ["Currency"] = "varchar(10) NOT NULL DEFAULT 'VND'",
-                ["PaymentMethod"] = "integer NOT NULL",
+                ["PaymentMethod"] = "integer NOT NULL DEFAULT 0",
                 ["Status"] = "integer NOT NULL DEFAULT 0",
                 ["TransactionId"] = "varchar(255) NULL",
                 ["PaymentGatewayResponse"] = "text NULL",
@@ -318,6 +371,7 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
             ["Routes"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Id"] = "integer NOT NULL",
+                ["Code"] = "varchar(50) NULL",
                 ["DepartureAirportId"] = "integer NOT NULL",
                 ["ArrivalAirportId"] = "integer NOT NULL",
                 ["DistanceKm"] = "integer NOT NULL",
@@ -384,6 +438,15 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
                 ["DeletedAt"] = "timestamp with time zone NULL",
                 ["Version"] = "integer NOT NULL DEFAULT 0"
             },
+            ["PromotionUsages"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Id"] = "integer NOT NULL",
+                ["PromotionId"] = "integer NOT NULL",
+                ["BookingId"] = "integer NOT NULL",
+                ["UserId"] = "integer NOT NULL",
+                ["DiscountAmount"] = "numeric(10,2) NOT NULL",
+                ["UsedAt"] = "timestamp with time zone NOT NULL"
+            },
             ["BookingPassengers"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Id"] = "integer NOT NULL",
@@ -402,8 +465,11 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
             ["FlightScheduleTemplates"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["Id"] = "integer NOT NULL",
+                ["Code"] = "varchar(50) NULL",
                 ["Name"] = "varchar(200) NOT NULL",
                 ["Description"] = "varchar(1000) NULL",
+                ["EffectiveFrom"] = "date NULL",
+                ["EffectiveTo"] = "date NULL",
                 ["IsActive"] = "boolean NOT NULL DEFAULT TRUE",
                 ["CreatedAt"] = "timestamp with time zone NOT NULL",
                 ["UpdatedAt"] = "timestamp with time zone NOT NULL"
@@ -412,13 +478,13 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
             {
                 ["Id"] = "integer NOT NULL",
                 ["TemplateId"] = "integer NOT NULL",
-                ["FlightNumberPrefix"] = "varchar(10) NOT NULL",
-                ["FlightNumberSuffix"] = "varchar(10) NOT NULL",
-                ["RouteId"] = "integer NOT NULL",
-                ["AircraftId"] = "integer NOT NULL",
+                ["FlightDefinitionId"] = "integer NULL",
                 ["DayOfWeek"] = "integer NOT NULL",
-                ["DepartureTime"] = "time without time zone NOT NULL",
-                ["ArrivalTime"] = "time without time zone NOT NULL",
+                ["AircraftOverrideId"] = "integer NULL",
+                ["DepartureTimeOverride"] = "time without time zone NULL",
+                ["ArrivalTimeOverride"] = "time without time zone NULL",
+                ["ArrivalOffsetDaysOverride"] = "integer NULL",
+                ["IsActive"] = "boolean NOT NULL DEFAULT TRUE",
                 ["CreatedAt"] = "timestamp with time zone NOT NULL"
             },
             ["FlightDefinitions"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -430,7 +496,6 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
                 ["DepartureTime"] = "time without time zone NOT NULL",
                 ["ArrivalTime"] = "time without time zone NOT NULL",
                 ["ArrivalOffsetDays"] = "integer NOT NULL DEFAULT 0",
-                ["OperatingDays"] = "integer NOT NULL DEFAULT 127",
                 ["IsActive"] = "boolean NOT NULL DEFAULT TRUE",
                 ["CreatedAt"] = "timestamp with time zone NOT NULL",
                 ["UpdatedAt"] = "timestamp with time zone NULL"

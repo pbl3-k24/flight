@@ -4,7 +4,7 @@ public class InitiatePaymentDto
 {
     public int BookingId { get; set; }
 
-    public string PaymentMethod { get; set; } = null!; // CARD, BANK, WALLET, MOMO, VNPAY, PAYPAL
+    public string PaymentMethod { get; set; } = null!; // VNPAY
 
     public string? PromoCode { get; set; }
 }

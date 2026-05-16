@@ -5,8 +5,11 @@ using System.ComponentModel.DataAnnotations;
 public class FlightScheduleTemplateDto
 {
     public int Id { get; set; }
+    public string Code { get; set; } = null!;
     public string Name { get; set; } = null!;
     public string? Description { get; set; }
+    public DateOnly? EffectiveFrom { get; set; }
+    public DateOnly? EffectiveTo { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
@@ -17,34 +20,44 @@ public class FlightTemplateDetailDto
 {
     public int Id { get; set; }
     public int TemplateId { get; set; }
+    public int FlightDefinitionId { get; set; }
+    public string FlightNumber { get; set; } = null!;
     public int RouteId { get; set; }
     public int AircraftId { get; set; }
+    public int? AircraftOverrideId { get; set; }
     public int DayOfWeek { get; set; }
     public string DayOfWeekName { get; set; } = null!; // "Monday", "Tuesday", etc.
     public TimeOnly DepartureTime { get; set; }
     public TimeOnly ArrivalTime { get; set; }
-    public string FlightNumber { get; set; } = null!; // Prefix + Suffix
+    public int ArrivalOffsetDays { get; set; }
+    public TimeOnly? DepartureTimeOverride { get; set; }
+    public TimeOnly? ArrivalTimeOverride { get; set; }
+    public int? ArrivalOffsetDaysOverride { get; set; }
+    public bool IsActive { get; set; }
     public string? RouteName { get; set; } // "SGN → HAN"
     public string? AircraftName { get; set; } // "Boeing 787"
 }
 
 public class CreateFlightTemplateDto
 {
+    public string Code { get; set; } = null!;
     public string Name { get; set; } = null!;
     public string? Description { get; set; }
+    public DateOnly? EffectiveFrom { get; set; }
+    public DateOnly? EffectiveTo { get; set; }
     public bool IsActive { get; set; } = true;
     public List<CreateFlightTemplateDetailDto> Details { get; set; } = new();
 }
 
 public class CreateFlightTemplateDetailDto
 {
-    public int RouteId { get; set; }
-    public int AircraftId { get; set; }
+    public int FlightDefinitionId { get; set; }
     public int DayOfWeek { get; set; } // 0-6
-    public TimeOnly DepartureTime { get; set; }
-    public TimeOnly ArrivalTime { get; set; }
-    public string FlightNumberPrefix { get; set; } = null!;
-    public string FlightNumberSuffix { get; set; } = null!;
+    public int? AircraftOverrideId { get; set; }
+    public TimeOnly? DepartureTimeOverride { get; set; }
+    public TimeOnly? ArrivalTimeOverride { get; set; }
+    public int? ArrivalOffsetDaysOverride { get; set; }
+    public bool IsActive { get; set; } = true;
 }
 
 public class GenerateFlightsFromTemplateDto

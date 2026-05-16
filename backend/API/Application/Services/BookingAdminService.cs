@@ -258,7 +258,7 @@ public class BookingAdminService : IBookingAdminService
             UserEmail = user?.Email ?? "Unknown",
             UserName = user?.FullName ?? "Unknown",
             OutboundFlight = outboundFlight?.FlightNumber ?? "N/A",
-            PassengerCount = booking.TotalAmount > 0 ? (int)(booking.TotalAmount / 100) : 0,
+            PassengerCount = booking.Passengers?.Count ?? 0,
             Amount = booking.FinalAmount,
             BookingStatus = booking.Status,
             BookingStatusName = statusName,

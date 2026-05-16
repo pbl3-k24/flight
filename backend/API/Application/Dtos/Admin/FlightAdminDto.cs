@@ -129,3 +129,21 @@ public class RouteManagementResponse
 
     public bool IsActive { get; set; }
 }
+
+public class CancelFlightAdminDto
+{
+    public string Reason { get; set; } = "Flight cancelled by admin operation";
+}
+
+public class CancelFlightAdminResponse
+{
+    public int FlightId { get; set; }
+
+    public string FlightNumber { get; set; } = null!;
+
+    public int CancelledBookings { get; set; }
+
+    public int RefundQueuedBookings { get; set; }
+
+    public int NotificationSentBookings { get; set; }
+}

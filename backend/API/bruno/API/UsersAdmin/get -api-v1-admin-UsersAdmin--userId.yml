@@ -17,7 +17,7 @@ http:
 runtime:
   variables:
     - name: baseUrl
-      value: http://localhost:5042/index.html
+      value: http://localhost:5042
 
 settings:
   encodeUrl: true
@@ -194,3 +194,7 @@ examples:
             "detail": "",
             "instance": ""
           }
+
+
+
+

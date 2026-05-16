@@ -4,22 +4,26 @@ using API.Application.Dtos.FlightTemplate;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 public class FlightTemplateService : IFlightTemplateService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<FlightTemplateService> _logger;
+    private readonly int _defaultTurnaroundMinutes;
 
     public FlightTemplateService(
         IUnitOfWork unitOfWork,
-        ILogger<FlightTemplateService> logger)
+        ILogger<FlightTemplateService> logger,
+        IConfiguration configuration)
     {
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _defaultTurnaroundMinutes = configuration.GetValue("FlightScheduling:DefaultAircraftTurnaroundMinutes", 45);
     }
-
-    // ========== CRUD Operations ==========
 
     public async Task<List<FlightScheduleTemplateDto>> GetAllTemplatesAsync()
     {
@@ -35,107 +39,110 @@ public class FlightTemplateService : IFlightTemplateService
 
     public async Task<FlightScheduleTemplateDto> CreateTemplateAsync(CreateFlightTemplateDto dto)
     {
-        // Validate
-        if (string.IsNullOrWhiteSpace(dto.Name))
+        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            throw new ValidationException("Template name is required");
-        }
+            ValidateTemplate(dto);
 
-        if (dto.Details == null || dto.Details.Count == 0)
-        {
-            throw new ValidationException("Template must have at least one flight detail");
-        }
-
-        // Validate each detail
-        foreach (var detail in dto.Details)
-        {
-            await ValidateFlightDetailAsync(detail);
-        }
-
-        var template = new FlightScheduleTemplate
-        {
-            Name = dto.Name,
-            Description = dto.Description,
-            IsActive = dto.IsActive,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        // Create template first
-        var createdTemplate = await _unitOfWork.FlightScheduleTemplates.CreateAsync(template);
-
-        // Then create details
-        foreach (var detailDto in dto.Details)
-        {
-            var detail = new FlightTemplateDetail
+            foreach (var detail in dto.Details)
             {
-                TemplateId = createdTemplate.Id,
-                RouteId = detailDto.RouteId,
-                AircraftId = detailDto.AircraftId,
-                DayOfWeek = detailDto.DayOfWeek,
-                DepartureTime = detailDto.DepartureTime,
-                ArrivalTime = detailDto.ArrivalTime,
-                FlightNumberPrefix = detailDto.FlightNumberPrefix,
-                FlightNumberSuffix = detailDto.FlightNumberSuffix,
-                CreatedAt = DateTime.UtcNow
+                await ValidateFlightDetailAsync(detail);
+            }
+
+            ValidateDuplicateDetails(dto.Details);
+
+            var template = new FlightScheduleTemplate
+            {
+                Code = dto.Code.Trim().ToUpperInvariant(),
+                Name = dto.Name.Trim(),
+                Description = dto.Description,
+                EffectiveFrom = dto.EffectiveFrom,
+                EffectiveTo = dto.EffectiveTo,
+                IsActive = dto.IsActive,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
             };
 
-            await _unitOfWork.FlightTemplateDetails.CreateAsync(detail);
-        }
+            var createdTemplate = await _unitOfWork.FlightScheduleTemplates.CreateAsync(template);
 
-        _logger.LogInformation("Created flight template: {TemplateName} with {Count} details",
-            dto.Name, dto.Details.Count);
+            foreach (var detailDto in dto.Details)
+            {
+                var detail = new FlightTemplateDetail
+                {
+                    TemplateId = createdTemplate.Id,
+                    FlightDefinitionId = detailDto.FlightDefinitionId,
+                    DayOfWeek = detailDto.DayOfWeek,
+                    AircraftOverrideId = detailDto.AircraftOverrideId,
+                    DepartureTimeOverride = detailDto.DepartureTimeOverride,
+                    ArrivalTimeOverride = detailDto.ArrivalTimeOverride,
+                    ArrivalOffsetDaysOverride = detailDto.ArrivalOffsetDaysOverride,
+                    IsActive = detailDto.IsActive,
+                    CreatedAt = DateTime.UtcNow
+                };
 
-        // Reload with details
-        var result = await _unitOfWork.FlightScheduleTemplates.GetByIdWithDetailsAsync(createdTemplate.Id);
-        return MapToDto(result!);
+                await _unitOfWork.FlightTemplateDetails.CreateAsync(detail);
+            }
+
+            _logger.LogInformation("Created flight template: {TemplateCode} with {Count} details",
+                template.Code, dto.Details.Count);
+
+            var result = await _unitOfWork.FlightScheduleTemplates.GetByIdWithDetailsAsync(createdTemplate.Id);
+            return MapToDto(result!);
+        });
     }
 
     public async Task<FlightScheduleTemplateDto> UpdateTemplateAsync(int templateId, CreateFlightTemplateDto dto)
     {
-        var template = await _unitOfWork.FlightScheduleTemplates.GetByIdAsync(templateId);
-        if (template == null)
+        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            throw new NotFoundException($"Template {templateId} not found");
-        }
+            ValidateTemplate(dto);
 
-        // Update template
-        template.Name = dto.Name;
-        template.Description = dto.Description;
-        template.IsActive = dto.IsActive;
-        template.UpdatedAt = DateTime.UtcNow;
-
-        await _unitOfWork.FlightScheduleTemplates.UpdateAsync(template);
-
-        // Delete old details
-        await _unitOfWork.FlightTemplateDetails.DeleteByTemplateIdAsync(templateId);
-
-        // Create new details
-        foreach (var detailDto in dto.Details)
-        {
-            await ValidateFlightDetailAsync(detailDto);
-
-            var detail = new FlightTemplateDetail
+            var template = await _unitOfWork.FlightScheduleTemplates.GetByIdAsync(templateId);
+            if (template == null)
             {
-                TemplateId = templateId,
-                RouteId = detailDto.RouteId,
-                AircraftId = detailDto.AircraftId,
-                DayOfWeek = detailDto.DayOfWeek,
-                DepartureTime = detailDto.DepartureTime,
-                ArrivalTime = detailDto.ArrivalTime,
-                FlightNumberPrefix = detailDto.FlightNumberPrefix,
-                FlightNumberSuffix = detailDto.FlightNumberSuffix,
-                CreatedAt = DateTime.UtcNow
-            };
+                throw new NotFoundException($"Template {templateId} not found");
+            }
 
-            await _unitOfWork.FlightTemplateDetails.CreateAsync(detail);
-        }
+            foreach (var detail in dto.Details)
+            {
+                await ValidateFlightDetailAsync(detail);
+            }
 
-        _logger.LogInformation("Updated flight template: {TemplateId}", templateId);
+            ValidateDuplicateDetails(dto.Details);
 
-        // Reload with details
-        var result = await _unitOfWork.FlightScheduleTemplates.GetByIdWithDetailsAsync(templateId);
-        return MapToDto(result!);
+            template.Code = dto.Code.Trim().ToUpperInvariant();
+            template.Name = dto.Name.Trim();
+            template.Description = dto.Description;
+            template.EffectiveFrom = dto.EffectiveFrom;
+            template.EffectiveTo = dto.EffectiveTo;
+            template.IsActive = dto.IsActive;
+            template.UpdatedAt = DateTime.UtcNow;
+
+            await _unitOfWork.FlightScheduleTemplates.UpdateAsync(template);
+            await _unitOfWork.FlightTemplateDetails.DeleteByTemplateIdAsync(templateId);
+
+            foreach (var detailDto in dto.Details)
+            {
+                var detail = new FlightTemplateDetail
+                {
+                    TemplateId = templateId,
+                    FlightDefinitionId = detailDto.FlightDefinitionId,
+                    DayOfWeek = detailDto.DayOfWeek,
+                    AircraftOverrideId = detailDto.AircraftOverrideId,
+                    DepartureTimeOverride = detailDto.DepartureTimeOverride,
+                    ArrivalTimeOverride = detailDto.ArrivalTimeOverride,
+                    ArrivalOffsetDaysOverride = detailDto.ArrivalOffsetDaysOverride,
+                    IsActive = detailDto.IsActive,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await _unitOfWork.FlightTemplateDetails.CreateAsync(detail);
+            }
+
+            _logger.LogInformation("Updated flight template: {TemplateId}", templateId);
+
+            var result = await _unitOfWork.FlightScheduleTemplates.GetByIdWithDetailsAsync(templateId);
+            return MapToDto(result!);
+        });
     }
 
     public async Task<bool> DeleteTemplateAsync(int templateId)
@@ -146,211 +153,182 @@ public class FlightTemplateService : IFlightTemplateService
             return false;
         }
 
-        // Delete details first
         await _unitOfWork.FlightTemplateDetails.DeleteByTemplateIdAsync(templateId);
-
-        // Then delete template
         await _unitOfWork.FlightScheduleTemplates.DeleteAsync(templateId);
 
         _logger.LogInformation("Deleted flight template: {TemplateId}", templateId);
         return true;
     }
 
-    // ========== Generate Flights ==========
-
     public async Task<GenerateFlightsResultDto> GenerateFlightsFromTemplateAsync(GenerateFlightsFromTemplateDto dto)
     {
         return await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
+            if (dto.TemplateId <= 0)
+            {
+                throw new ValidationException("TemplateId must be greater than 0");
+            }
+
+            if (dto.NumberOfWeeks < 1 || dto.NumberOfWeeks > 52)
+            {
+                throw new ValidationException("Number of weeks must be between 1 and 52");
+            }
+
+            var template = await _unitOfWork.FlightScheduleTemplates.GetByIdWithDetailsAsync(dto.TemplateId);
+            if (template == null)
+            {
+                throw new NotFoundException($"Template {dto.TemplateId} not found");
+            }
+
+            if (!template.IsActive)
+            {
+                throw new ValidationException($"Template {dto.TemplateId} is not active");
+            }
+
+            if (template.Details == null || !template.Details.Any(d => d.IsActive))
+            {
+                throw new ValidationException($"Template {dto.TemplateId} has no active flight details");
+            }
+
             var result = new GenerateFlightsResultDto();
 
-            try
+            for (var week = 0; week < dto.NumberOfWeeks; week++)
             {
-                // Validate TemplateId first
-                if (dto.TemplateId <= 0)
-                {
-                    throw new ValidationException($"Invalid TemplateId: {dto.TemplateId}. TemplateId must be greater than 0. Please check your request body.");
-                }
-
-                // Validate
-                if (dto.NumberOfWeeks < 1 || dto.NumberOfWeeks > 52)
-                {
-                    throw new ValidationException("Number of weeks must be between 1 and 52");
-                }
-
-                // Get template with details
-                var template = await _unitOfWork.FlightScheduleTemplates.GetByIdWithDetailsAsync(dto.TemplateId);
-                if (template == null)
-                {
-                    throw new NotFoundException($"Template {dto.TemplateId} not found");
-                }
-
-                if (!template.IsActive)
-                {
-                    throw new ValidationException($"Template {dto.TemplateId} is not active");
-                }
-
-                if (template.Details == null || !template.Details.Any())
-                {
-                    throw new ValidationException($"Template {dto.TemplateId} has no flight details");
-                }
-
-                _logger.LogInformation("Generating flights from template {TemplateId} ({TemplateName}) starting {StartDate} for {Weeks} week(s)",
-                    dto.TemplateId, template.Name, dto.WeekStartDate, dto.NumberOfWeeks);
-
-                // Generate flights for each week
-                for (int week = 0; week < dto.NumberOfWeeks; week++)
-                {
-                    var weekStart = dto.WeekStartDate.AddDays(week * 7);
-                    await GenerateFlightsForWeekAsync(template, weekStart, result);
-                }
-
-                _logger.LogInformation("Flight generation completed: {Generated} generated, {Skipped} skipped",
-                    result.TotalFlightsGenerated, result.TotalFlightsSkipped);
-
-                return result;
+                var weekStart = dto.WeekStartDate.Date.AddDays(week * 7);
+                await GenerateFlightsForWeekAsync(template, weekStart, result);
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error generating flights from template");
-                throw;
-            }
+
+            _logger.LogInformation("Flight generation completed: {Generated} generated, {Skipped} skipped",
+                result.TotalFlightsGenerated, result.TotalFlightsSkipped);
+
+            return result;
         });
     }
-
-    // ========== Private Helper Methods ==========
 
     private async Task GenerateFlightsForWeekAsync(
         FlightScheduleTemplate template,
         DateTime weekStart,
         GenerateFlightsResultDto result)
     {
-        foreach (var detail in template.Details)
+        foreach (var detail in template.Details.Where(d => d.IsActive))
         {
-            // Calculate actual flight date
-            var flightDate = weekStart.AddDays(detail.DayOfWeek);
-
-            // Build departure and arrival DateTime
-            var departureDateTime = flightDate.Date + detail.DepartureTime.ToTimeSpan();
-            var arrivalDateTime = flightDate.Date + detail.ArrivalTime.ToTimeSpan();
-
-            // ❗ HANDLE OVERNIGHT FLIGHTS
-            if (detail.ArrivalTime < detail.DepartureTime)
+            var definition = detail.FlightDefinition;
+            if (definition == null)
             {
-                arrivalDateTime = arrivalDateTime.AddDays(1);
-                _logger.LogDebug("Overnight flight detected: {FlightNumber} departs {Departure}, arrives {Arrival}",
-                    $"{detail.FlightNumberPrefix}{detail.FlightNumberSuffix}",
-                    departureDateTime,
-                    arrivalDateTime);
+                throw new ValidationException($"Template detail {detail.Id} has no flight definition loaded");
             }
 
-            // Build flight number
-            var flightNumber = $"{detail.FlightNumberPrefix}{detail.FlightNumberSuffix}";
-            var dayOfWeekName = GetDayOfWeekName(detail.DayOfWeek);
-
-            // ❗ CHECK 1: Flight number duplicate on same day
-            if (await IsFlightNumberDuplicateAsync(flightNumber, flightDate))
+            if (!definition.IsActive)
             {
-                throw new ValidationException($"Bị trùng: Chuyến bay {flightNumber} vào {dayOfWeekName} ngày {flightDate:dd/MM/yyyy} đã tồn tại trong hệ thống. Đã hủy toàn bộ thao tác sinh dữ liệu.");
+                result.TotalFlightsSkipped++;
+                result.Warnings.Add($"Skipped inactive flight definition {definition.FlightNumber}");
+                continue;
             }
 
-            // ❗ CHECK 2: Aircraft conflict
-            if (await HasAircraftConflictAsync(detail.AircraftId, departureDateTime, arrivalDateTime))
+            var flightDate = weekStart.AddDays(detail.DayOfWeek).Date;
+            if (template.EffectiveFrom.HasValue && DateOnly.FromDateTime(flightDate) < template.EffectiveFrom.Value)
             {
-                throw new ValidationException($"Bị trùng: Máy bay ID {detail.AircraftId} bị kẹt lịch vào {dayOfWeekName} ngày {flightDate:dd/MM/yyyy} (chuyến {flightNumber}). Đã hủy toàn bộ thao tác sinh dữ liệu.");
+                result.TotalFlightsSkipped++;
+                continue;
             }
 
-            // ❗ STEP 1: Get or create FlightDefinition
-            var arrivalOffsetDays = detail.ArrivalTime < detail.DepartureTime ? 1 : 0;
-            var flightDefinition = await _unitOfWork.FlightDefinitions.FindOrCreateAsync(
-                flightNumber,
-                detail.RouteId,
-                detail.AircraftId,
-                detail.DepartureTime,
-                detail.ArrivalTime,
-                arrivalOffsetDays,
-                operatingDays: 127 // Default: every day
-            );
+            if (template.EffectiveTo.HasValue && DateOnly.FromDateTime(flightDate) > template.EffectiveTo.Value)
+            {
+                result.TotalFlightsSkipped++;
+                continue;
+            }
 
-            // ❗ STEP 2: Create Flight instance
+            var departureTime = detail.DepartureTimeOverride ?? definition.DepartureTime;
+            var arrivalTime = detail.ArrivalTimeOverride ?? definition.ArrivalTime;
+            var arrivalOffsetDays = detail.ArrivalOffsetDaysOverride ?? definition.ArrivalOffsetDays;
+            ValidateSchedule(departureTime, arrivalTime, arrivalOffsetDays);
+
+            var departureDateTime = flightDate.Add(departureTime.ToTimeSpan());
+            var arrivalDateTime = flightDate.AddDays(arrivalOffsetDays).Add(arrivalTime.ToTimeSpan());
+            var aircraftId = detail.AircraftOverrideId ?? definition.DefaultAircraftId;
+            await _unitOfWork.Flights.AcquireAircraftGenerationLockAsync(aircraftId);
+
+            if (await IsFlightDuplicateAsync(definition.Id, departureDateTime))
+            {
+                result.TotalFlightsSkipped++;
+                result.Warnings.Add($"Skipped duplicate flight {definition.FlightNumber} at {departureDateTime:yyyy-MM-dd HH:mm}");
+                continue;
+            }
+
+            if (await HasAircraftConflictAsync(aircraftId, departureDateTime, arrivalDateTime))
+            {
+                throw new ValidationException(
+                    $"Aircraft {aircraftId} conflicts with an existing flight around {departureDateTime:yyyy-MM-dd HH:mm}. " +
+                    $"Turnaround timeout: {_defaultTurnaroundMinutes} minutes.");
+            }
+
             var flight = new Flight
             {
-                FlightDefinitionId = flightDefinition.Id,
+                FlightDefinitionId = definition.Id,
+                FlightNumber = definition.FlightNumber,
+                RouteId = definition.RouteId,
+                AircraftId = aircraftId,
+                ActualAircraftId = null,
                 DepartureTime = departureDateTime,
                 ArrivalTime = arrivalDateTime,
-                ActualAircraftId = null, // Use default from FlightDefinition
-                Status = 0, // Scheduled
+                ArrivalOffsetDays = arrivalOffsetDays,
+                Status = 0,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
 
-            await _unitOfWork.Flights.CreateAsync(flight);
+            try
+            {
+                await _unitOfWork.Flights.CreateAsync(flight);
+            }
+            catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+            {
+                result.TotalFlightsSkipped++;
+                result.Warnings.Add($"Skipped duplicate flight {definition.FlightNumber} at {departureDateTime:yyyy-MM-dd HH:mm}");
+                continue;
+            }
 
-            // ❗ STEP 3: Create seat inventory for this flight
-            await CreateSeatInventoryForFlightAsync(flight, detail.AircraftId);
+            await CreateSeatInventoryForFlightAsync(flight, aircraftId);
 
             result.TotalFlightsGenerated++;
 
-            _logger.LogDebug("Generated flight: {FlightNumber} on {Date} from {Departure} to {Arrival}",
-                flightNumber, flightDate, departureDateTime, arrivalDateTime);
+            _logger.LogDebug("Generated flight {FlightNumber} on {Date}", definition.FlightNumber, flightDate);
         }
-
-        await _unitOfWork.SaveChangesAsync();
     }
 
-    private async Task<bool> IsFlightNumberDuplicateAsync(string flightNumber, DateTime date)
+    private async Task<bool> IsFlightDuplicateAsync(int flightDefinitionId, DateTime departureDateTime)
     {
-        var startOfDay = date.Date;
-        var endOfDay = startOfDay.AddDays(1);
-
-        // Get FlightDefinition by flight number
-        var flightDefinition = await _unitOfWork.FlightDefinitions.GetByFlightNumberAsync(flightNumber);
-        if (flightDefinition == null)
-        {
-            return false; // No definition exists, so no duplicate
-        }
-
-        // Check if any Flight with this FlightDefinitionId exists on this date
-        var flights = await _unitOfWork.Flights.GetAllAsync();
-        return flights.Any(f =>
-            f.FlightDefinitionId == flightDefinition.Id &&
-            f.DepartureTime >= startOfDay &&
-            f.DepartureTime < endOfDay);
+        return await _unitOfWork.Flights.ExistsByDefinitionAndDepartureAsync(flightDefinitionId, departureDateTime);
     }
 
     private async Task<bool> HasAircraftConflictAsync(int aircraftId, DateTime newDeparture, DateTime newArrival)
     {
-        var flights = await _unitOfWork.Flights.GetAllAsync();
+        return await _unitOfWork.Flights.HasAircraftConflictAsync(
+            aircraftId,
+            newDeparture,
+            newArrival,
+            _defaultTurnaroundMinutes);
+    }
 
-        return flights.Any(f =>
-            (f.ActualAircraftId == aircraftId || f.FlightDefinition.DefaultAircraftId == aircraftId) &&
-            // Check time overlap: newDeparture < existingArrival AND newArrival > existingDeparture
-            newDeparture < f.ArrivalTime &&
-            newArrival > f.DepartureTime);
+    private static bool IsUniqueViolation(DbUpdateException ex)
+    {
+        return ex.InnerException is PostgresException pgEx &&
+               pgEx.SqlState == PostgresErrorCodes.UniqueViolation;
     }
 
     private async Task CreateSeatInventoryForFlightAsync(Flight flight, int aircraftId)
     {
-        // Lấy aircraft kèm seat templates
         var aircraft = await _unitOfWork.Aircraft.GetByIdWithSeatTemplatesAsync(aircraftId);
         if (aircraft == null)
         {
-            _logger.LogWarning("Aircraft {AircraftId} not found, skipping seat inventory creation", aircraftId);
-            return;
+            throw new NotFoundException($"Aircraft {aircraftId} not found");
         }
 
-        if (aircraft.SeatTemplates == null || !aircraft.SeatTemplates.Any())
-        {
-            _logger.LogWarning("No seat templates found for aircraft {AircraftId} ({Model})", 
-                aircraftId, aircraft.Model);
-            return;
-        }
-
-        // Tạo FlightSeatInventory cho mỗi SeatClass dựa trên AircraftSeatTemplate
         var activeTemplates = aircraft.SeatTemplates.Where(t => !t.IsDeleted).ToList();
-        
-        _logger.LogInformation("Creating {Count} seat inventories for flight {FlightId} using aircraft {AircraftId} ({Model})",
-            activeTemplates.Count, flight.Id, aircraftId, aircraft.Model);
+        if (!activeTemplates.Any())
+        {
+            throw new ValidationException($"Aircraft {aircraftId} has no active seat templates");
+        }
 
         foreach (var template in activeTemplates)
         {
@@ -369,12 +347,29 @@ public class FlightTemplateService : IFlightTemplateService
             };
 
             await _unitOfWork.FlightSeatInventories.CreateAsync(inventory);
-            
-            _logger.LogDebug("Created seat inventory: FlightId={FlightId}, SeatClass={SeatClass}, TotalSeats={TotalSeats}, BasePrice={BasePrice}",
-                flight.Id, 
-                template.SeatClass?.Name ?? "Unknown",
-                template.DefaultSeatCount,
-                template.DefaultBasePrice);
+        }
+    }
+
+    private void ValidateTemplate(CreateFlightTemplateDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Code))
+        {
+            throw new ValidationException("Template code is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.Name))
+        {
+            throw new ValidationException("Template name is required");
+        }
+
+        if (dto.EffectiveFrom.HasValue && dto.EffectiveTo.HasValue && dto.EffectiveFrom.Value > dto.EffectiveTo.Value)
+        {
+            throw new ValidationException("EffectiveFrom must be before or equal to EffectiveTo");
+        }
+
+        if (dto.Details == null || dto.Details.Count == 0)
+        {
+            throw new ValidationException("Template must have at least one flight detail");
         }
     }
 
@@ -385,29 +380,60 @@ public class FlightTemplateService : IFlightTemplateService
             throw new ValidationException("DayOfWeek must be between 0 and 6");
         }
 
-        var route = await _unitOfWork.Routes.GetByIdAsync(detail.RouteId);
-        if (route == null)
+        var definition = await _unitOfWork.FlightDefinitions.GetByIdAsync(detail.FlightDefinitionId);
+        if (definition == null)
         {
-            throw new NotFoundException($"Route {detail.RouteId} not found");
+            throw new NotFoundException($"Flight definition {detail.FlightDefinitionId} not found");
         }
 
-        var aircraft = await _unitOfWork.Aircraft.GetByIdAsync(detail.AircraftId);
-        if (aircraft == null)
+        if (detail.AircraftOverrideId.HasValue)
         {
-            throw new NotFoundException($"Aircraft {detail.AircraftId} not found");
+            var aircraft = await _unitOfWork.Aircraft.GetByIdAsync(detail.AircraftOverrideId.Value);
+            if (aircraft == null)
+            {
+                throw new NotFoundException($"Aircraft override {detail.AircraftOverrideId.Value} not found");
+            }
         }
 
-        // Allow either prefix+suffix OR just prefix (as full flight number)
-        if (string.IsNullOrWhiteSpace(detail.FlightNumberPrefix))
+        var departure = detail.DepartureTimeOverride ?? definition.DepartureTime;
+        var arrival = detail.ArrivalTimeOverride ?? definition.ArrivalTime;
+        var offsetDays = detail.ArrivalOffsetDaysOverride ?? definition.ArrivalOffsetDays;
+        ValidateSchedule(departure, arrival, offsetDays);
+    }
+
+    private void ValidateDuplicateDetails(List<CreateFlightTemplateDetailDto> details)
+    {
+        var duplicate = details
+            .GroupBy(d => new
+            {
+                d.FlightDefinitionId,
+                d.DayOfWeek,
+                Departure = d.DepartureTimeOverride
+            })
+            .FirstOrDefault(g => g.Count() > 1);
+
+        if (duplicate != null)
         {
-            throw new ValidationException("Flight number prefix is required");
+            throw new ValidationException(
+                $"Duplicate weekly template detail for FlightDefinitionId={duplicate.Key.FlightDefinitionId}, DayOfWeek={duplicate.Key.DayOfWeek}");
+        }
+    }
+
+    private void ValidateSchedule(TimeOnly departureTime, TimeOnly arrivalTime, int arrivalOffsetDays)
+    {
+        if (arrivalOffsetDays < 0 || arrivalOffsetDays > 2)
+        {
+            throw new ValidationException("ArrivalOffsetDays must be between 0 and 2");
         }
 
-        // If suffix is empty, use prefix as full flight number
-        if (string.IsNullOrWhiteSpace(detail.FlightNumberSuffix))
+        if (arrivalTime < departureTime && arrivalOffsetDays == 0)
         {
-            _logger.LogDebug("FlightNumberSuffix is empty, using FlightNumberPrefix as full flight number");
-            detail.FlightNumberSuffix = ""; // Set to empty string instead of null
+            throw new ValidationException("ArrivalOffsetDays must be greater than 0 when arrival time is earlier than departure time");
+        }
+
+        if (arrivalTime == departureTime && arrivalOffsetDays == 0)
+        {
+            throw new ValidationException("Arrival time must be different from departure time unless ArrivalOffsetDays is greater than 0");
         }
     }
 
@@ -416,25 +442,48 @@ public class FlightTemplateService : IFlightTemplateService
         return new FlightScheduleTemplateDto
         {
             Id = template.Id,
+            Code = template.Code,
             Name = template.Name,
             Description = template.Description,
+            EffectiveFrom = template.EffectiveFrom,
+            EffectiveTo = template.EffectiveTo,
             IsActive = template.IsActive,
             CreatedAt = template.CreatedAt,
             UpdatedAt = template.UpdatedAt,
-            Details = template.Details?.Select(d => new FlightTemplateDetailDto
-            {
-                Id = d.Id,
-                TemplateId = d.TemplateId,
-                DayOfWeek = d.DayOfWeek,
-                DayOfWeekName = GetDayOfWeekName(d.DayOfWeek),
-                DepartureTime = d.DepartureTime,
-                ArrivalTime = d.ArrivalTime,
-                FlightNumber = $"{d.FlightNumberPrefix}{d.FlightNumberSuffix}",
-                RouteId = d.RouteId,
-                AircraftId = d.AircraftId,
-                RouteName = d.Route != null ? $"{d.Route.DepartureAirport?.Code} → {d.Route.ArrivalAirport?.Code}" : null,
-                AircraftName = d.Aircraft?.Model
-            }).ToList() ?? new List<FlightTemplateDetailDto>()
+            Details = template.Details?.Select(MapDetailToDto).ToList() ?? new List<FlightTemplateDetailDto>()
+        };
+    }
+
+    private FlightTemplateDetailDto MapDetailToDto(FlightTemplateDetail detail)
+    {
+        var definition = detail.FlightDefinition;
+        var departureTime = detail.DepartureTimeOverride ?? definition.DepartureTime;
+        var arrivalTime = detail.ArrivalTimeOverride ?? definition.ArrivalTime;
+        var arrivalOffsetDays = detail.ArrivalOffsetDaysOverride ?? definition.ArrivalOffsetDays;
+        var aircraft = detail.AircraftOverride ?? definition.DefaultAircraft;
+
+        return new FlightTemplateDetailDto
+        {
+            Id = detail.Id,
+            TemplateId = detail.TemplateId,
+            FlightDefinitionId = detail.FlightDefinitionId,
+            FlightNumber = definition.FlightNumber,
+            RouteId = definition.RouteId,
+            AircraftId = aircraft.Id,
+            AircraftOverrideId = detail.AircraftOverrideId,
+            DayOfWeek = detail.DayOfWeek,
+            DayOfWeekName = GetDayOfWeekName(detail.DayOfWeek),
+            DepartureTime = departureTime,
+            ArrivalTime = arrivalTime,
+            ArrivalOffsetDays = arrivalOffsetDays,
+            DepartureTimeOverride = detail.DepartureTimeOverride,
+            ArrivalTimeOverride = detail.ArrivalTimeOverride,
+            ArrivalOffsetDaysOverride = detail.ArrivalOffsetDaysOverride,
+            IsActive = detail.IsActive,
+            RouteName = definition.Route != null
+                ? $"{definition.Route.DepartureAirport?.Code} -> {definition.Route.ArrivalAirport?.Code}"
+                : null,
+            AircraftName = aircraft.Model
         };
     }
 

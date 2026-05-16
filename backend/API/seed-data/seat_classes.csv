@@ -1,0 +1,4 @@
+Code,Name,RefundPercent,ChangeFee,Priority
+ECO,Economy,50,300000,3
+BUS,Business,80,500000,2
+FIR,First,90,800000,1

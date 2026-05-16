@@ -127,6 +127,32 @@ public class SmtpEmailService : IEmailService
         await SendEmailAsync(email, "Password Reset", htmlContent);
     }
 
+    public async Task SendPasswordChangeOtpEmailAsync(string email, string otpCode)
+    {
+        var htmlContent = $@"
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: Arial, sans-serif; }}
+                    .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                    .otp {{ font-size: 32px; font-weight: bold; letter-spacing: 4px; }}
+                </style>
+            </head>
+            <body>
+                <div class='container'>
+                    <h2>Password Change OTP</h2>
+                    <p>Use the OTP code below to change your account password:</p>
+                    <p class='otp'>{otpCode}</p>
+                    <p>This code will expire in 10 minutes.</p>
+                    <p>If you didn't request a password change, please ignore this email.</p>
+                </div>
+            </body>
+            </html>";
+
+        await SendEmailAsync(email, "Password Change OTP", htmlContent);
+    }
+
     public async Task SendBookingConfirmationAsync(string email, Booking booking)
     {
         var htmlContent = $@"

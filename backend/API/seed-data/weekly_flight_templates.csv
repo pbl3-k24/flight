@@ -1,0 +1,7 @@
+TemplateCode,TemplateName,Description,EffectiveFrom,EffectiveTo,FlightDefinitionCode,DayOfWeek,AircraftOverrideCode,DepartureTimeOverride,ArrivalTimeOverride,ArrivalOffsetDaysOverride,IsActive
+SUMMER_2026,Summer 2026,Default summer schedule,2026-06-01,2026-08-31,VN201,1,,,,,true
+SUMMER_2026,Summer 2026,Default summer schedule,2026-06-01,2026-08-31,VN201,3,,,,,true
+SUMMER_2026,Summer 2026,Default summer schedule,2026-06-01,2026-08-31,VN201,5,,,,,true
+SUMMER_2026,Summer 2026,Default summer schedule,2026-06-01,2026-08-31,VN202,2,,,,,true
+SUMMER_2026,Summer 2026,Default summer schedule,2026-06-01,2026-08-31,VN301,4,,,,,true
+SUMMER_2026,Summer 2026,Default summer schedule,2026-06-01,2026-08-31,VN999,6,,,,,true

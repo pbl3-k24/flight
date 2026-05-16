@@ -3,6 +3,7 @@ namespace API.Controllers;
 using API.Application.Dtos.Search;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
+using API.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -51,8 +52,10 @@ public class SearchController : ControllerBase
     {
         try
         {
+            var requesterUserId = User.GetUserIdOrThrow();
+            var isAdmin = User.IsInRole("Admin");
             _logger.LogInformation("Searching bookings");
-            var results = await _searchService.SearchBookingsAsync(filter);
+            var results = await _searchService.SearchBookingsAsync(filter, requesterUserId, isAdmin);
             return Ok(results);
         }
         catch (Exception ex)
@@ -92,8 +95,10 @@ public class SearchController : ControllerBase
     {
         try
         {
+            var requesterUserId = User.GetUserIdOrThrow();
+            var isAdmin = User.IsInRole("Admin");
             _logger.LogInformation("Global search: {SearchTerm}", searchTerm);
-            var results = await _searchService.GlobalSearchAsync(searchTerm);
+            var results = await _searchService.GlobalSearchAsync(searchTerm, requesterUserId, isAdmin);
             return Ok(results);
         }
         catch (Exception ex)

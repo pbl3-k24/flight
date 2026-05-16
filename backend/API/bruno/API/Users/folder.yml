@@ -5,3 +5,21 @@ info:
 
 request:
   auth: inherit
+  scripts:
+    - type: after-response
+      code: |-
+        // 1. Kiểm tra xem Request có thành công không (Status Code = 200)
+        if (res.getStatus() === 200) {
+            // 2. Ép kiểu dữ liệu trả về thành JSON
+            const data = res.getBody();
+            
+            // 3. Lấy token từ chuỗi JSON (bạn đổi 'data.token' hoặc 'data.accessToken' tùy cấu trúc API của bạn)
+            const token = data.token || data.accessToken;
+            
+            if (token) {
+                // 4. Lưu token vào biến của Collection để tất cả các API khác đều dùng được
+                bru.setVar("jwt_token", token);
+                console.log("Đã tự động lưu JWT Token thành công!");
+            }
+        }
+

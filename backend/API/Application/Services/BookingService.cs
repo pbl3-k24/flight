@@ -5,25 +5,33 @@ using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
 using API.Infrastructure.Data;
+using API.Infrastructure.ExternalServices;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using BookingServiceEntity = API.Domain.Entities.BookingService;
 
 public class BookingService : IBookingService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPromotionService _promotionService;
     private readonly ILogger<BookingService> _logger;
     private readonly IBackgroundJobService _backgroundJobService;
     private readonly FlightBookingDbContext _dbContext;
+    private readonly VnpayPaymentProvider _vnpayPaymentProvider;
 
     public BookingService(
         IUnitOfWork unitOfWork,
+        IPromotionService promotionService,
         IBackgroundJobService backgroundJobService,
         FlightBookingDbContext dbContext,
+        VnpayPaymentProvider vnpayPaymentProvider,
         ILogger<BookingService> logger)
     {
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
+        _promotionService = promotionService ?? throw new ArgumentNullException(nameof(promotionService));
         _backgroundJobService = backgroundJobService ?? throw new ArgumentNullException(nameof(backgroundJobService));
         _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
+        _vnpayPaymentProvider = vnpayPaymentProvider ?? throw new ArgumentNullException(nameof(vnpayPaymentProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -163,6 +171,47 @@ public class BookingService : IBookingService
 
                 var totalAmount = outboundInventory.CurrentPrice * dto.PassengerCount + additionalServicesTotal;
 
+                Promotion? promotion = null;
+                decimal discountAmount = 0;
+
+                if (!string.IsNullOrWhiteSpace(dto.PromotionCode))
+                {
+                    promotion = await _promotionService.ValidatePromotionCodeAsync(dto.PromotionCode.Trim());
+                    if (promotion == null)
+                    {
+                        throw new ValidationException("Invalid or expired promotion code");
+                    }
+                }
+                else if (dto.PromotionId.HasValue)
+                {
+                    promotion = await _unitOfWork.Promotions.GetByIdAsync(dto.PromotionId.Value);
+                    if (promotion == null || !promotion.IsValid(DateTime.UtcNow) || !promotion.IsAvailable())
+                    {
+                        throw new ValidationException("Invalid or expired promotion code");
+                    }
+                }
+
+                if (promotion != null)
+                {
+                    var alreadyUsed = await _dbContext.PromotionUsages.AnyAsync(pu =>
+                        pu.PromotionId == promotion.Id && pu.UserId == userId);
+                    if (alreadyUsed)
+                    {
+                        throw new ValidationException("This promotion has already been used by this account");
+                    }
+
+                    discountAmount = promotion.CalculateDiscount(totalAmount);
+                    if (discountAmount <= 0)
+                    {
+                        throw new ValidationException("Promotion discount must be greater than 0");
+                    }
+
+                    if (discountAmount >= totalAmount)
+                    {
+                        throw new ValidationException("Promotion discount cannot be greater than or equal to booking total");
+                    }
+                }
+
                 // 5. Create booking with expiration (1 hour timeout)
                 var booking = new Booking
                 {
@@ -173,11 +222,12 @@ public class BookingService : IBookingService
                     Status = (int)BookingStatus.Pending,
                     ContactEmail = dto.ContactEmail ?? "",
                     TotalAmount = totalAmount,
-                    FinalAmount = totalAmount,
+                    DiscountAmount = discountAmount,
+                    FinalAmount = totalAmount - discountAmount,
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow,
                     ExpiresAt = DateTime.UtcNow.AddHours(1),
-                    PromotionId = dto.PromotionId
+                    PromotionId = promotion?.Id
                 };
 
                 var createdBooking = await _unitOfWork.Bookings.CreateAsync(booking);
@@ -234,8 +284,26 @@ public class BookingService : IBookingService
                 }
 
                 // 7. Hold seats atomically within transaction
-                outboundInventory.HoldSeats(dto.PassengerCount);
-                await _unitOfWork.FlightSeatInventories.UpdateAsync(outboundInventory);
+                var holdSucceeded = await _unitOfWork.FlightSeatInventories
+                    .TryHoldSeatsAtomicAsync(outboundInventory.Id, dto.PassengerCount);
+                if (!holdSucceeded)
+                {
+                    throw new ConcurrencyException("Unable to hold seats due to concurrent updates. Please retry.");
+                }
+
+                if (promotion != null)
+                {
+                    var recorded = await _promotionService.RecordPromotionUsageAsync(
+                        promotion.Id,
+                        createdBooking.Id,
+                        userId,
+                        discountAmount);
+
+                    if (!recorded)
+                    {
+                        throw new ValidationException("Failed to record promotion usage");
+                    }
+                }
 
                 _logger.LogInformation("Booking created atomically: {BookingCode}", booking.BookingCode);
 
@@ -320,16 +388,14 @@ public class BookingService : IBookingService
             // BƯỚC 2: Refund thành công (hoặc booking chưa thanh toán) → Mới hủy booking
             return await _unitOfWork.ExecuteInTransactionAsync(async () =>
             {
-                if (previousStatus == (int)BookingStatus.Pending)
-                {
-                    seatInventory.ReleaseHeldSeats(passengers.Count);
-                }
-                else
-                {
-                    seatInventory.CancelSoldSeats(passengers.Count);
-                }
+                var inventoryUpdateSucceeded = previousStatus == (int)BookingStatus.Pending
+                    ? await _unitOfWork.FlightSeatInventories.TryReleaseHeldSeatsAtomicAsync(seatInventory.Id, passengers.Count)
+                    : await _unitOfWork.FlightSeatInventories.TryCancelSoldSeatsAtomicAsync(seatInventory.Id, passengers.Count);
 
-                await _unitOfWork.FlightSeatInventories.UpdateAsync(seatInventory);
+                if (!inventoryUpdateSucceeded)
+                {
+                    throw new ConcurrencyException("Unable to update seat inventory due to concurrent updates. Please retry.");
+                }
 
                 booking.Status = (int)BookingStatus.Cancelled;
                 booking.UpdatedAt = DateTime.UtcNow;
@@ -432,6 +498,171 @@ public class BookingService : IBookingService
         }
     }
 
+    public async Task<List<PassengerServiceResponse>> GetPassengerServicesAsync(int bookingId, int passengerId, int userId)
+    {
+        await GetAuthorizedBookingPassengerAsync(bookingId, passengerId, userId, requirePending: false);
+
+        var includedServiceIds = await GetIncludedServiceIdsForPassengerAsync(passengerId);
+        var services = await _dbContext.BookingServices
+            .Include(bs => bs.AdditionalService)
+            .Where(bs => bs.BookingPassengerId == passengerId && !bs.IsDeleted)
+            .OrderBy(bs => bs.Id)
+            .ToListAsync();
+
+        return services.Select(bs => MapPassengerServiceResponse(bs, includedServiceIds)).ToList();
+    }
+
+    public async Task<PassengerServiceResponse> AddPassengerServiceAsync(
+        int bookingId,
+        int passengerId,
+        int userId,
+        AddPassengerServiceDto dto)
+    {
+        ValidatePassengerServiceQuantity(dto.Quantity);
+
+        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        {
+            await GetAuthorizedBookingPassengerAsync(bookingId, passengerId, userId, requirePending: true);
+
+            var service = await _dbContext.AdditionalServices
+                .FirstOrDefaultAsync(s => s.Id == dto.AdditionalServiceId && !s.IsDeleted);
+            if (service == null)
+            {
+                throw new NotFoundException("Additional service not found");
+            }
+
+            if (await IsIncludedServiceForPassengerAsync(passengerId, dto.AdditionalServiceId))
+            {
+                throw new ValidationException("This service is already included for the passenger seat class");
+            }
+
+            var existingService = await _dbContext.BookingServices
+                .FirstOrDefaultAsync(bs =>
+                    bs.BookingPassengerId == passengerId &&
+                    bs.AdditionalServiceId == dto.AdditionalServiceId);
+
+            if (existingService != null && !existingService.IsDeleted)
+            {
+                throw new ValidationException("Passenger already has this service");
+            }
+
+            BookingServiceEntity bookingService;
+            if (existingService != null)
+            {
+                existingService.Restore();
+                existingService.Quantity = dto.Quantity;
+                existingService.Price = service.Price;
+                existingService.AdditionalService = service;
+                bookingService = existingService;
+            }
+            else
+            {
+                bookingService = new BookingServiceEntity
+                {
+                    BookingPassengerId = passengerId,
+                    AdditionalServiceId = dto.AdditionalServiceId,
+                    Quantity = dto.Quantity,
+                    Price = service.Price,
+                    AdditionalService = service
+                };
+                _dbContext.BookingServices.Add(bookingService);
+            }
+
+            await AdjustBookingAmountAsync(bookingId, service.Price * dto.Quantity);
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Added service {AdditionalServiceId} to passenger {PassengerId} in booking {BookingId}",
+                dto.AdditionalServiceId,
+                passengerId,
+                bookingId);
+
+            return MapPassengerServiceResponse(bookingService, new HashSet<int>());
+        });
+    }
+
+    public async Task<PassengerServiceResponse> UpdatePassengerServiceAsync(
+        int bookingId,
+        int passengerId,
+        int bookingServiceId,
+        int userId,
+        UpdatePassengerServiceDto dto)
+    {
+        ValidatePassengerServiceQuantity(dto.Quantity);
+
+        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        {
+            await GetAuthorizedBookingPassengerAsync(bookingId, passengerId, userId, requirePending: true);
+
+            var bookingService = await _dbContext.BookingServices
+                .Include(bs => bs.AdditionalService)
+                .FirstOrDefaultAsync(bs =>
+                    bs.Id == bookingServiceId &&
+                    bs.BookingPassengerId == passengerId &&
+                    !bs.IsDeleted);
+
+            if (bookingService == null)
+            {
+                throw new NotFoundException("Passenger service not found");
+            }
+
+            var includedServiceIds = await GetIncludedServiceIdsForPassengerAsync(passengerId);
+            if (includedServiceIds.Contains(bookingService.AdditionalServiceId))
+            {
+                throw new ValidationException("Included services cannot be updated");
+            }
+
+            var oldTotal = bookingService.Price * bookingService.Quantity;
+            bookingService.Quantity = dto.Quantity;
+            var newTotal = bookingService.Price * bookingService.Quantity;
+            await AdjustBookingAmountAsync(bookingId, newTotal - oldTotal);
+
+            _logger.LogInformation(
+                "Updated service {BookingServiceId} for passenger {PassengerId} in booking {BookingId}",
+                bookingServiceId,
+                passengerId,
+                bookingId);
+
+            return MapPassengerServiceResponse(bookingService, includedServiceIds);
+        });
+    }
+
+    public async Task<bool> RemovePassengerServiceAsync(int bookingId, int passengerId, int bookingServiceId, int userId)
+    {
+        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        {
+            await GetAuthorizedBookingPassengerAsync(bookingId, passengerId, userId, requirePending: true);
+
+            var bookingService = await _dbContext.BookingServices
+                .FirstOrDefaultAsync(bs =>
+                    bs.Id == bookingServiceId &&
+                    bs.BookingPassengerId == passengerId &&
+                    !bs.IsDeleted);
+
+            if (bookingService == null)
+            {
+                throw new NotFoundException("Passenger service not found");
+            }
+
+            var includedServiceIds = await GetIncludedServiceIdsForPassengerAsync(passengerId);
+            if (includedServiceIds.Contains(bookingService.AdditionalServiceId))
+            {
+                throw new ValidationException("Included services cannot be removed");
+            }
+
+            bookingService.SoftDelete();
+            await AdjustBookingAmountAsync(bookingId, -(bookingService.Price * bookingService.Quantity));
+
+            _logger.LogInformation(
+                "Removed service {BookingServiceId} from passenger {PassengerId} in booking {BookingId}",
+                bookingServiceId,
+                passengerId,
+                bookingId);
+
+            return true;
+        });
+    }
+
     private async Task<BookingResponse> BuildBookingResponseAsync(Booking booking)
     {
         var outboundFlight = await _unitOfWork.Flights.GetByIdAsync(booking.OutboundFlightId);
@@ -440,7 +671,7 @@ public class BookingService : IBookingService
         
         var bookingServices = await _dbContext.BookingServices
             .Include(bs => bs.AdditionalService)
-            .Where(bs => passengerIds.Contains(bs.BookingPassengerId))
+            .Where(bs => passengerIds.Contains(bs.BookingPassengerId) && !bs.IsDeleted)
             .ToListAsync();
 
         var statusString = booking.Status switch
@@ -458,7 +689,9 @@ public class BookingService : IBookingService
             BookingCode = booking.BookingCode,
             Status = statusString,
             TotalAmount = booking.TotalAmount,
+            PromotionId = booking.PromotionId,
             FinalAmount = booking.FinalAmount,
+            DiscountAmount = booking.DiscountAmount,
             CreatedAt = booking.CreatedAt,
             ExpiresAt = booking.ExpiresAt,
             OutboundFlight = new FlightBookingDetail
@@ -512,6 +745,103 @@ public class BookingService : IBookingService
         return response;
     }
 
+    private static void ValidatePassengerServiceQuantity(int quantity)
+    {
+        if (quantity <= 0)
+        {
+            throw new ValidationException("Service quantity must be greater than 0");
+        }
+    }
+
+    private async Task<(Booking Booking, BookingPassenger Passenger)> GetAuthorizedBookingPassengerAsync(
+        int bookingId,
+        int passengerId,
+        int userId,
+        bool requirePending)
+    {
+        var booking = await _unitOfWork.Bookings.GetByIdAsync(bookingId);
+        if (booking == null)
+        {
+            throw new NotFoundException("Booking not found");
+        }
+
+        if (booking.UserId != userId)
+        {
+            throw new UnauthorizedException("Cannot access this booking");
+        }
+
+        if (requirePending && booking.Status != (int)BookingStatus.Pending)
+        {
+            throw new ValidationException("Can only modify services for pending bookings");
+        }
+
+        var passenger = await _unitOfWork.BookingPassengers.GetByIdAsync(passengerId);
+        if (passenger == null || passenger.BookingId != bookingId)
+        {
+            throw new NotFoundException("Passenger not found in this booking");
+        }
+
+        return (booking, passenger);
+    }
+
+    private async Task<HashSet<int>> GetIncludedServiceIdsForPassengerAsync(int passengerId)
+    {
+        var passenger = await _dbContext.BookingPassengers
+            .Include(p => p.FlightSeatInventory)
+            .FirstOrDefaultAsync(p => p.Id == passengerId);
+
+        if (passenger == null)
+        {
+            throw new NotFoundException("Passenger not found");
+        }
+
+        return await _dbContext.ClassServiceConfigs
+            .Where(c => c.SeatClassId == passenger.FlightSeatInventory.SeatClassId && c.IsIncluded)
+            .Select(c => c.AdditionalServiceId)
+            .ToHashSetAsync();
+    }
+
+    private async Task<bool> IsIncludedServiceForPassengerAsync(int passengerId, int additionalServiceId)
+    {
+        var includedServiceIds = await GetIncludedServiceIdsForPassengerAsync(passengerId);
+        return includedServiceIds.Contains(additionalServiceId);
+    }
+
+    private async Task AdjustBookingAmountAsync(int bookingId, decimal delta)
+    {
+        var booking = await _unitOfWork.Bookings.GetByIdAsync(bookingId);
+        if (booking == null)
+        {
+            throw new NotFoundException("Booking not found");
+        }
+
+        booking.TotalAmount += delta;
+        booking.FinalAmount = booking.TotalAmount - booking.DiscountAmount;
+        if (booking.FinalAmount < 0)
+        {
+            throw new ValidationException("Booking final amount cannot be negative");
+        }
+
+        booking.UpdatedAt = DateTime.UtcNow;
+    }
+
+    private static PassengerServiceResponse MapPassengerServiceResponse(
+        BookingServiceEntity bookingService,
+        HashSet<int> includedServiceIds)
+    {
+        return new PassengerServiceResponse
+        {
+            BookingServiceId = bookingService.Id,
+            BookingPassengerId = bookingService.BookingPassengerId,
+            AdditionalServiceId = bookingService.AdditionalServiceId,
+            ServiceName = bookingService.AdditionalService?.ServiceName ?? "",
+            Quantity = bookingService.Quantity,
+            UnitPrice = bookingService.Price,
+            TotalPrice = bookingService.Price * bookingService.Quantity,
+            IsIncluded = includedServiceIds.Contains(bookingService.AdditionalServiceId)
+        };
+    }
+
     private string GenerateBookingCode()
     {
         const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -533,45 +863,57 @@ public class BookingService : IBookingService
         {
             _logger.LogInformation("Processing refund for payment {PaymentId} before cancellation", payment.Id);
 
-            // Chỉ hỗ trợ VNPay refund hiện tại
-            if (!string.Equals(payment.Provider, "VNPAY", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(payment.TransactionRef))
+            {
+                _logger.LogWarning("Payment {PaymentId} has empty transaction ref; refund cannot be processed", payment.Id);
+                return false;
+            }
+
+            var provider = (payment.Provider ?? string.Empty).Trim().ToUpperInvariant();
+            var refundSucceeded = false;
+
+            if (provider == "VNPAY")
+            {
+                var refundRequest = new VnpayRefundRequest
+                {
+                    TxnRef = payment.TransactionRef,
+                    TransactionDate = payment.PaidAt?.ToString("yyyyMMddHHmmss") ?? payment.CreatedAt.ToString("yyyyMMddHHmmss"),
+                    Amount = payment.Amount,
+                    OrderInfo = $"Cancel booking {payment.BookingId}: {reason}".Trim(),
+                    CreateBy = "SYSTEM"
+                };
+
+                var refundResponse = await _vnpayPaymentProvider.ProcessRefundAsync(refundRequest);
+                refundSucceeded = refundResponse.Success;
+
+                if (!refundSucceeded)
+                {
+                    _logger.LogWarning(
+                        "VNPAY refund failed for payment {PaymentId}. Code: {Code}, Message: {Message}",
+                        payment.Id,
+                        refundResponse.ResponseCode,
+                        refundResponse.Message);
+                }
+            }
+            else
             {
                 _logger.LogWarning("Refund not supported for provider {Provider}", payment.Provider);
                 return false;
             }
 
-            // TODO: Khi deploy production với IP whitelist, uncomment code dưới để gọi VNPay API
-            /*
-            var refundRequest = new VnpayRefundRequest
+            if (!refundSucceeded)
             {
-                TxnRef = payment.TransactionRef,
-                TransactionDate = payment.CreatedAt.ToString("yyyyMMddHHmmss"),
-                Amount = payment.Amount,
-                OrderInfo = $"Hoan tien huy ve - {reason}",
-                CreateBy = "SYSTEM"
-            };
-
-            var refundResponse = await _vnpayProvider.ProcessRefundAsync(refundRequest);
-
-            if (!refundResponse.Success)
-            {
-                _logger.LogError("Refund failed for payment {PaymentId}: {ResponseCode} - {Message}", 
-                    payment.Id, refundResponse.ResponseCode, refundResponse.Message);
                 return false;
             }
-            */
 
-            // TEMPORARY: Tạm thời chỉ cập nhật status trong DB, không gọi VNPay API
-            _logger.LogWarning("[MOCK REFUND] Skipping VNPay API call (no IP whitelist). Only updating DB status.");
-            _logger.LogInformation("[MOCK REFUND] Would refund: TxnRef={TxnRef}, Amount={Amount} VND", 
-                payment.TransactionRef, payment.Amount);
-
-            // Cập nhật payment status = Refunded
             payment.Status = (int)PaymentStatus.Refunded;
             payment.UpdatedAt = DateTime.UtcNow;
             await _unitOfWork.Payments.UpdateAsync(payment);
 
-            _logger.LogInformation("Refund processed successfully for payment {PaymentId} (mock mode)", payment.Id);
+            _logger.LogInformation(
+                "Refund processed successfully for payment {PaymentId} via provider {Provider}",
+                payment.Id,
+                provider);
             return true;
         }
         catch (Exception ex)

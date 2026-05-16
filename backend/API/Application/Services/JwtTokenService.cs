@@ -23,6 +23,7 @@ public class JwtTokenService : IJwtTokenService
     public string GenerateToken(User user)
     {
         var secretKey = _config["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is not configured");
+        ValidateSigningKey(secretKey);
         var expirationHours = int.TryParse(_config["Jwt:ExpirationHours"], out var hours) ? hours : 24;
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
@@ -41,8 +42,18 @@ public class JwtTokenService : IJwtTokenService
             _logger.LogInformation("User {UserId} has {RoleCount} roles", user.Id, user.UserRoles.Count);
             foreach (var userRole in user.UserRoles)
             {
-                _logger.LogInformation("Adding role claim: {RoleName}", userRole.Role.Name);
-                claims.Add(new Claim(ClaimTypes.Role, userRole.Role.Name));
+                var roleName = userRole.Role?.Name;
+                if (string.IsNullOrWhiteSpace(roleName))
+                {
+                    _logger.LogWarning(
+                        "Skipping invalid role claim for user {UserId}. UserRole has missing Role/Name (RoleId={RoleId})",
+                        user.Id,
+                        userRole.RoleId);
+                    continue;
+                }
+
+                _logger.LogInformation("Adding role claim: {RoleName}", roleName);
+                claims.Add(new Claim(ClaimTypes.Role, roleName));
             }
         }
         else
@@ -78,6 +89,7 @@ public class JwtTokenService : IJwtTokenService
                 token.Substring(0, Math.Min(50, token.Length)));
 
             var secretKey = _config["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is not configured");
+            ValidateSigningKey(secretKey);
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
 
             var tokenHandler = new JwtSecurityTokenHandler();
@@ -106,6 +118,17 @@ public class JwtTokenService : IJwtTokenService
         {
             _logger.LogWarning("JWT token validation failed: {Message}", ex.Message);
             return null;
+        }
+    }
+
+    private static void ValidateSigningKey(string secretKey)
+    {
+        var keySizeBits = Encoding.UTF8.GetByteCount(secretKey) * 8;
+        if (keySizeBits < 128)
+        {
+            throw new InvalidOperationException(
+                "JWT Key must be at least 128 bits (minimum 16 ASCII characters). " +
+                "Please set a stronger Jwt:Key / JWT_KEY environment variable.");
         }
     }
 }

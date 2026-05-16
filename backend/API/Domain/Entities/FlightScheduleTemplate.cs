@@ -6,6 +6,11 @@ namespace API.Domain.Entities;
 public class FlightScheduleTemplate
 {
     public int Id { get; set; }
+
+    /// <summary>
+    /// Stable business code for seeding and integrations.
+    /// </summary>
+    public string Code { get; set; } = null!;
     
     /// <summary>
     /// Template name (e.g., "Lịch bay mùa hè 2026")
@@ -16,6 +21,10 @@ public class FlightScheduleTemplate
     /// Description of the template
     /// </summary>
     public string? Description { get; set; }
+
+    public DateOnly? EffectiveFrom { get; set; }
+
+    public DateOnly? EffectiveTo { get; set; }
     
     /// <summary>
     /// Whether this template is currently active

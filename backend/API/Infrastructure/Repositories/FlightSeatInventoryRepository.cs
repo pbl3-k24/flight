@@ -6,6 +6,7 @@ using API.Domain.Entities;
 using API.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 public class FlightSeatInventoryRepository : IFlightSeatInventoryRepository
 {
@@ -135,6 +136,94 @@ public class FlightSeatInventoryRepository : IFlightSeatInventoryRepository
             _logger.LogError(ex, "Error getting active inventories");
             throw;
         }
+    }
+
+    public async Task<bool> TryHoldSeatsAtomicAsync(int id, int count)
+    {
+        if (count <= 0)
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        var affected = await _context.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE ""FlightSeatInventories""
+            SET
+                ""AvailableSeats"" = ""AvailableSeats"" - {count},
+                ""HeldSeats"" = ""HeldSeats"" + {count},
+                ""Version"" = ""Version"" + 1,
+                ""UpdatedAt"" = {now}
+            WHERE ""Id"" = {id}
+              AND ""IsDeleted"" = FALSE
+              AND ""AvailableSeats"" >= {count};");
+
+        return affected == 1;
+    }
+
+    public async Task<bool> TryConfirmHeldSeatsAtomicAsync(int id, int count)
+    {
+        if (count <= 0)
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        var affected = await _context.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE ""FlightSeatInventories""
+            SET
+                ""HeldSeats"" = ""HeldSeats"" - {count},
+                ""SoldSeats"" = ""SoldSeats"" + {count},
+                ""Version"" = ""Version"" + 1,
+                ""UpdatedAt"" = {now}
+            WHERE ""Id"" = {id}
+              AND ""IsDeleted"" = FALSE
+              AND ""HeldSeats"" >= {count};");
+
+        return affected == 1;
+    }
+
+    public async Task<bool> TryReleaseHeldSeatsAtomicAsync(int id, int count)
+    {
+        if (count <= 0)
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        var affected = await _context.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE ""FlightSeatInventories""
+            SET
+                ""HeldSeats"" = ""HeldSeats"" - {count},
+                ""AvailableSeats"" = ""AvailableSeats"" + {count},
+                ""Version"" = ""Version"" + 1,
+                ""UpdatedAt"" = {now}
+            WHERE ""Id"" = {id}
+              AND ""IsDeleted"" = FALSE
+              AND ""HeldSeats"" >= {count};");
+
+        return affected == 1;
+    }
+
+    public async Task<bool> TryCancelSoldSeatsAtomicAsync(int id, int count)
+    {
+        if (count <= 0)
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        var affected = await _context.Database.ExecuteSqlInterpolatedAsync($@"
+            UPDATE ""FlightSeatInventories""
+            SET
+                ""SoldSeats"" = ""SoldSeats"" - {count},
+                ""AvailableSeats"" = ""AvailableSeats"" + {count},
+                ""Version"" = ""Version"" + 1,
+                ""UpdatedAt"" = {now}
+            WHERE ""Id"" = {id}
+              AND ""IsDeleted"" = FALSE
+              AND ""SoldSeats"" >= {count};");
+
+        return affected == 1;
     }
 
     public async Task ReserveSeatsAsync(int id, int count, int version)

@@ -47,4 +47,21 @@ public interface IBookingService
     /// <param name="pageSize">Items per page</param>
     /// <returns>Paginated list of bookings</returns>
     Task<List<BookingResponse>> GetUserBookingsAsync(int userId, int page = 1, int pageSize = 10);
+
+    Task<List<PassengerServiceResponse>> GetPassengerServicesAsync(int bookingId, int passengerId, int userId);
+
+    Task<PassengerServiceResponse> AddPassengerServiceAsync(
+        int bookingId,
+        int passengerId,
+        int userId,
+        AddPassengerServiceDto dto);
+
+    Task<PassengerServiceResponse> UpdatePassengerServiceAsync(
+        int bookingId,
+        int passengerId,
+        int bookingServiceId,
+        int userId,
+        UpdatePassengerServiceDto dto);
+
+    Task<bool> RemovePassengerServiceAsync(int bookingId, int passengerId, int bookingServiceId, int userId);
 }

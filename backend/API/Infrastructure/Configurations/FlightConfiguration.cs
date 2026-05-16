@@ -14,6 +14,20 @@ public class FlightConfiguration : IEntityTypeConfiguration<Flight>
         builder.Property(f => f.FlightDefinitionId)
             .IsRequired();
 
+        builder.Property(f => f.FlightNumber)
+            .IsRequired()
+            .HasMaxLength(20);
+
+        builder.Property(f => f.RouteId)
+            .IsRequired();
+
+        builder.Property(f => f.AircraftId)
+            .IsRequired();
+
+        builder.Property(f => f.ArrivalOffsetDays)
+            .IsRequired()
+            .HasDefaultValue(0);
+
         builder.Property(f => f.DepartureTime)
             .IsRequired();
 
@@ -41,14 +55,27 @@ public class FlightConfiguration : IEntityTypeConfiguration<Flight>
 
         // Indexes
         builder.HasIndex(f => f.FlightDefinitionId);
+        builder.HasIndex(f => f.FlightNumber);
+        builder.HasIndex(f => f.RouteId);
+        builder.HasIndex(f => f.AircraftId);
         builder.HasIndex(f => f.DepartureTime);
         builder.HasIndex(f => f.Status);
-        builder.HasIndex(f => new { f.FlightDefinitionId, f.DepartureTime });
+        builder.HasIndex(f => new { f.FlightDefinitionId, f.DepartureTime }).IsUnique();
 
         // Relationships
         builder.HasOne(f => f.FlightDefinition)
             .WithMany(fd => fd.Flights)
             .HasForeignKey(f => f.FlightDefinitionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(f => f.Route)
+            .WithMany()
+            .HasForeignKey(f => f.RouteId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(f => f.Aircraft)
+            .WithMany()
+            .HasForeignKey(f => f.AircraftId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(f => f.ActualAircraft)
@@ -71,14 +98,13 @@ public class FlightConfiguration : IEntityTypeConfiguration<Flight>
             .HasForeignKey(b => b.ReturnFlightId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        // Ignore computed properties
-        builder.Ignore(f => f.FlightNumber);
-        builder.Ignore(f => f.Route);
-        builder.Ignore(f => f.Aircraft);
-
         builder.HasCheckConstraint(
             "CK_Flight_Status_Valid",
             "\"Status\" IN (0, 1, 2, 3, 4)");
+
+        builder.HasCheckConstraint(
+            "CK_Flight_ArrivalOffsetDays_NonNegative",
+            "\"ArrivalOffsetDays\" >= 0");
 
         builder.ToTable("Flights");
     }

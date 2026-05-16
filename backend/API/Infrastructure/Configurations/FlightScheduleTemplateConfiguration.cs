@@ -11,6 +11,10 @@ public class FlightScheduleTemplateConfiguration : IEntityTypeConfiguration<Flig
         builder.ToTable("FlightScheduleTemplates");
         
         builder.HasKey(t => t.Id);
+
+        builder.Property(t => t.Code)
+            .IsRequired()
+            .HasMaxLength(50);
         
         builder.Property(t => t.Name)
             .IsRequired()
@@ -18,6 +22,10 @@ public class FlightScheduleTemplateConfiguration : IEntityTypeConfiguration<Flig
         
         builder.Property(t => t.Description)
             .HasMaxLength(1000);
+
+        builder.Property(t => t.EffectiveFrom);
+
+        builder.Property(t => t.EffectiveTo);
         
         builder.Property(t => t.IsActive)
             .IsRequired()
@@ -30,7 +38,12 @@ public class FlightScheduleTemplateConfiguration : IEntityTypeConfiguration<Flig
             .IsRequired();
         
         // Indexes
+        builder.HasIndex(t => t.Code).IsUnique();
         builder.HasIndex(t => t.IsActive);
         builder.HasIndex(t => t.Name);
+
+        builder.ToTable(t => t.HasCheckConstraint(
+            "CK_FlightScheduleTemplate_EffectiveRange",
+            "\"EffectiveFrom\" IS NULL OR \"EffectiveTo\" IS NULL OR \"EffectiveFrom\" <= \"EffectiveTo\""));
     }
 }

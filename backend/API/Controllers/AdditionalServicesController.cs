@@ -5,7 +5,7 @@ using API.Application.Services;
 using Microsoft.AspNetCore.Mvc;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v1/additional-services")]
 public class AdditionalServicesController : ControllerBase
 {
     private readonly IAdditionalServiceService _service;

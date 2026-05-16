@@ -20,6 +20,8 @@ public class CreateBookingDto
 
     public List<CreatePassengerDto> Passengers { get; set; } = [];
 
+    public string? PromotionCode { get; set; }
+
     public int? PromotionId { get; set; }
 
     public string? ContactEmail { get; set; }
@@ -79,6 +81,10 @@ public class BookingResponse
     public string Status { get; set; } = null!;
 
     public decimal TotalAmount { get; set; }
+
+    public int? PromotionId { get; set; }
+
+    public decimal DiscountAmount { get; set; }
 
     public decimal FinalAmount { get; set; }
 

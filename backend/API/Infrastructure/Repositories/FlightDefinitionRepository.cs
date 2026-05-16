@@ -92,8 +92,7 @@ public class FlightDefinitionRepository : IFlightDefinitionRepository
         int defaultAircraftId,
         TimeOnly departureTime,
         TimeOnly arrivalTime,
-        int arrivalOffsetDays = 0,
-        int operatingDays = 127)
+        int arrivalOffsetDays = 0)
     {
         // Try to find existing
         var existing = await GetByFlightNumberAsync(flightNumber);
@@ -111,7 +110,6 @@ public class FlightDefinitionRepository : IFlightDefinitionRepository
             DepartureTime = departureTime,
             ArrivalTime = arrivalTime,
             ArrivalOffsetDays = arrivalOffsetDays,
-            OperatingDays = operatingDays,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };

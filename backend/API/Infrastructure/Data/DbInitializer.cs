@@ -108,12 +108,12 @@ public static class DbInitializer
         // Routes
         var routes = new[]
         {
-            new Route { DepartureAirportId = 1, ArrivalAirportId = 2, DistanceKm = 1166, EstimatedDurationMinutes = 145 }, // SGN-HAN
-            new Route { DepartureAirportId = 2, ArrivalAirportId = 1, DistanceKm = 1166, EstimatedDurationMinutes = 145 }, // HAN-SGN
-            new Route { DepartureAirportId = 1, ArrivalAirportId = 3, DistanceKm = 610, EstimatedDurationMinutes = 80 },   // SGN-DAD
-            new Route { DepartureAirportId = 3, ArrivalAirportId = 1, DistanceKm = 610, EstimatedDurationMinutes = 80 },   // DAD-SGN
-            new Route { DepartureAirportId = 2, ArrivalAirportId = 3, DistanceKm = 616, EstimatedDurationMinutes = 85 },   // HAN-DAD
-            new Route { DepartureAirportId = 3, ArrivalAirportId = 2, DistanceKm = 616, EstimatedDurationMinutes = 85 }    // DAD-HAN
+            new Route { Code = "SGN-HAN", DepartureAirportId = 1, ArrivalAirportId = 2, DistanceKm = 1166, EstimatedDurationMinutes = 145 },
+            new Route { Code = "HAN-SGN", DepartureAirportId = 2, ArrivalAirportId = 1, DistanceKm = 1166, EstimatedDurationMinutes = 145 },
+            new Route { Code = "SGN-DAD", DepartureAirportId = 1, ArrivalAirportId = 3, DistanceKm = 610, EstimatedDurationMinutes = 80 },
+            new Route { Code = "DAD-SGN", DepartureAirportId = 3, ArrivalAirportId = 1, DistanceKm = 610, EstimatedDurationMinutes = 80 },
+            new Route { Code = "HAN-DAD", DepartureAirportId = 2, ArrivalAirportId = 3, DistanceKm = 616, EstimatedDurationMinutes = 85 },
+            new Route { Code = "DAD-HAN", DepartureAirportId = 3, ArrivalAirportId = 2, DistanceKm = 616, EstimatedDurationMinutes = 85 }
         };
         await context.Routes.AddRangeAsync(routes);
         await context.SaveChangesAsync();
@@ -144,6 +144,43 @@ public static class DbInitializer
         await context.AircraftSeatTemplates.AddRangeAsync(seatTemplates);
         await context.SaveChangesAsync();
         logger.LogInformation("✓ Aircraft seat templates seeded: {Count}", seatTemplates.Count);
+
+        // Additional Services
+        var additionalServices = new[]
+        {
+            new AdditionalService { ServiceName = "Hành lý kí gửi (10kg)", Price = 250000, Description = "Mua thêm 10kg hành lý ký gửi, áp dụng cho một chặng bay" },
+            new AdditionalService { ServiceName = "Hành lý xách tay (7kg)", Price = 0, Description = "Tiêu chuẩn hành lý xách tay 7kg áp dụng cho mọi hạng vé" },
+            new AdditionalService { ServiceName = "Suất ăn tiêu chuẩn", Price = 150000, Description = "Suất ăn trên chuyến bay, thay đổi theo thời điểm" },
+            new AdditionalService { ServiceName = "Bảo hiểm chuyến bay", Price = 100000, Description = "Bảo hiểm tai nạn và sự cố trễ chuyến bay" }
+        };
+        await context.AdditionalServices.AddRangeAsync(additionalServices);
+        await context.SaveChangesAsync();
+        logger.LogInformation("✓ Additional services seeded: {Count}", additionalServices.Length);
+
+        // Class Service Configs
+        var classServiceConfigs = new[]
+        {
+            // Economy Class: includes only 7kg carry-on baggage.
+            new ClassServiceConfig { SeatClassId = 1, AdditionalServiceId = 2, IsIncluded = true },
+            new ClassServiceConfig { SeatClassId = 1, AdditionalServiceId = 1, IsIncluded = false },
+            new ClassServiceConfig { SeatClassId = 1, AdditionalServiceId = 3, IsIncluded = false },
+            new ClassServiceConfig { SeatClassId = 1, AdditionalServiceId = 4, IsIncluded = false },
+
+            // Business Class: includes 7kg carry-on and standard meal.
+            new ClassServiceConfig { SeatClassId = 2, AdditionalServiceId = 2, IsIncluded = true },
+            new ClassServiceConfig { SeatClassId = 2, AdditionalServiceId = 3, IsIncluded = true },
+            new ClassServiceConfig { SeatClassId = 2, AdditionalServiceId = 1, IsIncluded = false },
+            new ClassServiceConfig { SeatClassId = 2, AdditionalServiceId = 4, IsIncluded = false },
+
+            // Premium/First Class: includes all services.
+            new ClassServiceConfig { SeatClassId = 3, AdditionalServiceId = 1, IsIncluded = true },
+            new ClassServiceConfig { SeatClassId = 3, AdditionalServiceId = 2, IsIncluded = true },
+            new ClassServiceConfig { SeatClassId = 3, AdditionalServiceId = 3, IsIncluded = true },
+            new ClassServiceConfig { SeatClassId = 3, AdditionalServiceId = 4, IsIncluded = true }
+        };
+        await context.ClassServiceConfigs.AddRangeAsync(classServiceConfigs);
+        await context.SaveChangesAsync();
+        logger.LogInformation("✓ Class service configs seeded: {Count}", classServiceConfigs.Length);
 
         // Admin user
         var adminUser = new User
@@ -190,38 +227,38 @@ public static class DbInitializer
         var flightDefinitions = new[]
         {
             // SGN-HAN route
-            new FlightDefinition { FlightNumber = "VN201", RouteId = 1, DefaultAircraftId = 1, DepartureTime = new TimeOnly(6, 0), ArrivalTime = new TimeOnly(8, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VN203", RouteId = 1, DefaultAircraftId = 2, DepartureTime = new TimeOnly(9, 0), ArrivalTime = new TimeOnly(11, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VN205", RouteId = 1, DefaultAircraftId = 3, DepartureTime = new TimeOnly(12, 0), ArrivalTime = new TimeOnly(14, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VN207", RouteId = 1, DefaultAircraftId = 1, DepartureTime = new TimeOnly(15, 0), ArrivalTime = new TimeOnly(17, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VN209", RouteId = 1, DefaultAircraftId = 2, DepartureTime = new TimeOnly(18, 0), ArrivalTime = new TimeOnly(20, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VN211", RouteId = 1, DefaultAircraftId = 3, DepartureTime = new TimeOnly(21, 0), ArrivalTime = new TimeOnly(23, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN201", RouteId = 1, DefaultAircraftId = 1, DepartureTime = new TimeOnly(6, 0), ArrivalTime = new TimeOnly(8, 15), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN203", RouteId = 1, DefaultAircraftId = 2, DepartureTime = new TimeOnly(9, 0), ArrivalTime = new TimeOnly(11, 15), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN205", RouteId = 1, DefaultAircraftId = 3, DepartureTime = new TimeOnly(12, 0), ArrivalTime = new TimeOnly(14, 15), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN207", RouteId = 1, DefaultAircraftId = 1, DepartureTime = new TimeOnly(15, 0), ArrivalTime = new TimeOnly(17, 15), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN209", RouteId = 1, DefaultAircraftId = 2, DepartureTime = new TimeOnly(18, 0), ArrivalTime = new TimeOnly(20, 15), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN211", RouteId = 1, DefaultAircraftId = 3, DepartureTime = new TimeOnly(21, 0), ArrivalTime = new TimeOnly(23, 15), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
             // VietJet flights
-            new FlightDefinition { FlightNumber = "VJ123", RouteId = 1, DefaultAircraftId = 1, DepartureTime = new TimeOnly(5, 30), ArrivalTime = new TimeOnly(7, 45), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VJ125", RouteId = 1, DefaultAircraftId = 2, DepartureTime = new TimeOnly(13, 30), ArrivalTime = new TimeOnly(15, 45), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VJ123", RouteId = 1, DefaultAircraftId = 1, DepartureTime = new TimeOnly(5, 30), ArrivalTime = new TimeOnly(7, 45), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VJ125", RouteId = 1, DefaultAircraftId = 2, DepartureTime = new TimeOnly(13, 30), ArrivalTime = new TimeOnly(15, 45), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
             // Overnight flight
-            new FlightDefinition { FlightNumber = "VN999", RouteId = 1, DefaultAircraftId = 3, DepartureTime = new TimeOnly(23, 30), ArrivalTime = new TimeOnly(1, 45), ArrivalOffsetDays = 1, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN999", RouteId = 1, DefaultAircraftId = 3, DepartureTime = new TimeOnly(23, 30), ArrivalTime = new TimeOnly(1, 45), ArrivalOffsetDays = 1, IsActive = true, CreatedAt = DateTime.UtcNow },
             
             // HAN-SGN route (return flights)
-            new FlightDefinition { FlightNumber = "VN202", RouteId = 2, DefaultAircraftId = 1, DepartureTime = new TimeOnly(7, 0), ArrivalTime = new TimeOnly(9, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VN204", RouteId = 2, DefaultAircraftId = 2, DepartureTime = new TimeOnly(10, 0), ArrivalTime = new TimeOnly(12, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VN206", RouteId = 2, DefaultAircraftId = 3, DepartureTime = new TimeOnly(13, 0), ArrivalTime = new TimeOnly(15, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VN208", RouteId = 2, DefaultAircraftId = 1, DepartureTime = new TimeOnly(16, 0), ArrivalTime = new TimeOnly(18, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VN210", RouteId = 2, DefaultAircraftId = 2, DepartureTime = new TimeOnly(19, 0), ArrivalTime = new TimeOnly(21, 15), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN202", RouteId = 2, DefaultAircraftId = 1, DepartureTime = new TimeOnly(7, 0), ArrivalTime = new TimeOnly(9, 15), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN204", RouteId = 2, DefaultAircraftId = 2, DepartureTime = new TimeOnly(10, 0), ArrivalTime = new TimeOnly(12, 15), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN206", RouteId = 2, DefaultAircraftId = 3, DepartureTime = new TimeOnly(13, 0), ArrivalTime = new TimeOnly(15, 15), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN208", RouteId = 2, DefaultAircraftId = 1, DepartureTime = new TimeOnly(16, 0), ArrivalTime = new TimeOnly(18, 15), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN210", RouteId = 2, DefaultAircraftId = 2, DepartureTime = new TimeOnly(19, 0), ArrivalTime = new TimeOnly(21, 15), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
             
             // SGN-DAD route
-            new FlightDefinition { FlightNumber = "VN301", RouteId = 3, DefaultAircraftId = 2, DepartureTime = new TimeOnly(8, 0), ArrivalTime = new TimeOnly(9, 20), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VN303", RouteId = 3, DefaultAircraftId = 3, DepartureTime = new TimeOnly(14, 0), ArrivalTime = new TimeOnly(15, 20), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN301", RouteId = 3, DefaultAircraftId = 2, DepartureTime = new TimeOnly(8, 0), ArrivalTime = new TimeOnly(9, 20), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN303", RouteId = 3, DefaultAircraftId = 3, DepartureTime = new TimeOnly(14, 0), ArrivalTime = new TimeOnly(15, 20), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
             
             // DAD-SGN route
-            new FlightDefinition { FlightNumber = "VN302", RouteId = 4, DefaultAircraftId = 2, DepartureTime = new TimeOnly(10, 0), ArrivalTime = new TimeOnly(11, 20), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
-            new FlightDefinition { FlightNumber = "VN304", RouteId = 4, DefaultAircraftId = 3, DepartureTime = new TimeOnly(16, 0), ArrivalTime = new TimeOnly(17, 20), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN302", RouteId = 4, DefaultAircraftId = 2, DepartureTime = new TimeOnly(10, 0), ArrivalTime = new TimeOnly(11, 20), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN304", RouteId = 4, DefaultAircraftId = 3, DepartureTime = new TimeOnly(16, 0), ArrivalTime = new TimeOnly(17, 20), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
             
             // HAN-DAD route
-            new FlightDefinition { FlightNumber = "VN401", RouteId = 5, DefaultAircraftId = 2, DepartureTime = new TimeOnly(9, 0), ArrivalTime = new TimeOnly(10, 25), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow },
+            new FlightDefinition { FlightNumber = "VN401", RouteId = 5, DefaultAircraftId = 2, DepartureTime = new TimeOnly(9, 0), ArrivalTime = new TimeOnly(10, 25), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow },
             
             // DAD-HAN route
-            new FlightDefinition { FlightNumber = "VN402", RouteId = 6, DefaultAircraftId = 2, DepartureTime = new TimeOnly(11, 0), ArrivalTime = new TimeOnly(12, 25), ArrivalOffsetDays = 0, OperatingDays = 127, IsActive = true, CreatedAt = DateTime.UtcNow }
+            new FlightDefinition { FlightNumber = "VN402", RouteId = 6, DefaultAircraftId = 2, DepartureTime = new TimeOnly(11, 0), ArrivalTime = new TimeOnly(12, 25), ArrivalOffsetDays = 0, IsActive = true, CreatedAt = DateTime.UtcNow }
         };
         await context.FlightDefinitions.AddRangeAsync(flightDefinitions);
         await context.SaveChangesAsync();
@@ -236,24 +273,18 @@ public static class DbInitializer
         {
             for (var date = startDate; date < endDate; date = date.AddDays(1))
             {
-                var dayOfWeek = (int)date.DayOfWeek;
-                var dayFlag = 1 << dayOfWeek;
-                
-                // Check if flight operates on this day
-                if ((definition.OperatingDays & dayFlag) == 0)
-                    continue;
-
                 var departureDateTime = date.Add(definition.DepartureTime.ToTimeSpan());
-                var arrivalDateTime = date.Add(definition.ArrivalTime.ToTimeSpan());
-                
-                if (definition.ArrivalOffsetDays > 0)
-                {
-                    arrivalDateTime = arrivalDateTime.AddDays(definition.ArrivalOffsetDays);
-                }
+                var arrivalDateTime = date
+                    .AddDays(definition.ArrivalOffsetDays)
+                    .Add(definition.ArrivalTime.ToTimeSpan());
 
                 flights.Add(new Flight
                 {
                     FlightDefinitionId = definition.Id,
+                    FlightNumber = definition.FlightNumber,
+                    RouteId = definition.RouteId,
+                    AircraftId = definition.DefaultAircraftId,
+                    ArrivalOffsetDays = definition.ArrivalOffsetDays,
                     DepartureTime = departureDateTime,
                     ArrivalTime = arrivalDateTime,
                     Status = 0,

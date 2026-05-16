@@ -28,6 +28,5 @@ public interface IFlightDefinitionRepository
         int defaultAircraftId,
         TimeOnly departureTime,
         TimeOnly arrivalTime,
-        int arrivalOffsetDays = 0,
-        int operatingDays = 127);
+        int arrivalOffsetDays = 0);
 }

@@ -23,6 +23,10 @@ public interface IUserRepository
     Task<bool> EmailExistsAsync(string email);
 
     Task<IEnumerable<User>> GetAllAsync();
+    Task<IEnumerable<User>> GetAllWithRolesAsync();
+    Task<bool> UserHasRoleAsync(int userId, int roleId);
+    Task AddRoleAsync(int userId, int roleId);
+    Task RemoveRoleAsync(int userId, int roleId);
 
     Task<User?> GetByGoogleIdAsync(string googleId);
 }

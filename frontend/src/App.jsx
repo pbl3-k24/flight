@@ -10,6 +10,8 @@ import {
   getBookings,
   cancelBooking,
   getBestPromotion,
+  getServices,
+  addServiceToBooking,
   getFlightDefinitions,
   getAircrafts,
   getFlightTemplates,
@@ -178,6 +180,11 @@ function App() {
   const [historyError, setHistoryError] = useState('')
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isCancellingBookingId, setIsCancellingBookingId] = useState(null)
+  const [services, setServices] = useState([])
+  const [isLoadingServices, setIsLoadingServices] = useState(false)
+  const [showServicesModal, setShowServicesModal] = useState(false)
+  const [currentBookingForServices, setCurrentBookingForServices] = useState(null)
+  const [selectedServices, setSelectedServices] = useState({})
   const [loginData, setLoginData] = useState({
     email: '',
     password: '',
@@ -289,6 +296,7 @@ function App() {
       seatClass: outbound?.seatClass || '',
       passengerName,
       passengerCount: passengers.length || 1,
+      passengers,
       totalPrice:
         booking?.finalAmount ?? booking?.totalAmount ?? outbound?.price ?? 0,
     }
@@ -322,6 +330,19 @@ function App() {
       setHistoryError(error.message || 'Không thể tải lịch sử đặt vé')
     } finally {
       setIsLoadingHistory(false)
+    }
+  }
+
+  const loadServices = async () => {
+    setIsLoadingServices(true)
+    try {
+      const data = await getServices()
+      setServices(Array.isArray(data) ? data : [])
+    } catch (error) {
+      setHistoryError(error.message || 'Không thể tải danh sách dịch vụ')
+      setServices([])
+    } finally {
+      setIsLoadingServices(false)
     }
   }
 
@@ -1508,6 +1529,26 @@ function App() {
                         💳 Thanh toán ngay
                       </button>
                     )}
+                    {/* Nút thêm dịch vụ */}
+                    {!isBookingCancelled(item.status) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const passengers = item?.passengers || []
+                          const defaultPassengerId = passengers[0]?.passengerId ?? null
+                          setCurrentBookingForServices({
+                            ...item,
+                            selectedPassengerId: defaultPassengerId,
+                          })
+                          setSelectedServices({})
+                          setShowServicesModal(true)
+                          loadServices()
+                        }}
+                        className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                      >
+                        ➕ Thêm dịch vụ
+                      </button>
+                    )}
                     {/* Nút hủy vé */}
                     {!isBookingCancelled(item.status) && (
                       <button
@@ -1524,6 +1565,221 @@ function App() {
               </div>
             </article>
           ))}
+        </div>
+      )}
+
+      {/* Modal chọn dịch vụ */}
+      {showServicesModal && currentBookingForServices && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-900">
+                  ➕ Thêm Dịch Vụ
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Booking: {currentBookingForServices.bookingId} - {currentBookingForServices.flightNumber}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowServicesModal(false)
+                  setCurrentBookingForServices(null)
+                  setSelectedServices({})
+                }}
+                className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+              >
+                ✕ Đóng
+              </button>
+            </div>
+
+            {currentBookingForServices?.passengers?.length > 0 ? (
+              <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Chọn hành khách
+                </label>
+                <select
+                  value={
+                    currentBookingForServices.selectedPassengerId ||
+                    currentBookingForServices.passengers[0]?.passengerId ||
+                    ''
+                  }
+                  onChange={(e) => {
+                    const selectedPassengerId = Number(e.target.value)
+                    setCurrentBookingForServices((prev) => ({
+                      ...prev,
+                      selectedPassengerId,
+                    }))
+                  }}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
+                >
+                  {currentBookingForServices.passengers.map((passenger) => {
+                    const passengerName = [passenger.lastName, passenger.firstName]
+                      .filter(Boolean)
+                      .join(' ')
+                    const label =
+                      passengerName ||
+                      passenger.email ||
+                      passenger.phone ||
+                      `Hành khách #${passenger.passengerId}`
+                    return (
+                      <option key={passenger.passengerId} value={passenger.passengerId}>
+                        {label}
+                      </option>
+                    )
+                  })}
+                </select>
+              </div>
+            ) : (
+              <div className="mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
+                Booking chưa có thông tin hành khách.
+              </div>
+            )}
+
+            {isLoadingServices && (
+              <div className="py-8 text-center text-sm text-slate-500">
+                Đang tải danh sách dịch vụ...
+              </div>
+            )}
+
+            {!isLoadingServices && services.length === 0 && (
+              <div className="py-8 text-center text-sm text-slate-500">
+                Không có dịch vụ nào
+              </div>
+            )}
+
+            {!isLoadingServices && services.length > 0 && (
+              <div className="space-y-3">
+                {services.map((service) => (
+                  <div
+                    key={service.serviceId || service.id}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-slate-900">{service.serviceName}</h4>
+                        <p className="mt-1 text-sm text-slate-600">{service.description}</p>
+                        <p className="mt-2 text-lg font-bold text-[#1E40AF]">
+                          {formatCurrency(service.price)}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const serviceId = service.serviceId || service.id
+                            const current = selectedServices[serviceId] || 0
+                            if (current > 0) {
+                              setSelectedServices((prev) => ({
+                                ...prev,
+                                [serviceId]: current - 1,
+                              }))
+                            }
+                          }}
+                          className="rounded-lg bg-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+                        >
+                          −
+                        </button>
+                        <span className="w-8 text-center font-semibold">
+                          {selectedServices[service.serviceId || service.id] || 0}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const serviceId = service.serviceId || service.id
+                            const current = selectedServices[serviceId] || 0
+                            setSelectedServices((prev) => ({
+                              ...prev,
+                              [serviceId]: current + 1,
+                            }))
+                          }}
+                          className="rounded-lg bg-[#1E40AF] px-3 py-1 text-sm font-semibold text-white hover:bg-blue-800"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-6 rounded-xl border-2 border-green-500 bg-green-50 p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-slate-600">Tổng tiền dịch vụ:</p>
+                  <p className="text-2xl font-bold text-slate-900">
+                    {formatCurrency(
+                      Object.entries(selectedServices).reduce((total, [serviceId, quantity]) => {
+                        const service = services.find(
+                          (s) => (s.serviceId || s.id) === Number(serviceId)
+                        )
+                        return total + (service?.price || 0) * quantity
+                      }, 0)
+                    )}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      setHistoryError('')
+                      setHistoryNotice('')
+
+                      const bookingIdValue = Number(currentBookingForServices.bookingId)
+                      if (!Number.isFinite(bookingIdValue) || bookingIdValue <= 0) {
+                        setHistoryError('Mã booking không hợp lệ')
+                        return
+                      }
+
+                      const passengers = currentBookingForServices?.passengers || []
+                      const fallbackPassengerId = Number(passengers[0]?.passengerId)
+                      const passengerIdValue = Number(
+                        currentBookingForServices?.selectedPassengerId || fallbackPassengerId
+                      )
+                      if (!Number.isFinite(passengerIdValue) || passengerIdValue <= 0) {
+                        setHistoryError('Không tìm thấy hành khách để thêm dịch vụ')
+                        return
+                      }
+
+                      const selectedCount = Object.values(selectedServices).reduce(
+                        (sum, qty) => sum + qty,
+                        0
+                      )
+                      if (selectedCount === 0) {
+                        setHistoryError('Vui lòng chọn ít nhất 1 dịch vụ')
+                        return
+                      }
+
+                      setHistoryNotice('Đang thêm dịch vụ...')
+
+                      for (const [serviceId, quantity] of Object.entries(selectedServices)) {
+                        if (quantity > 0) {
+                          await addServiceToBooking(
+                            bookingIdValue,
+                            passengerIdValue,
+                            Number(serviceId),
+                            quantity
+                          )
+                        }
+                      }
+
+                      setHistoryNotice(`✅ Đã thêm ${selectedCount} dịch vụ vào booking!`)
+                      setShowServicesModal(false)
+                      setCurrentBookingForServices(null)
+                      setSelectedServices({})
+                    } catch (error) {
+                      setHistoryError(error.message || 'Lỗi khi thêm dịch vụ')
+                    }
+                  }}
+                  className="rounded-xl bg-green-600 px-6 py-3 text-sm font-semibold text-white hover:bg-green-700"
+                >
+                  ✓ Xác nhận thêm dịch vụ
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -10,6 +10,10 @@ public class RouteConfiguration : IEntityTypeConfiguration<Route>
     {
         builder.HasKey(r => r.Id);
 
+        builder.Property(r => r.Code)
+            .HasMaxLength(50)
+            .IsRequired();
+
         builder.Property(r => r.DistanceKm)
             .IsRequired();
 
@@ -24,6 +28,8 @@ public class RouteConfiguration : IEntityTypeConfiguration<Route>
             .HasDefaultValue(false);
 
         builder.Property(r => r.DeletedAt);
+
+        builder.HasIndex(r => r.Code).IsUnique();
 
         builder.HasOne(r => r.DepartureAirport)
             .WithMany(a => a.DepartureRoutes)

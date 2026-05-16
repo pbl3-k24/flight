@@ -72,6 +72,8 @@ public class FlightDefinitionService : IFlightDefinitionService
             throw new NotFoundException($"Aircraft {dto.DefaultAircraftId} not found");
         }
 
+        ValidateSchedule(dto.DepartureTime, dto.ArrivalTime, dto.ArrivalOffsetDays);
+
         var definition = new FlightDefinition
         {
             FlightNumber = dto.FlightNumber.ToUpper(),
@@ -80,7 +82,6 @@ public class FlightDefinitionService : IFlightDefinitionService
             DepartureTime = dto.DepartureTime,
             ArrivalTime = dto.ArrivalTime,
             ArrivalOffsetDays = dto.ArrivalOffsetDays,
-            OperatingDays = dto.OperatingDays,
             IsActive = dto.IsActive,
             CreatedAt = DateTime.UtcNow
         };
@@ -113,12 +114,13 @@ public class FlightDefinitionService : IFlightDefinitionService
             throw new NotFoundException($"Aircraft {dto.DefaultAircraftId} not found");
         }
 
+        ValidateSchedule(dto.DepartureTime, dto.ArrivalTime, dto.ArrivalOffsetDays);
+
         definition.RouteId = dto.RouteId;
         definition.DefaultAircraftId = dto.DefaultAircraftId;
         definition.DepartureTime = dto.DepartureTime;
         definition.ArrivalTime = dto.ArrivalTime;
         definition.ArrivalOffsetDays = dto.ArrivalOffsetDays;
-        definition.OperatingDays = dto.OperatingDays;
         definition.IsActive = dto.IsActive;
         definition.UpdatedAt = DateTime.UtcNow;
 
@@ -183,7 +185,6 @@ public class FlightDefinitionService : IFlightDefinitionService
             DepartureTime = definition.DepartureTime,
             ArrivalTime = definition.ArrivalTime,
             ArrivalOffsetDays = definition.ArrivalOffsetDays,
-            OperatingDays = definition.OperatingDays,
             IsActive = definition.IsActive,
             CreatedAt = definition.CreatedAt,
             UpdatedAt = definition.UpdatedAt,
@@ -193,26 +194,25 @@ public class FlightDefinitionService : IFlightDefinitionService
             DepartureAirportCode = definition.Route?.DepartureAirport?.Code,
             ArrivalAirportCode = definition.Route?.ArrivalAirport?.Code,
             AircraftModel = definition.DefaultAircraft?.Model,
-            IsOvernightFlight = definition.IsOvernightFlight(),
-            OperatingDaysText = GetOperatingDaysText(definition.OperatingDays)
+            IsOvernightFlight = definition.IsOvernightFlight()
         };
     }
 
-    private string GetOperatingDaysText(int operatingDays)
+    private void ValidateSchedule(TimeOnly departureTime, TimeOnly arrivalTime, int arrivalOffsetDays)
     {
-        if (operatingDays == 127) return "Every day";
-        if (operatingDays == 31) return "Mon-Fri";
-        if (operatingDays == 96) return "Sat-Sun";
+        if (arrivalOffsetDays < 0 || arrivalOffsetDays > 2)
+        {
+            throw new ValidationException("ArrivalOffsetDays must be between 0 and 2");
+        }
 
-        var days = new List<string>();
-        if ((operatingDays & 1) != 0) days.Add("Mon");
-        if ((operatingDays & 2) != 0) days.Add("Tue");
-        if ((operatingDays & 4) != 0) days.Add("Wed");
-        if ((operatingDays & 8) != 0) days.Add("Thu");
-        if ((operatingDays & 16) != 0) days.Add("Fri");
-        if ((operatingDays & 32) != 0) days.Add("Sat");
-        if ((operatingDays & 64) != 0) days.Add("Sun");
+        if (arrivalTime < departureTime && arrivalOffsetDays == 0)
+        {
+            throw new ValidationException("ArrivalOffsetDays must be greater than 0 when arrival time is earlier than departure time");
+        }
 
-        return string.Join(", ", days);
+        if (arrivalTime == departureTime && arrivalOffsetDays == 0)
+        {
+            throw new ValidationException("Arrival time must be different from departure time unless ArrivalOffsetDays is greater than 0");
+        }
     }
 }

@@ -1,0 +1,32 @@
+@baseUrl = http://localhost:5042/api/v1
+@token = paste-jwt-token-here
+@bookingId = 1
+@passengerId = 1
+@bookingServiceId = 1
+
+### Get passenger services
+GET {{baseUrl}}/bookings/{{bookingId}}/passengers/{{passengerId}}/services
+Authorization: Bearer {{token}}
+
+### Add service to passenger
+POST {{baseUrl}}/bookings/{{bookingId}}/passengers/{{passengerId}}/services
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "additionalServiceId": 3,
+  "quantity": 1
+}
+
+### Update passenger service quantity
+PUT {{baseUrl}}/bookings/{{bookingId}}/passengers/{{passengerId}}/services/{{bookingServiceId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "quantity": 2
+}
+
+### Remove passenger service
+DELETE {{baseUrl}}/bookings/{{bookingId}}/passengers/{{passengerId}}/services/{{bookingServiceId}}
+Authorization: Bearer {{token}}

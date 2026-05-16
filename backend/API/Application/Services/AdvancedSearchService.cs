@@ -3,6 +3,8 @@ namespace API.Application.Services;
 using API.Application.Dtos.Search;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
+using API.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 public class AdvancedSearchService : IAdvancedSearchService
@@ -11,6 +13,7 @@ public class AdvancedSearchService : IAdvancedSearchService
     private readonly IBookingRepository _bookingRepository;
     private readonly IUserRepository _userRepository;
     private readonly IRefundRequestRepository _refundRepository;
+    private readonly FlightBookingDbContext _dbContext;
     private readonly ILogger<AdvancedSearchService> _logger;
 
     public AdvancedSearchService(
@@ -18,12 +21,14 @@ public class AdvancedSearchService : IAdvancedSearchService
         IBookingRepository bookingRepository,
         IUserRepository userRepository,
         IRefundRequestRepository refundRepository,
+        FlightBookingDbContext dbContext,
         ILogger<AdvancedSearchService> logger)
     {
         _flightRepository = flightRepository;
         _bookingRepository = bookingRepository;
         _userRepository = userRepository;
         _refundRepository = refundRepository;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
@@ -83,39 +88,56 @@ public class AdvancedSearchService : IAdvancedSearchService
         }
     }
 
-    public async Task<SearchResultDto<dynamic>> SearchBookingsAsync(AdvancedSearchFilterDto filter)
+    public async Task<SearchResultDto<dynamic>> SearchBookingsAsync(AdvancedSearchFilterDto filter, int requesterUserId, bool isAdmin)
     {
         try
         {
-            var bookings = await _bookingRepository.GetAllAsync();
-            var filtered = bookings.AsEnumerable();
+            var page = Math.Max(filter.Page, 1);
+            var pageSize = Math.Clamp(filter.PageSize, 1, 100);
+            var query = _dbContext.Bookings
+                .AsNoTracking()
+                .Include(b => b.OutboundFlight)
+                .Include(b => b.Passengers)
+                .AsQueryable();
+
+            if (!isAdmin)
+            {
+                query = query.Where(b => b.UserId == requesterUserId);
+            }
 
             if (filter.BookingStatus.HasValue)
             {
-                filtered = filtered.Where(b => b.Status == filter.BookingStatus.Value);
+                query = query.Where(b => b.Status == filter.BookingStatus.Value);
             }
 
             if (!string.IsNullOrWhiteSpace(filter.FlightNumber))
             {
                 var flightNumber = filter.FlightNumber.Trim();
-                filtered = filtered.Where(b =>
+                query = query.Where(b =>
                     b.OutboundFlight != null
                     && string.Equals(b.OutboundFlight.FlightNumber, flightNumber, StringComparison.OrdinalIgnoreCase));
             }
 
-            var total = filtered.Count();
-            var items = filtered
-                .Skip((filter.Page - 1) * filter.PageSize)
-                .Take(filter.PageSize)
-                .ToList();
+            if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
+            {
+                var term = filter.SearchTerm.Trim();
+                query = query.Where(b => b.BookingCode.Contains(term));
+            }
+
+            var total = await query.CountAsync();
+            var items = await query
+                .OrderByDescending(b => b.CreatedAt)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
 
             return new SearchResultDto<dynamic>
             {
                 Items = items.Cast<dynamic>().ToList(),
                 TotalCount = total,
-                TotalPages = (total + filter.PageSize - 1) / filter.PageSize,
-                CurrentPage = filter.Page,
-                PageSize = filter.PageSize
+                TotalPages = (total + pageSize - 1) / pageSize,
+                CurrentPage = page,
+                PageSize = pageSize
             };
         }
         catch (Exception ex)
@@ -198,17 +220,59 @@ public class AdvancedSearchService : IAdvancedSearchService
         }
     }
 
-    public async Task<Dictionary<string, object>> GlobalSearchAsync(string searchTerm)
+    public async Task<Dictionary<string, object>> GlobalSearchAsync(string searchTerm, int requesterUserId, bool isAdmin)
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(searchTerm))
+            {
+                return new Dictionary<string, object>();
+            }
+
+            var term = searchTerm.Trim();
             var results = new Dictionary<string, object>();
 
-            var users = await _userRepository.GetAllAsync();
-            results["users"] = users.Where(u => u.Email.Contains(searchTerm) || u.FullName.Contains(searchTerm)).Take(5).ToList();
+            if (isAdmin)
+            {
+                var users = await _dbContext.Users
+                    .AsNoTracking()
+                    .Where(u => u.Email.Contains(term) || u.FullName.Contains(term))
+                    .OrderByDescending(u => u.CreatedAt)
+                    .Take(5)
+                    .Select(u => new
+                    {
+                        u.Id,
+                        u.Email,
+                        u.FullName,
+                        u.Status,
+                        u.CreatedAt
+                    })
+                    .ToListAsync();
+                results["users"] = users;
+            }
 
-            var bookings = await _bookingRepository.GetAllAsync();
-            results["bookings"] = bookings.Where(b => b.BookingCode.Contains(searchTerm)).Take(5).ToList();
+            var bookingsQuery = _dbContext.Bookings
+                .AsNoTracking()
+                .Where(b => b.BookingCode.Contains(term));
+
+            if (!isAdmin)
+            {
+                bookingsQuery = bookingsQuery.Where(b => b.UserId == requesterUserId);
+            }
+
+            var bookings = await bookingsQuery
+                .OrderByDescending(b => b.CreatedAt)
+                .Take(5)
+                .Select(b => new
+                {
+                    b.Id,
+                    b.BookingCode,
+                    b.Status,
+                    b.FinalAmount,
+                    b.CreatedAt
+                })
+                .ToListAsync();
+            results["bookings"] = bookings;
 
             _logger.LogInformation("Global search for: {SearchTerm}", searchTerm);
             return results;

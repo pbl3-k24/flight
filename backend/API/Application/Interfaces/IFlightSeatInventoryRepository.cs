@@ -16,6 +16,14 @@ public interface IFlightSeatInventoryRepository
 
     Task<List<FlightSeatInventory>> GetActiveInventoriesAsync();
 
+    Task<bool> TryHoldSeatsAtomicAsync(int id, int count);
+
+    Task<bool> TryConfirmHeldSeatsAtomicAsync(int id, int count);
+
+    Task<bool> TryReleaseHeldSeatsAtomicAsync(int id, int count);
+
+    Task<bool> TryCancelSoldSeatsAtomicAsync(int id, int count);
+
     Task ReserveSeatsAsync(int id, int count, int version);
 
     Task UpdateAsync(FlightSeatInventory inventory);

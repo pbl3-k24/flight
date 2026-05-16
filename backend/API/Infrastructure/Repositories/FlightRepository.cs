@@ -30,8 +30,13 @@ public class FlightRepository : IFlightRepository
                         .ThenInclude(r => r.ArrivalAirport)
                 .Include(f => f.FlightDefinition)
                     .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.Aircraft)
                 .Include(f => f.ActualAircraft)
-                .FirstOrDefaultAsync(f => f.FlightDefinition.FlightNumber == flightNumber);
+                .FirstOrDefaultAsync(f => f.FlightNumber == flightNumber);
         }
         catch (Exception ex)
         {
@@ -53,9 +58,14 @@ public class FlightRepository : IFlightRepository
                         .ThenInclude(r => r.ArrivalAirport)
                 .Include(f => f.FlightDefinition)
                     .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.Aircraft)
                 .Include(f => f.ActualAircraft)
-                .Where(f => f.FlightDefinition.Route.DepartureAirportId == departureId 
-                    && f.FlightDefinition.Route.ArrivalAirportId == arrivalId 
+                .Where(f => f.Route.DepartureAirportId == departureId 
+                    && f.Route.ArrivalAirportId == arrivalId 
                     && f.DepartureTime.Date == date.Date)
                 .ToListAsync();
         }
@@ -79,6 +89,11 @@ public class FlightRepository : IFlightRepository
                         .ThenInclude(r => r.ArrivalAirport)
                 .Include(f => f.FlightDefinition)
                     .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.Aircraft)
                 .Include(f => f.ActualAircraft)
                 .Include(f => f.SeatInventories)
                 .FirstOrDefaultAsync(f => f.Id == id);
@@ -132,6 +147,11 @@ public class FlightRepository : IFlightRepository
                         .ThenInclude(r => r.ArrivalAirport)
                 .Include(f => f.FlightDefinition)
                     .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.Aircraft)
                 .Include(f => f.ActualAircraft)
                 .FirstOrDefaultAsync(f => f.Id == id);
         }
@@ -155,6 +175,11 @@ public class FlightRepository : IFlightRepository
                         .ThenInclude(r => r.ArrivalAirport)
                 .Include(f => f.FlightDefinition)
                     .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.Aircraft)
                 .Include(f => f.ActualAircraft)
                 .Include(f => f.SeatInventories)
                 .FirstOrDefaultAsync(f => f.Id == id);
@@ -180,6 +205,11 @@ public class FlightRepository : IFlightRepository
                         .ThenInclude(r => r.ArrivalAirport)
                 .Include(f => f.FlightDefinition)
                     .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.Aircraft)
                 .Include(f => f.ActualAircraft)
                 .ToListAsync();
             _logger.LogDebug("Retrieved {Count} flights", result.Count);
@@ -212,6 +242,11 @@ public class FlightRepository : IFlightRepository
                         .ThenInclude(r => r.ArrivalAirport)
                 .Include(f => f.FlightDefinition)
                     .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.Aircraft)
                 .Include(f => f.ActualAircraft)
                 .Where(f => f.DepartureTime >= start && f.DepartureTime < end)
                 .ToListAsync();
@@ -220,10 +255,8 @@ public class FlightRepository : IFlightRepository
             
             // Filter by route
             var filtered = allFlights
-                .Where(f => f.FlightDefinition != null 
-                    && f.FlightDefinition.Route != null
-                    && f.FlightDefinition.Route.DepartureAirportId == departureAirportId 
-                    && f.FlightDefinition.Route.ArrivalAirportId == arrivalAirportId)
+                .Where(f => f.Route.DepartureAirportId == departureAirportId 
+                    && f.Route.ArrivalAirportId == arrivalAirportId)
                 .ToList();
             
             _logger.LogInformation("After route filter: {Count} flights", filtered.Count);
@@ -242,14 +275,71 @@ public class FlightRepository : IFlightRepository
         try
         {
             return await _context.Flights.AnyAsync(f =>
-                f.FlightDefinition.RouteId == routeId
-                && (f.ActualAircraftId == aircraftId || f.FlightDefinition.DefaultAircraftId == aircraftId)
+                f.RouteId == routeId
+                && f.AircraftId == aircraftId
                 && f.DepartureTime == departureTime
-                && f.FlightDefinition.FlightNumber == flightNumber);
+                && f.FlightNumber == flightNumber);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error checking flight existence for {FlightNumber}", flightNumber);
+            throw;
+        }
+    }
+
+    public async Task<bool> ExistsByDefinitionAndDepartureAsync(int flightDefinitionId, DateTime departureTime)
+    {
+        try
+        {
+            return await _context.Flights.AnyAsync(f =>
+                !f.IsDeleted &&
+                f.FlightDefinitionId == flightDefinitionId &&
+                f.DepartureTime == departureTime);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error checking flight existence for definition {FlightDefinitionId} at {DepartureTime}",
+                flightDefinitionId, departureTime);
+            throw;
+        }
+    }
+
+    public async Task<bool> HasAircraftConflictAsync(int aircraftId, DateTime newDeparture, DateTime newArrival, int turnaroundMinutes)
+    {
+        try
+        {
+            var turnaround = TimeSpan.FromMinutes(turnaroundMinutes);
+            var newArrivalWithTurnaround = newArrival.Add(turnaround);
+
+            return await _context.Flights.AnyAsync(f =>
+                !f.IsDeleted &&
+                f.Status != 1 &&
+                f.AircraftId == aircraftId &&
+                newDeparture < f.ArrivalTime.Add(turnaround) &&
+                newArrivalWithTurnaround > f.DepartureTime);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Error checking aircraft conflict for aircraft {AircraftId} in range {Departure} - {Arrival}",
+                aircraftId, newDeparture, newArrival);
+            throw;
+        }
+    }
+
+    public async Task AcquireAircraftGenerationLockAsync(int aircraftId)
+    {
+        try
+        {
+            // Serialize flight generation per aircraft inside current DB transaction.
+            const int flightGenerationLockNamespace = 20260513;
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock({flightGenerationLockNamespace}, {aircraftId})");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error acquiring generation lock for aircraft {AircraftId}", aircraftId);
             throw;
         }
     }
@@ -269,8 +359,13 @@ public class FlightRepository : IFlightRepository
                         .ThenInclude(r => r.ArrivalAirport)
                 .Include(f => f.FlightDefinition)
                     .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.Aircraft)
                 .Include(f => f.ActualAircraft)
-                .Where(f => f.FlightDefinition.RouteId == routeId && f.DepartureTime >= start && f.DepartureTime < end)
+                .Where(f => f.RouteId == routeId && f.DepartureTime >= start && f.DepartureTime < end)
                 .ToListAsync();
         }
         catch (Exception ex)
@@ -295,6 +390,11 @@ public class FlightRepository : IFlightRepository
                         .ThenInclude(r => r.ArrivalAirport)
                 .Include(f => f.FlightDefinition)
                     .ThenInclude(fd => fd.DefaultAircraft)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.DepartureAirport)
+                .Include(f => f.Route)
+                    .ThenInclude(r => r.ArrivalAirport)
+                .Include(f => f.Aircraft)
                 .Include(f => f.ActualAircraft)
                 .Where(f => f.DepartureTime >= startDate && f.DepartureTime <= endDate)
                 .ToListAsync();

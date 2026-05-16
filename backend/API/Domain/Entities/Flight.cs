@@ -16,6 +16,14 @@ public class Flight
     /// </summary>
     public int FlightDefinitionId { get; set; }
 
+    public string FlightNumber { get; set; } = null!;
+
+    public int RouteId { get; set; }
+
+    public int AircraftId { get; set; }
+
+    public int ArrivalOffsetDays { get; set; }
+
     // ===== ACTUAL FLIGHT DATA =====
     
     /// <summary>
@@ -29,7 +37,7 @@ public class Flight
     public DateTime ArrivalTime { get; set; }
 
     /// <summary>
-    /// Actual aircraft used (can override FlightDefinition.DefaultAircraftId)
+    /// Legacy override field kept for backward compatibility. New code uses AircraftId snapshot.
     /// </summary>
     public int? ActualAircraftId { get; set; }
 
@@ -53,6 +61,8 @@ public class Flight
 
     // ===== NAVIGATION =====
     public virtual FlightDefinition FlightDefinition { get; set; } = null!;
+    public virtual Route Route { get; set; } = null!;
+    public virtual Aircraft Aircraft { get; set; } = null!;
     public virtual Aircraft? ActualAircraft { get; set; }
     public virtual ICollection<FlightSeatInventory> SeatInventories { get; set; } = [];
     public virtual ICollection<Booking> OutboundBookings { get; set; } = [];
@@ -60,21 +70,6 @@ public class Flight
 
     // ===== COMPUTED PROPERTIES =====
     
-    /// <summary>
-    /// Get flight number from definition
-    /// </summary>
-    public string FlightNumber => FlightDefinition?.FlightNumber ?? "UNKNOWN";
-
-    /// <summary>
-    /// Get route from definition
-    /// </summary>
-    public Route Route => FlightDefinition?.Route!;
-
-    /// <summary>
-    /// Get aircraft (actual or default from definition)
-    /// </summary>
-    public Aircraft Aircraft => ActualAircraft ?? FlightDefinition?.DefaultAircraft!;
-
     // ===== DOMAIN METHODS =====
 
     public Airport GetDepartureAirport() => FlightDefinition.Route.DepartureAirport;

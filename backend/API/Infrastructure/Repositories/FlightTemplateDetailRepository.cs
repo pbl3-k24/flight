@@ -17,19 +17,33 @@ public class FlightTemplateDetailRepository : IFlightTemplateDetailRepository
     public async Task<FlightTemplateDetail?> GetByIdAsync(int id)
     {
         return await _context.FlightTemplateDetails
-            .Include(d => d.Route)
-            .Include(d => d.Aircraft)
+            .Include(d => d.FlightDefinition)
+                .ThenInclude(fd => fd.Route)
+                    .ThenInclude(r => r.DepartureAirport)
+            .Include(d => d.FlightDefinition)
+                .ThenInclude(fd => fd.Route)
+                    .ThenInclude(r => r.ArrivalAirport)
+            .Include(d => d.FlightDefinition)
+                .ThenInclude(fd => fd.DefaultAircraft)
+            .Include(d => d.AircraftOverride)
             .FirstOrDefaultAsync(d => d.Id == id);
     }
 
     public async Task<IEnumerable<FlightTemplateDetail>> GetByTemplateIdAsync(int templateId)
     {
         return await _context.FlightTemplateDetails
-            .Include(d => d.Route)
-            .Include(d => d.Aircraft)
+            .Include(d => d.FlightDefinition)
+                .ThenInclude(fd => fd.Route)
+                    .ThenInclude(r => r.DepartureAirport)
+            .Include(d => d.FlightDefinition)
+                .ThenInclude(fd => fd.Route)
+                    .ThenInclude(r => r.ArrivalAirport)
+            .Include(d => d.FlightDefinition)
+                .ThenInclude(fd => fd.DefaultAircraft)
+            .Include(d => d.AircraftOverride)
             .Where(d => d.TemplateId == templateId)
             .OrderBy(d => d.DayOfWeek)
-            .ThenBy(d => d.DepartureTime)
+            .ThenBy(d => d.DepartureTimeOverride ?? d.FlightDefinition.DepartureTime)
             .ToListAsync();
     }
 

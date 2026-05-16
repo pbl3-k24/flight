@@ -6,6 +6,7 @@ using API.Application.Interfaces;
 using API.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using API.Extensions;
 
 [ApiController]
 [Route("api/v1/admin/[controller]")]
@@ -80,13 +81,22 @@ public class UsersAdminController : ControllerBase
     {
         try
         {
+            var actorAdminId = User.GetUserIdOrThrow();
             _logger.LogInformation("Updating user status: {UserId}", userId);
-            var success = await _userService.UpdateUserStatusAsync(userId, dto);
+            var success = await _userService.UpdateUserStatusAsync(actorAdminId, userId, dto);
             return success ? Ok(new { message = "User status updated successfully" }) : BadRequest();
         }
         catch (NotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
         catch (Exception ex)
         {
@@ -105,13 +115,22 @@ public class UsersAdminController : ControllerBase
     {
         try
         {
+            var actorAdminId = User.GetUserIdOrThrow();
             _logger.LogInformation("Assigning role to user: {UserId}", userId);
-            var success = await _userService.AssignRoleAsync(userId, dto);
+            var success = await _userService.AssignRoleAsync(actorAdminId, userId, dto);
             return success ? Ok(new { message = "Role assigned successfully" }) : BadRequest();
         }
         catch (NotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
         catch (Exception ex)
         {
@@ -130,13 +149,22 @@ public class UsersAdminController : ControllerBase
     {
         try
         {
+            var actorAdminId = User.GetUserIdOrThrow();
             _logger.LogInformation("Removing role from user: {UserId}", userId);
-            var success = await _userService.RemoveRoleAsync(userId, roleId);
+            var success = await _userService.RemoveRoleAsync(actorAdminId, userId, roleId);
             return success ? Ok(new { message = "Role removed successfully" }) : BadRequest();
         }
         catch (NotFoundException ex)
         {
             return NotFound(new { message = ex.Message });
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedException ex)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = ex.Message });
         }
         catch (Exception ex)
         {

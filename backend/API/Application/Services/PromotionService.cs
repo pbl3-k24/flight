@@ -3,18 +3,24 @@ namespace API.Application.Services;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
+using API.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Npgsql;
 
 public class PromotionService : IPromotionService
 {
     private readonly IPromotionRepository _promotionRepository;
+    private readonly FlightBookingDbContext _dbContext;
     private readonly ILogger<PromotionService> _logger;
 
     public PromotionService(
         IPromotionRepository promotionRepository,
+        FlightBookingDbContext dbContext,
         ILogger<PromotionService> logger)
     {
         _promotionRepository = promotionRepository;
+        _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
         _logger = logger;
     }
 
@@ -81,7 +87,7 @@ public class PromotionService : IPromotionService
         }
     }
 
-    public async Task<bool> RecordPromotionUsageAsync(int promotionId, int bookingId, decimal discountAmount)
+    public async Task<bool> RecordPromotionUsageAsync(int promotionId, int bookingId, int userId, decimal discountAmount)
     {
         try
         {
@@ -91,12 +97,39 @@ public class PromotionService : IPromotionService
                 return false;
             }
 
+            var alreadyUsed = await _dbContext.PromotionUsages.AnyAsync(pu =>
+                pu.PromotionId == promotionId && pu.UserId == userId);
+            if (alreadyUsed)
+            {
+                return false;
+            }
+
+            var usage = new PromotionUsage
+            {
+                PromotionId = promotionId,
+                BookingId = bookingId,
+                UserId = userId,
+                DiscountAmount = discountAmount,
+                UsedAt = DateTime.UtcNow
+            };
+
+            await _dbContext.PromotionUsages.AddAsync(usage);
             promotion.IncrementUsage();
             await _promotionRepository.UpdateAsync(promotion);
 
-            _logger.LogInformation("Recorded promotion usage for promotion {PromotionId} and booking {BookingId}", promotionId, bookingId);
+            _logger.LogInformation(
+                "Recorded promotion usage for promotion {PromotionId}, booking {BookingId}, user {UserId}",
+                promotionId,
+                bookingId,
+                userId);
 
             return true;
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException postgresException &&
+            postgresException.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            _logger.LogWarning(ex, "Duplicate promotion usage detected for promotion {PromotionId} and user {UserId}", promotionId, userId);
+            return false;
         }
         catch (Exception ex)
         {

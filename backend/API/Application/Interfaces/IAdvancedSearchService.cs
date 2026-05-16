@@ -12,7 +12,7 @@ public interface IAdvancedSearchService
     /// <summary>
     /// Searches bookings with advanced filters.
     /// </summary>
-    Task<SearchResultDto<dynamic>> SearchBookingsAsync(AdvancedSearchFilterDto filter);
+    Task<SearchResultDto<dynamic>> SearchBookingsAsync(AdvancedSearchFilterDto filter, int requesterUserId, bool isAdmin);
 
     /// <summary>
     /// Searches users with advanced filters.
@@ -27,5 +27,5 @@ public interface IAdvancedSearchService
     /// <summary>
     /// Global search across all entities.
     /// </summary>
-    Task<Dictionary<string, object>> GlobalSearchAsync(string searchTerm);
+    Task<Dictionary<string, object>> GlobalSearchAsync(string searchTerm, int requesterUserId, bool isAdmin);
 }

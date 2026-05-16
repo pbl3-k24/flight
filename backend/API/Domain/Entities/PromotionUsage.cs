@@ -8,6 +8,8 @@ public class PromotionUsage
 
     public int BookingId { get; set; }
 
+    public int UserId { get; set; }
+
     public decimal DiscountAmount { get; set; }
 
     public DateTime UsedAt { get; set; }

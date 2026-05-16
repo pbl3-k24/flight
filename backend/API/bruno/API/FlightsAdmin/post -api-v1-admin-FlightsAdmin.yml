@@ -19,7 +19,9 @@ http:
         "arrivalTime": "",
         "isActive": false
       }
-  auth: inherit
+  auth:
+    type: bearer
+    token: "{{adminToken}}"
 
 runtime:
   variables:

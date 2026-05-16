@@ -42,13 +42,6 @@ public class FlightDefinition
     public int ArrivalOffsetDays { get; set; } = 0;
 
     /// <summary>
-    /// Days of week this flight operates (bit flags)
-    /// 1 = Monday, 2 = Tuesday, 4 = Wednesday, 8 = Thursday, 16 = Friday, 32 = Saturday, 64 = Sunday
-    /// Example: 31 = Mon-Fri, 127 = Every day
-    /// </summary>
-    public int OperatingDays { get; set; } = 127; // Default: every day
-
-    /// <summary>
     /// Is this flight definition active?
     /// </summary>
     public bool IsActive { get; set; } = true;
@@ -93,15 +86,6 @@ public class FlightDefinition
     }
 
     /// <summary>
-    /// Check if flight operates on a specific day of week
-    /// </summary>
-    public bool OperatesOnDay(DayOfWeek dayOfWeek)
-    {
-        int dayFlag = 1 << (int)dayOfWeek;
-        return (OperatingDays & dayFlag) != 0;
-    }
-
-    /// <summary>
     /// Validate flight definition
     /// </summary>
     public bool IsValid()
@@ -109,8 +93,8 @@ public class FlightDefinition
         return !string.IsNullOrWhiteSpace(FlightNumber)
             && RouteId > 0
             && DefaultAircraftId > 0
-            && DepartureTime != ArrivalTime
-            && OperatingDays > 0;
+            && (DepartureTime != ArrivalTime || ArrivalOffsetDays > 0)
+            && ArrivalOffsetDays >= 0;
     }
 
     /// <summary>
@@ -121,19 +105,6 @@ public class FlightDefinition
         DepartureTime = departure;
         ArrivalTime = arrival;
         ArrivalOffsetDays = offsetDays;
-        UpdatedAt = DateTime.UtcNow;
-    }
-
-    /// <summary>
-    /// Update operating days
-    /// </summary>
-    public void SetOperatingDays(params DayOfWeek[] days)
-    {
-        OperatingDays = 0;
-        foreach (var day in days)
-        {
-            OperatingDays |= (1 << (int)day);
-        }
         UpdatedAt = DateTime.UtcNow;
     }
 

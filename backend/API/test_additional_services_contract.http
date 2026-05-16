@@ -1,0 +1,22 @@
+### =====================================================
+### ADDITIONAL SERVICES CONTRACT TEST
+### =====================================================
+
+@baseUrl = http://localhost:5042
+
+### 1) New route (must be primary)
+GET {{baseUrl}}/api/v1/additional-services
+
+### 2) Legacy route (must be removed)
+GET {{baseUrl}}/api/AdditionalServices
+
+### 3) New by-seat-class route
+GET {{baseUrl}}/api/v1/additional-services/by-seat-class/1
+
+### 4) Legacy by-seat-class route (must be removed)
+GET {{baseUrl}}/api/AdditionalServices/by-seat-class/1
+
+### =====================================================
+### Expected for legacy routes:
+### - HTTP 404 Not Found
+### =====================================================

@@ -20,7 +20,6 @@ public class PaymentService : IPaymentService
     private readonly IEmailService _emailService;
     private readonly ITicketService _ticketService;
     private readonly ILogger<PaymentService> _logger;
-    private readonly MomoPaymentProvider _momoProvider;
     private readonly VnpayPaymentProvider _vnpayProvider;
 
     public PaymentService(
@@ -32,7 +31,6 @@ public class PaymentService : IPaymentService
         IEmailService emailService,
         ITicketService ticketService,
         ILogger<PaymentService> logger,
-        MomoPaymentProvider momoProvider,
         VnpayPaymentProvider vnpayProvider)
     {
         _unitOfWork = unitOfWork;
@@ -43,7 +41,6 @@ public class PaymentService : IPaymentService
         _emailService = emailService;
         _ticketService = ticketService;
         _logger = logger;
-        _momoProvider = momoProvider;
         _vnpayProvider = vnpayProvider;
     }
 
@@ -119,7 +116,6 @@ public class PaymentService : IPaymentService
         return paymentMethod switch
         {
             "VNPAY" => await _vnpayProvider.GeneratePaymentLinkAsync(providerRequest),
-            "MOMO" => await _momoProvider.GeneratePaymentLinkAsync(providerRequest),
             _ => throw new ValidationException("Unsupported payment method")
         };
     }
@@ -133,8 +129,7 @@ public class PaymentService : IPaymentService
         return normalizedMethod switch
         {
             "VNPAY" => normalizedMethod,
-            "MOMO" => normalizedMethod,
-            _ => throw new ValidationException("Payment method must be VNPAY or MOMO")
+            _ => throw new ValidationException("Payment method must be VNPAY")
         };
     }
 
@@ -262,7 +257,6 @@ public class PaymentService : IPaymentService
     {
         return provider.ToUpperInvariant() switch
         {
-            "MOMO" => _momoProvider,
             "VNPAY" => _vnpayProvider,
             _ => throw new ValidationException("Unsupported payment provider")
         };
@@ -323,12 +317,11 @@ public class PaymentService : IPaymentService
             return;
         }
 
-        var seatInventory = await _seatInventoryRepository.GetByIdAsync(
-            passengers.First().FlightSeatInventoryId);
-        if (seatInventory != null)
+        var seatInventoryId = passengers.First().FlightSeatInventoryId;
+        var released = await _seatInventoryRepository.TryReleaseHeldSeatsAtomicAsync(seatInventoryId, passengers.Count);
+        if (!released)
         {
-            seatInventory.ReleaseHeldSeats(passengers.Count);
-            await _seatInventoryRepository.UpdateAsync(seatInventory);
+            throw new ConcurrencyException("Unable to release held seats due to concurrent updates. Please retry.");
         }
 
         booking.Status = (int)BookingStatus.Cancelled;
@@ -369,15 +362,12 @@ public class PaymentService : IPaymentService
             return;
         }
 
-        var seatInventory = await _seatInventoryRepository.GetByIdAsync(
-            passengers.First().FlightSeatInventoryId);
-        if (seatInventory == null)
+        var seatInventoryId = passengers.First().FlightSeatInventoryId;
+        var confirmed = await _seatInventoryRepository.TryConfirmHeldSeatsAtomicAsync(seatInventoryId, passengers.Count);
+        if (!confirmed)
         {
-            throw new NotFoundException("Seat inventory not found for booking");
+            throw new ConcurrencyException("Unable to confirm held seats due to concurrent updates. Please retry.");
         }
-
-        seatInventory.ConfirmHeldSeats(passengers.Count);
-        await _seatInventoryRepository.UpdateAsync(seatInventory);
 
         booking.Status = (int)BookingStatus.Confirmed;
         booking.UpdatedAt = DateTime.UtcNow;

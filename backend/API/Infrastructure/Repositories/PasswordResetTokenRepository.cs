@@ -31,6 +31,20 @@ public class PasswordResetTokenRepository : IPasswordResetTokenRepository
         }
     }
 
+    public async Task<PasswordResetToken?> GetByUserIdAndCodeAsync(int userId, string code)
+    {
+        try
+        {
+            return await _context.PasswordResetTokens
+                .FirstOrDefaultAsync(t => t.UserId == userId && t.Code == code);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting password reset token by user ID and code");
+            throw;
+        }
+    }
+
     public async Task<PasswordResetToken?> GetByIdAsync(int id)
     {
         try

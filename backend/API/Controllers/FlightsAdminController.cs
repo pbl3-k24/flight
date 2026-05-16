@@ -136,6 +136,37 @@ public class FlightsAdminController : ControllerBase
     }
 
     /// <summary>
+    /// Cancels a flight and all affected bookings, queues refunds for paid bookings,
+    /// and sends cancellation emails (Admin only).
+    /// </summary>
+    [HttpPost("{flightId}/cancel")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CancelFlightAdminResponse>> CancelFlightAsync(int flightId, [FromBody] CancelFlightAdminDto dto)
+    {
+        try
+        {
+            _logger.LogInformation("Cancelling flight by admin: {FlightId}", flightId);
+            var response = await _flightService.CancelFlightAsync(flightId, dto);
+            return Ok(response);
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling flight");
+            return StatusCode(500, new { message = "Error cancelling flight" });
+        }
+    }
+
+    /// <summary>
     /// Gets all flights (Admin only).
     /// </summary>
     [HttpGet]

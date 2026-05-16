@@ -175,6 +175,80 @@ public class UserRepository : IUserRepository
         }
     }
 
+    public async Task<IEnumerable<User>> GetAllWithRolesAsync()
+    {
+        try
+        {
+            return await _context.Users
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .AsNoTracking()
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting all users with roles");
+            throw;
+        }
+    }
+
+    public async Task<bool> UserHasRoleAsync(int userId, int roleId)
+    {
+        try
+        {
+            return await _context.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.RoleId == roleId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking role {RoleId} for user {UserId}", roleId, userId);
+            throw;
+        }
+    }
+
+    public async Task AddRoleAsync(int userId, int roleId)
+    {
+        try
+        {
+            var exists = await _context.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.RoleId == roleId);
+            if (exists)
+            {
+                return;
+            }
+
+            _context.UserRoles.Add(new UserRole
+            {
+                UserId = userId,
+                RoleId = roleId
+            });
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Database error adding role {RoleId} to user {UserId}", roleId, userId);
+            throw;
+        }
+    }
+
+    public async Task RemoveRoleAsync(int userId, int roleId)
+    {
+        try
+        {
+            var entity = await _context.UserRoles.FirstOrDefaultAsync(ur => ur.UserId == userId && ur.RoleId == roleId);
+            if (entity == null)
+            {
+                return;
+            }
+
+            _context.UserRoles.Remove(entity);
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Database error removing role {RoleId} from user {UserId}", roleId, userId);
+            throw;
+        }
+    }
+
     public async Task<User?> GetByGoogleIdAsync(string googleId)
     {
         try

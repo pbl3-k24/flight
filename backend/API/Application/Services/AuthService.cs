@@ -5,6 +5,7 @@ using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
 using Microsoft.Extensions.Logging;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
 public class AuthService : IAuthService
@@ -170,9 +171,8 @@ public class AuthService : IAuthService
             throw new NotFoundException("User not found");
         }
 
-        // 4. Mark email as verified (update user entity if needed)
-        // Note: Add IsEmailVerified property to User entity if not present
-        user.UpdatedAt = DateTime.UtcNow;
+        // 4. Mark email as verified
+        user.MarkEmailAsVerified();
         await _userRepository.UpdateAsync(user);
 
         // 5. Delete token
@@ -214,6 +214,81 @@ public class AuthService : IAuthService
         // 6. Log password change
         _logger.LogInformation("Password changed successfully for user {UserId}", userId);
 
+        return true;
+    }
+
+    public async Task<bool> RequestChangePasswordOtpAsync(int userId)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user == null)
+        {
+            _logger.LogWarning("Change password OTP request failed: User not found {UserId}", userId);
+            throw new NotFoundException("User not found");
+        }
+
+        if (!user.IsActive())
+        {
+            _logger.LogWarning("Change password OTP request failed: User is not active {UserId}", userId);
+            throw new ValidationException("Account is not active");
+        }
+
+        var existingTokens = await _passwordTokenRepository.GetByUserIdAsync(user.Id);
+        foreach (var existingToken in existingTokens)
+        {
+            await _passwordTokenRepository.DeleteAsync(existingToken.Id);
+        }
+
+        var otpCode = GenerateOtpCode();
+        var resetToken = new PasswordResetToken
+        {
+            UserId = user.Id,
+            Code = otpCode,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(10)
+        };
+
+        await _passwordTokenRepository.CreateAsync(resetToken);
+        await _emailService.SendPasswordChangeOtpEmailAsync(user.Email, otpCode);
+
+        _logger.LogInformation("Change password OTP requested for user {UserId}", userId);
+        return true;
+    }
+
+    public async Task<bool> ConfirmChangePasswordOtpAsync(int userId, ConfirmChangePasswordOtpDto dto)
+    {
+        var token = await _passwordTokenRepository.GetByUserIdAndCodeAsync(userId, dto.Code);
+        if (token == null)
+        {
+            _logger.LogWarning("Change password OTP failed: Token not found for user {UserId}", userId);
+            throw new NotFoundException("Invalid OTP code");
+        }
+
+        if (token.IsUsed())
+        {
+            _logger.LogWarning("Change password OTP failed: Token already used for user {UserId}", userId);
+            throw new ValidationException("OTP code has already been used");
+        }
+
+        if (token.IsExpired(DateTime.UtcNow))
+        {
+            _logger.LogWarning("Change password OTP failed: Token expired for user {UserId}", userId);
+            throw new ValidationException("OTP code has expired");
+        }
+
+        ValidatePasswordStrength(dto.NewPassword);
+
+        var user = await _userRepository.GetByIdAsync(userId);
+        if (user == null)
+        {
+            throw new NotFoundException("User not found");
+        }
+
+        var passwordHash = _passwordHasher.HashPassword(dto.NewPassword);
+        user.UpdatePassword(passwordHash);
+        await _userRepository.UpdateAsync(user);
+
+        await _passwordTokenRepository.DeleteAsync(token.Id);
+
+        _logger.LogInformation("Password changed with OTP successfully for user {UserId}", userId);
         return true;
     }
 
@@ -313,6 +388,11 @@ public class AuthService : IAuthService
     private string GenerateVerificationCode()
     {
         return Guid.NewGuid().ToString("N").Substring(0, 32);
+    }
+
+    private string GenerateOtpCode()
+    {
+        return RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
     }
 }
 

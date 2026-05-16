@@ -10,6 +10,11 @@ public interface IPasswordResetTokenRepository
     Task<PasswordResetToken?> GetByCodeAsync(string code);
 
     /// <summary>
+    /// Gets a password reset token by user ID and code.
+    /// </summary>
+    Task<PasswordResetToken?> GetByUserIdAndCodeAsync(int userId, string code);
+
+    /// <summary>
     /// Gets a password reset token by ID.
     /// </summary>
     Task<PasswordResetToken?> GetByIdAsync(int id);
