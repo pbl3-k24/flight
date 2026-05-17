@@ -25,6 +25,9 @@ public class BookingPassengerConfiguration : IEntityTypeConfiguration<BookingPas
         builder.Property(b => b.PassengerType)
             .HasDefaultValue(0);
 
+        builder.Property(b => b.DocumentCheckStatus)
+            .HasDefaultValue((int)PassengerDocumentCheckStatus.Pending);
+
         builder.HasOne(b => b.Booking)
             .WithMany(bo => bo.Passengers)
             .HasForeignKey(b => b.BookingId)

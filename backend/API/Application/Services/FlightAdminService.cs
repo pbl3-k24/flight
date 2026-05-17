@@ -234,10 +234,17 @@ public class FlightAdminService : IFlightAdminService
                 var passengers = await _unitOfWork.BookingPassengers.GetByBookingIdAsync(booking.Id);
                 var groupedSeatCounts = passengers
                     .GroupBy(p => p.FlightSeatInventoryId)
-                    .ToDictionary(g => g.Key, g => g.Count());
+                    .ToDictionary(
+                        g => g.Key,
+                        g => g.Count(p => p.PassengerType != (int)PassengerType.Infant));
 
                 foreach (var groupedSeat in groupedSeatCounts)
                 {
+                    if (groupedSeat.Value <= 0)
+                    {
+                        continue;
+                    }
+
                     var inventory = await _unitOfWork.FlightSeatInventories.GetByIdAsync(groupedSeat.Key);
                     if (inventory == null)
                     {

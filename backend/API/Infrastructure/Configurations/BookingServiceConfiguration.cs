@@ -30,6 +30,9 @@ public class BookingServiceConfiguration : IEntityTypeConfiguration<BookingServi
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(b => b.BookingPassengerId);
+        builder.HasIndex(b => new { b.BookingPassengerId, b.AdditionalServiceId })
+            .IsUnique()
+            .HasFilter("\"IsDeleted\" = false");
 
         builder.HasOne(b => b.AdditionalService)
             .WithMany(a => a.BookingServices)

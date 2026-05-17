@@ -318,10 +318,14 @@ public class PaymentService : IPaymentService
         }
 
         var seatInventoryId = passengers.First().FlightSeatInventoryId;
-        var released = await _seatInventoryRepository.TryReleaseHeldSeatsAtomicAsync(seatInventoryId, passengers.Count);
-        if (!released)
+        var seatsToRelease = passengers.Count(p => p.PassengerType != (int)PassengerType.Infant);
+        if (seatsToRelease > 0)
         {
-            throw new ConcurrencyException("Unable to release held seats due to concurrent updates. Please retry.");
+            var released = await _seatInventoryRepository.TryReleaseHeldSeatsAtomicAsync(seatInventoryId, seatsToRelease);
+            if (!released)
+            {
+                throw new ConcurrencyException("Unable to release held seats due to concurrent updates. Please retry.");
+            }
         }
 
         booking.Status = (int)BookingStatus.Cancelled;
@@ -330,7 +334,7 @@ public class PaymentService : IPaymentService
 
         _logger.LogInformation(
             "Cancelled pending booking and released {PassengerCount} held seats after payment failure for booking {BookingId}",
-            passengers.Count,
+            seatsToRelease,
             bookingId);
     }
 
@@ -363,10 +367,14 @@ public class PaymentService : IPaymentService
         }
 
         var seatInventoryId = passengers.First().FlightSeatInventoryId;
-        var confirmed = await _seatInventoryRepository.TryConfirmHeldSeatsAtomicAsync(seatInventoryId, passengers.Count);
-        if (!confirmed)
+        var seatsToConfirm = passengers.Count(p => p.PassengerType != (int)PassengerType.Infant);
+        if (seatsToConfirm > 0)
         {
-            throw new ConcurrencyException("Unable to confirm held seats due to concurrent updates. Please retry.");
+            var confirmed = await _seatInventoryRepository.TryConfirmHeldSeatsAtomicAsync(seatInventoryId, seatsToConfirm);
+            if (!confirmed)
+            {
+                throw new ConcurrencyException("Unable to confirm held seats due to concurrent updates. Please retry.");
+            }
         }
 
         booking.Status = (int)BookingStatus.Confirmed;
@@ -386,7 +394,7 @@ public class PaymentService : IPaymentService
 
         _logger.LogInformation(
             "Confirmed {PassengerCount} held seats as sold for booking {BookingId}",
-            passengers.Count,
+            seatsToConfirm,
             bookingId);
     }
 

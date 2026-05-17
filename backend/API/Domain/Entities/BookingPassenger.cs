@@ -29,6 +29,8 @@ public class BookingPassenger
 
     public int PassengerType { get; set; } = 0; // 0=Adult, 1=Child, 2=Infant
 
+    public int DocumentCheckStatus { get; set; } = (int)PassengerDocumentCheckStatus.Pending;
+
     public int FlightSeatInventoryId { get; set; }
 
     public string? FareSnapshot { get; set; }

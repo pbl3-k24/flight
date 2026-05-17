@@ -1,5 +1,6 @@
 namespace API.Infrastructure.Data;
 
+using API.Application.Common;
 using API.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -60,33 +61,70 @@ public class FlightBookingDbContext : DbContext
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(FlightBookingDbContext).Assembly);
     }
 
+    public override int SaveChanges()
+    {
+        ApplyEntityAuditAndNormalizeTimes();
+        return base.SaveChanges();
+    }
+
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        // Set UpdatedAt for modified entities
-        var modifiedEntries = ChangeTracker
-            .Entries()
-            .Where(e => e.State == EntityState.Modified);
+        ApplyEntityAuditAndNormalizeTimes();
+        return await base.SaveChangesAsync(cancellationToken);
+    }
 
-        foreach (var entry in modifiedEntries)
+    private void ApplyEntityAuditAndNormalizeTimes()
+    {
+        var trackedEntries = ChangeTracker
+            .Entries()
+            .Where(e => e.State is EntityState.Added or EntityState.Modified);
+
+        foreach (var entry in trackedEntries)
         {
-            if (entry.Entity is not null)
+            if (entry.Entity is null)
             {
-                // Update UpdatedAt for entities that have it
+                continue;
+            }
+
+            if (entry.State == EntityState.Modified)
+            {
                 var updatedAtProperty = entry.Entity.GetType().GetProperty("UpdatedAt");
                 if (updatedAtProperty != null)
                 {
                     updatedAtProperty.SetValue(entry.Entity, DateTime.UtcNow);
                 }
 
-                // Increment Version for entities that have it
                 var versionProperty = entry.Entity.GetType().GetProperty("Version");
                 if (versionProperty != null && versionProperty.PropertyType == typeof(int))
                 {
                     versionProperty.SetValue(entry.Entity, (int)(versionProperty.GetValue(entry.Entity) ?? 0) + 1);
                 }
             }
-        }
 
-        return await base.SaveChangesAsync(cancellationToken);
+            NormalizeDateTimePropertiesToUtc(entry);
+        }
+    }
+
+    private static void NormalizeDateTimePropertiesToUtc(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry)
+    {
+        foreach (var property in entry.Properties)
+        {
+            if (property.Metadata.ClrType == typeof(DateTime))
+            {
+                if (property.CurrentValue is DateTime dateTimeValue)
+                {
+                    property.CurrentValue = VietnamTime.ToUtcFromVietnamStandard(dateTimeValue);
+                }
+                continue;
+            }
+
+            if (property.Metadata.ClrType == typeof(DateTime?))
+            {
+                if (property.CurrentValue is DateTime nullableDateTimeValue)
+                {
+                    property.CurrentValue = VietnamTime.ToUtcFromVietnamStandard(nullableDateTimeValue);
+                }
+            }
+        }
     }
 }

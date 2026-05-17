@@ -3,6 +3,7 @@
 using API.Application.Dtos.Booking;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
+using API.Application.Common;
 using API.Domain.Entities;
 using API.Infrastructure.Data;
 using API.Infrastructure.ExternalServices;
@@ -12,7 +13,11 @@ using BookingServiceEntity = API.Domain.Entities.BookingService;
 
 public class BookingService : IBookingService
 {
+    private const decimal ChildFareRate = 0.7m;
+    private const decimal InfantFlatFare = 100000m;
+
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPricingService _pricingService;
     private readonly IPromotionService _promotionService;
     private readonly ILogger<BookingService> _logger;
     private readonly IBackgroundJobService _backgroundJobService;
@@ -21,6 +26,7 @@ public class BookingService : IBookingService
 
     public BookingService(
         IUnitOfWork unitOfWork,
+        IPricingService pricingService,
         IPromotionService promotionService,
         IBackgroundJobService backgroundJobService,
         FlightBookingDbContext dbContext,
@@ -28,6 +34,7 @@ public class BookingService : IBookingService
         ILogger<BookingService> logger)
     {
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
+        _pricingService = pricingService ?? throw new ArgumentNullException(nameof(pricingService));
         _promotionService = promotionService ?? throw new ArgumentNullException(nameof(promotionService));
         _backgroundJobService = backgroundJobService ?? throw new ArgumentNullException(nameof(backgroundJobService));
         _dbContext = dbContext ?? throw new ArgumentNullException(nameof(dbContext));
@@ -62,7 +69,9 @@ public class BookingService : IBookingService
             return await _unitOfWork.ExecuteInTransactionAsync(async () =>
             {
                 var outboundFlightId = dto.OutboundFlightId;
-                if (!string.IsNullOrWhiteSpace(dto.OutboundFlightNumber) && dto.OutboundDepartureDate.HasValue)
+                if (outboundFlightId <= 0
+                    && !string.IsNullOrWhiteSpace(dto.OutboundFlightNumber)
+                    && dto.OutboundDepartureDate.HasValue)
                 {
                     outboundFlightId = await ResolveFlightIdAsync(
                         dto.OutboundFlightNumber,
@@ -79,6 +88,20 @@ public class BookingService : IBookingService
                 if (outboundFlight.Status != 0)
                 {
                     throw new ValidationException("Selected flight is not available for booking");
+                }
+
+                if (dto.OutboundDepartureDate.HasValue)
+                {
+                    var selectedDateVn = VietnamTime.GetVietnamDate(dto.OutboundDepartureDate.Value);
+                    var flightDepartureDateVn = VietnamTime.ToVietnamTime(outboundFlight.DepartureTime).Date;
+                    if (selectedDateVn != flightDepartureDateVn)
+                    {
+                        _logger.LogWarning(
+                            "OutboundDepartureDate mismatch ignored. Booking will trust OutboundFlightId. FlightId={FlightId}, RequestDateVn={RequestDateVn}, FlightDateVn={FlightDateVn}",
+                            outboundFlight.Id,
+                            selectedDateVn,
+                            flightDepartureDateVn);
+                    }
                 }
 
                 // Allow booking up to 2 hours before departure
@@ -106,7 +129,9 @@ public class BookingService : IBookingService
                         throw new ValidationException("Return flight must depart after the outbound flight arrives");
                     }
                 }
-                else if (!string.IsNullOrWhiteSpace(dto.ReturnFlightNumber) && dto.ReturnDepartureDate.HasValue)
+                else if (!dto.ReturnFlightId.HasValue
+                         && !string.IsNullOrWhiteSpace(dto.ReturnFlightNumber)
+                         && dto.ReturnDepartureDate.HasValue)
                 {
                     var returnFlightId = await ResolveFlightIdAsync(
                         dto.ReturnFlightNumber,
@@ -136,40 +161,97 @@ public class BookingService : IBookingService
                     throw new ValidationException("Invalid passenger count");
                 }
 
-                // 3. Validate seats available
+                var passengerProfiles = dto.Passengers
+                    .Select(p => new
+                    {
+                        Passenger = p,
+                        Type = ResolvePassengerType(p.DateOfBirth, outboundFlight.DepartureTime)
+                    })
+                    .ToList();
+
+                var hasPassengerAtLeast14 = passengerProfiles.Any(p =>
+                    CalculateAgeAtDeparture(p.Passenger.DateOfBirth, outboundFlight.DepartureTime) >= 14);
+                if (!hasPassengerAtLeast14)
+                {
+                    throw new ValidationException("A booking must include at least one passenger aged 14 or older");
+                }
+
+                // 3. Validate seats available (infants do not consume seats)
                 var outboundInventory = await _unitOfWork.FlightSeatInventories.GetByFlightAndSeatClassAsync(
                     outboundFlightId, dto.SeatClassId);
-                if (outboundInventory == null || outboundInventory.AvailableSeats < dto.PassengerCount)
+                var seatsToHold = passengerProfiles.Count(p => p.Type != PassengerType.Infant);
+                if (outboundInventory == null || outboundInventory.AvailableSeats < seatsToHold)
                 {
                     throw new ValidationException("Insufficient seats available");
                 }
+                var seatPriceForBooking = await _pricingService.CalculateCurrentPriceAsync(outboundInventory.Id);
 
                 // 4. Calculate total amount with seat class pricing and additional services
                 var includedServiceIds = await _dbContext.ClassServiceConfigs
                     .Where(c => c.SeatClassId == dto.SeatClassId && c.IsIncluded)
                     .Select(c => c.AdditionalServiceId)
                     .ToListAsync();
+                var optionalServiceIds = await _dbContext.ClassServiceConfigs
+                    .Where(c => c.SeatClassId == dto.SeatClassId && !c.IsIncluded)
+                    .Select(c => c.AdditionalServiceId)
+                    .ToHashSetAsync();
 
                 var allAdditionalServices = await _dbContext.AdditionalServices
                     .Where(s => !s.IsDeleted)
                     .ToDictionaryAsync(s => s.Id, s => s);
 
                 decimal additionalServicesTotal = 0;
-                foreach (var passenger in dto.Passengers)
+                decimal passengerFareTotal = 0;
+                foreach (var profile in passengerProfiles)
                 {
-                    if (passenger.OptionalServices != null)
+                    passengerFareTotal += profile.Type switch
                     {
-                        foreach (var optSvc in passenger.OptionalServices)
-                        {
-                            if (allAdditionalServices.TryGetValue(optSvc.AdditionalServiceId, out var svc))
+                        PassengerType.Infant => InfantFlatFare,
+                        PassengerType.Child => seatPriceForBooking * ChildFareRate,
+                        _ => seatPriceForBooking
+                    };
+
+                    if (profile.Type == PassengerType.Infant &&
+                        profile.Passenger.OptionalServices is { Count: > 0 })
+                    {
+                        throw new ValidationException("Infant passengers cannot use optional services");
+                    }
+
+                    if (profile.Passenger.OptionalServices != null)
+                    {
+                        var normalizedOptionalServices = profile.Passenger.OptionalServices
+                            .GroupBy(s => s.AdditionalServiceId)
+                            .Select(g => new PassengerServiceDto
                             {
-                                additionalServicesTotal += svc.Price * optSvc.Quantity;
+                                AdditionalServiceId = g.Key,
+                                Quantity = g.Sum(x => x.Quantity)
+                            })
+                            .ToList();
+
+                        foreach (var optSvc in normalizedOptionalServices)
+                        {
+                            ValidatePassengerServiceQuantity(optSvc.Quantity);
+
+                            if (!allAdditionalServices.TryGetValue(optSvc.AdditionalServiceId, out var svc))
+                            {
+                                throw new ValidationException($"Additional service {optSvc.AdditionalServiceId} is invalid or unavailable");
                             }
+
+                            if (includedServiceIds.Contains(optSvc.AdditionalServiceId))
+                            {
+                                throw new ValidationException($"Service {optSvc.AdditionalServiceId} is already included in the selected seat class");
+                            }
+                            if (!optionalServiceIds.Contains(optSvc.AdditionalServiceId))
+                            {
+                                throw new ValidationException($"Service {optSvc.AdditionalServiceId} is not available for the selected seat class");
+                            }
+
+                            additionalServicesTotal += svc.Price * optSvc.Quantity;
                         }
                     }
                 }
 
-                var totalAmount = outboundInventory.CurrentPrice * dto.PassengerCount + additionalServicesTotal;
+                var totalAmount = passengerFareTotal + additionalServicesTotal;
 
                 Promotion? promotion = null;
                 decimal discountAmount = 0;
@@ -233,8 +315,9 @@ public class BookingService : IBookingService
                 var createdBooking = await _unitOfWork.Bookings.CreateAsync(booking);
 
                 // 6. Create passengers and their services
-                foreach (var passengerDto in dto.Passengers)
+                foreach (var profile in passengerProfiles)
                 {
+                    var passengerDto = profile.Passenger;
                     var passenger = new BookingPassenger
                     {
                         BookingId = createdBooking.Id,
@@ -246,49 +329,63 @@ public class BookingService : IBookingService
                         DateOfBirth = passengerDto.DateOfBirth,
                         Nationality = passengerDto.Nationality,
                         PassportNumber = passengerDto.PassportNumber,
-                        PassengerType = (int)PassengerType.Adult,
+                        PassengerType = (int)profile.Type,
+                        DocumentCheckStatus = ResolveInitialDocumentCheckStatus(profile.Type),
                         FlightSeatInventoryId = outboundInventory.Id
                     };
 
                     await _unitOfWork.BookingPassengers.CreateAsync(passenger);
 
                     // Add included services
-                    foreach (var includedId in includedServiceIds)
+                    if (profile.Type != PassengerType.Infant)
                     {
-                        _dbContext.BookingServices.Add(new API.Domain.Entities.BookingService
+                        foreach (var includedId in includedServiceIds)
                         {
-                            BookingPassengerId = passenger.Id,
-                            AdditionalServiceId = includedId,
-                            Quantity = 1,
-                            Price = 0 // Included is free
-                        });
+                            _dbContext.BookingServices.Add(new API.Domain.Entities.BookingService
+                            {
+                                BookingPassengerId = passenger.Id,
+                                AdditionalServiceId = includedId,
+                                Quantity = 1,
+                                Price = 0 // Included is free
+                            });
+                        }
                     }
 
                     // Add optional services
                     if (passengerDto.OptionalServices != null)
                     {
-                        foreach (var optSvc in passengerDto.OptionalServices)
-                        {
-                            if (allAdditionalServices.TryGetValue(optSvc.AdditionalServiceId, out var svc))
+                        var normalizedOptionalServices = passengerDto.OptionalServices
+                            .GroupBy(s => s.AdditionalServiceId)
+                            .Select(g => new PassengerServiceDto
                             {
-                                _dbContext.BookingServices.Add(new API.Domain.Entities.BookingService
-                                {
-                                    BookingPassengerId = passenger.Id,
-                                    AdditionalServiceId = optSvc.AdditionalServiceId,
-                                    Quantity = optSvc.Quantity,
-                                    Price = svc.Price
-                                });
-                            }
+                                AdditionalServiceId = g.Key,
+                                Quantity = g.Sum(x => x.Quantity)
+                            })
+                            .ToList();
+
+                        foreach (var optSvc in normalizedOptionalServices)
+                        {
+                            var svc = allAdditionalServices[optSvc.AdditionalServiceId];
+                            _dbContext.BookingServices.Add(new API.Domain.Entities.BookingService
+                            {
+                                BookingPassengerId = passenger.Id,
+                                AdditionalServiceId = optSvc.AdditionalServiceId,
+                                Quantity = optSvc.Quantity,
+                                Price = svc.Price
+                            });
                         }
                     }
                 }
 
                 // 7. Hold seats atomically within transaction
-                var holdSucceeded = await _unitOfWork.FlightSeatInventories
-                    .TryHoldSeatsAtomicAsync(outboundInventory.Id, dto.PassengerCount);
-                if (!holdSucceeded)
+                if (seatsToHold > 0)
                 {
-                    throw new ConcurrencyException("Unable to hold seats due to concurrent updates. Please retry.");
+                    var holdSucceeded = await _unitOfWork.FlightSeatInventories
+                        .TryHoldSeatsAtomicAsync(outboundInventory.Id, seatsToHold);
+                    if (!holdSucceeded)
+                    {
+                        throw new ConcurrencyException("Unable to hold seats due to concurrent updates. Please retry.");
+                    }
                 }
 
                 if (promotion != null)
@@ -349,6 +446,7 @@ public class BookingService : IBookingService
             {
                 throw new ValidationException("Booking has no passengers to cancel");
             }
+            var seatsToRelease = passengers.Count(p => p.PassengerType != (int)PassengerType.Infant);
 
             var seatInventory = await _unitOfWork.FlightSeatInventories.GetByIdAsync(
                 passengers.First().FlightSeatInventoryId);
@@ -388,9 +486,13 @@ public class BookingService : IBookingService
             // BƯỚC 2: Refund thành công (hoặc booking chưa thanh toán) → Mới hủy booking
             return await _unitOfWork.ExecuteInTransactionAsync(async () =>
             {
-                var inventoryUpdateSucceeded = previousStatus == (int)BookingStatus.Pending
-                    ? await _unitOfWork.FlightSeatInventories.TryReleaseHeldSeatsAtomicAsync(seatInventory.Id, passengers.Count)
-                    : await _unitOfWork.FlightSeatInventories.TryCancelSoldSeatsAtomicAsync(seatInventory.Id, passengers.Count);
+                var inventoryUpdateSucceeded = true;
+                if (seatsToRelease > 0)
+                {
+                    inventoryUpdateSucceeded = previousStatus == (int)BookingStatus.Pending
+                        ? await _unitOfWork.FlightSeatInventories.TryReleaseHeldSeatsAtomicAsync(seatInventory.Id, seatsToRelease)
+                        : await _unitOfWork.FlightSeatInventories.TryCancelSoldSeatsAtomicAsync(seatInventory.Id, seatsToRelease);
+                }
 
                 if (!inventoryUpdateSucceeded)
                 {
@@ -522,7 +624,11 @@ public class BookingService : IBookingService
 
         return await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            await GetAuthorizedBookingPassengerAsync(bookingId, passengerId, userId, requirePending: true);
+            var (_, passenger) = await GetAuthorizedBookingPassengerAsync(bookingId, passengerId, userId, requirePending: true);
+            if (passenger.PassengerType == (int)PassengerType.Infant)
+            {
+                throw new ValidationException("Infant passengers cannot use optional services");
+            }
 
             var service = await _dbContext.AdditionalServices
                 .FirstOrDefaultAsync(s => s.Id == dto.AdditionalServiceId && !s.IsDeleted);
@@ -534,6 +640,10 @@ public class BookingService : IBookingService
             if (await IsIncludedServiceForPassengerAsync(passengerId, dto.AdditionalServiceId))
             {
                 throw new ValidationException("This service is already included for the passenger seat class");
+            }
+            if (!await IsOptionalServiceAllowedForPassengerAsync(passengerId, dto.AdditionalServiceId))
+            {
+                throw new ValidationException("This service is not available for the passenger seat class");
             }
 
             var existingService = await _dbContext.BookingServices
@@ -692,18 +802,18 @@ public class BookingService : IBookingService
             PromotionId = booking.PromotionId,
             FinalAmount = booking.FinalAmount,
             DiscountAmount = booking.DiscountAmount,
-            CreatedAt = booking.CreatedAt,
-            ExpiresAt = booking.ExpiresAt,
+            CreatedAt = VietnamTime.ToVietnamTime(booking.CreatedAt),
+            ExpiresAt = booking.ExpiresAt.HasValue ? VietnamTime.ToVietnamTime(booking.ExpiresAt.Value) : null,
             OutboundFlight = new FlightBookingDetail
             {
                 FlightId = outboundFlight!.Id,
                 FlightNumber = outboundFlight.FlightNumber,
                 DepartureAirport = outboundFlight.Route.DepartureAirport.Code,
                 ArrivalAirport = outboundFlight.Route.ArrivalAirport.Code,
-                DepartureTime = outboundFlight.DepartureTime,
-                ArrivalTime = outboundFlight.ArrivalTime,
+                DepartureTime = VietnamTime.ToVietnamTime(outboundFlight.DepartureTime),
+                ArrivalTime = VietnamTime.ToVietnamTime(outboundFlight.ArrivalTime),
                 SeatClass = "Economy",
-                Price = passengers.Count > 0 ? booking.TotalAmount / passengers.Count : 0
+                Price = booking.TotalAmount
             },
             Passengers = passengers.Select(p => new PassengerDetail
             {
@@ -714,6 +824,7 @@ public class BookingService : IBookingService
                 Phone = p.Phone,
                 PassportNumber = p.PassportNumber ?? "",
                 Status = "Confirmed",
+                DocumentCheckStatus = ((PassengerDocumentCheckStatus)p.DocumentCheckStatus).ToString(),
                 Services = bookingServices
                     .Where(bs => bs.BookingPassengerId == p.Id)
                     .Select(bs => new BookingServiceDetail
@@ -735,8 +846,8 @@ public class BookingService : IBookingService
                 FlightNumber = returnFlight.FlightNumber,
                 DepartureAirport = returnFlight.Route.DepartureAirport.Code,
                 ArrivalAirport = returnFlight.Route.ArrivalAirport.Code,
-                DepartureTime = returnFlight.DepartureTime,
-                ArrivalTime = returnFlight.ArrivalTime,
+                DepartureTime = VietnamTime.ToVietnamTime(returnFlight.DepartureTime),
+                ArrivalTime = VietnamTime.ToVietnamTime(returnFlight.ArrivalTime),
                 SeatClass = "Economy",
                 Price = 0
             };
@@ -751,6 +862,42 @@ public class BookingService : IBookingService
         {
             throw new ValidationException("Service quantity must be greater than 0");
         }
+    }
+
+    private static PassengerType ResolvePassengerType(DateTime birthDate, DateTime departureTime)
+    {
+        var years = CalculateAgeAtDeparture(birthDate, departureTime);
+
+        if (years < 2)
+        {
+            return PassengerType.Infant;
+        }
+
+        if (years < 12)
+        {
+            return PassengerType.Child;
+        }
+
+        return PassengerType.Adult;
+    }
+
+    private static int CalculateAgeAtDeparture(DateTime birthDate, DateTime departureTime)
+    {
+        var departureDate = VietnamTime.ToVietnamTime(departureTime).Date;
+        var years = departureDate.Year - birthDate.Year;
+        if (birthDate.Date > departureDate.AddYears(-years))
+        {
+            years--;
+        }
+
+        return years;
+    }
+
+    private static int ResolveInitialDocumentCheckStatus(PassengerType passengerType)
+    {
+        return passengerType == PassengerType.Infant
+            ? (int)PassengerDocumentCheckStatus.NotRequired
+            : (int)PassengerDocumentCheckStatus.Pending;
     }
 
     private async Task<(Booking Booking, BookingPassenger Passenger)> GetAuthorizedBookingPassengerAsync(
@@ -805,6 +952,24 @@ public class BookingService : IBookingService
     {
         var includedServiceIds = await GetIncludedServiceIdsForPassengerAsync(passengerId);
         return includedServiceIds.Contains(additionalServiceId);
+    }
+
+    private async Task<bool> IsOptionalServiceAllowedForPassengerAsync(int passengerId, int additionalServiceId)
+    {
+        var passenger = await _dbContext.BookingPassengers
+            .Include(p => p.FlightSeatInventory)
+            .FirstOrDefaultAsync(p => p.Id == passengerId);
+
+        if (passenger == null)
+        {
+            throw new NotFoundException("Passenger not found");
+        }
+
+        return await _dbContext.ClassServiceConfigs
+            .AnyAsync(c =>
+                c.SeatClassId == passenger.FlightSeatInventory.SeatClassId &&
+                c.AdditionalServiceId == additionalServiceId &&
+                !c.IsIncluded);
     }
 
     private async Task AdjustBookingAmountAsync(int bookingId, decimal delta)

@@ -131,16 +131,20 @@ public class BookingAdminService : IBookingAdminService
                         throw new NotFoundException("Seat inventory not found for booking");
                     }
 
-                    if (booking.Status == (int)BookingStatus.Pending)
+                    var seatPassengerCount = passengers.Count(p => p.PassengerType != (int)PassengerType.Infant);
+                    if (seatPassengerCount > 0)
                     {
-                        seatInventory.ReleaseHeldSeats(passengers.Count);
-                    }
-                    else
-                    {
-                        seatInventory.CancelSoldSeats(passengers.Count);
-                    }
+                        if (booking.Status == (int)BookingStatus.Pending)
+                        {
+                            seatInventory.ReleaseHeldSeats(seatPassengerCount);
+                        }
+                        else
+                        {
+                            seatInventory.CancelSoldSeats(seatPassengerCount);
+                        }
 
-                    await _unitOfWork.FlightSeatInventories.UpdateAsync(seatInventory);
+                        await _unitOfWork.FlightSeatInventories.UpdateAsync(seatInventory);
+                    }
                 }
 
                 booking.Status = (int)BookingStatus.Cancelled;

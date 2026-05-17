@@ -96,7 +96,33 @@ export const getServices = () => {
 }
 
 export const getSeatClassServices = (seatClassId) =>
-  makeRequest(`/additional-services/by-seat-class/${seatClassId}`)
+  makeRequest(`/additional-services/by-seat-class/${seatClassId}`).then((data) => {
+    const mergeServiceLists = (optionalList, includedList) => {
+      const optionalArr = Array.isArray(optionalList) ? optionalList : []
+      const includedArr = Array.isArray(includedList) ? includedList : []
+      const merged = [...optionalArr, ...includedArr]
+      const seen = new Set()
+      return merged.filter((item) => {
+        const id = item?.id ?? item?.serviceId
+        const key = id ?? JSON.stringify(item)
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+    }
+
+    if (Array.isArray(data)) return data
+    if (Array.isArray(data?.items)) return data.items
+    if (Array.isArray(data?.data)) return data.data
+    if (Array.isArray(data?.$values)) return data.$values
+    if (Array.isArray(data?.optionalServices) || Array.isArray(data?.includedServices)) {
+      return mergeServiceLists(data?.optionalServices, data?.includedServices)
+    }
+    if (data?.data && (Array.isArray(data.data?.optionalServices) || Array.isArray(data.data?.includedServices))) {
+      return mergeServiceLists(data.data?.optionalServices, data.data?.includedServices)
+    }
+    return []
+  })
 
 export const addServiceToBooking = (bookingId, passengerId, additionalServiceId, quantity = 1) => {
   console.log('➕ Adding service to booking passenger:', {

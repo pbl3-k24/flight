@@ -7,7 +7,9 @@ using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Application.Services;
 using API.Domain.Entities;
+using API.Infrastructure.Data;
 using API.Infrastructure.ExternalServices;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
@@ -40,7 +42,288 @@ internal sealed class Program
         await TestFlightSearchValidationErrors();
         await TestAdminCancelBookingQueuesRefundForConfirmedBooking();
         await TestAdminCancelBookingRejectsInvalidStatus();
+        await TestPassengerServicesFlow_AddUpdateRemove();
+        await TestPassengerServices_RejectInfantOptionalService();
+        await TestPassengerServices_RejectServiceNotAllowedBySeatClass();
         Console.WriteLine("PASS");
+    }
+
+    private static async Task TestPassengerServicesFlow_AddUpdateRemove()
+    {
+        var db = BuildInMemoryDbContext(nameof(TestPassengerServicesFlow_AddUpdateRemove));
+        await SeedPassengerServiceBaseDataAsync(db, seatClassId: 1, includedServiceId: 10, optionalServiceId: 11);
+
+        var booking = new Booking
+        {
+            Id = 9001,
+            UserId = 99,
+            BookingCode = "BK9001",
+            OutboundFlightId = 501,
+            Status = (int)BookingStatus.Pending,
+            ContactEmail = "booker1@test.com",
+            TotalAmount = 1_000_000m,
+            FinalAmount = 1_000_000m,
+            DiscountAmount = 0m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var passenger = new BookingPassenger
+        {
+            Id = 9101,
+            BookingId = 9001,
+            FirstName = "Test",
+            LastName = "Adult",
+            FullName = "Test Adult",
+            Email = "adult@test.com",
+            Phone = "090",
+            FlightSeatInventoryId = 801,
+            PassengerType = (int)PassengerType.Adult,
+            DocumentCheckStatus = (int)PassengerDocumentCheckStatus.Pending
+        };
+        db.Bookings.Add(booking);
+        db.BookingPassengers.Add(passenger);
+        db.BookingServices.Add(new API.Domain.Entities.BookingService
+        {
+            Id = 9201,
+            BookingPassengerId = 9101,
+            AdditionalServiceId = 10,
+            Quantity = 1,
+            Price = 0m,
+            IsDeleted = false
+        });
+        await db.SaveChangesAsync();
+
+        var uow = new FakeUnitOfWork
+        {
+            BookingRepo = new FakeBookingRepository(new List<Booking> { booking }),
+            PassengerRepo = new FakeBookingPassengerRepository(new List<BookingPassenger> { passenger })
+        };
+
+        var service = BuildBookingServiceForTests(uow, db);
+
+        var added = await service.AddPassengerServiceAsync(9001, 9101, 99, new API.Application.Dtos.Booking.AddPassengerServiceDto
+        {
+            AdditionalServiceId = 11,
+            Quantity = 2
+        });
+
+        AssertEx.Equal(2, added.Quantity, "AddPassengerService should persist quantity");
+        AssertEx.Equal(1_100_000m, booking.TotalAmount, "Booking total should increase by optional service amount");
+
+        var updated = await service.UpdatePassengerServiceAsync(9001, 9101, added.BookingServiceId, 99, new API.Application.Dtos.Booking.UpdatePassengerServiceDto
+        {
+            Quantity = 3
+        });
+        AssertEx.Equal(3, updated.Quantity, "UpdatePassengerService should update quantity");
+        AssertEx.Equal(1_150_000m, booking.TotalAmount, "Booking total should adjust by quantity delta");
+
+        await service.RemovePassengerServiceAsync(9001, 9101, added.BookingServiceId, 99);
+        AssertEx.Equal(1_000_000m, booking.TotalAmount, "RemovePassengerService should revert optional service amount");
+    }
+
+    private static async Task TestPassengerServices_RejectInfantOptionalService()
+    {
+        var db = BuildInMemoryDbContext(nameof(TestPassengerServices_RejectInfantOptionalService));
+        await SeedPassengerServiceBaseDataAsync(db, seatClassId: 1, includedServiceId: 10, optionalServiceId: 11);
+
+        var booking = new Booking
+        {
+            Id = 9002,
+            UserId = 100,
+            BookingCode = "BK9002",
+            OutboundFlightId = 502,
+            Status = (int)BookingStatus.Pending,
+            ContactEmail = "booker2@test.com",
+            TotalAmount = 100_000m,
+            FinalAmount = 100_000m,
+            DiscountAmount = 0m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var infant = new BookingPassenger
+        {
+            Id = 9102,
+            BookingId = 9002,
+            FirstName = "Baby",
+            LastName = "Test",
+            FullName = "Baby Test",
+            Email = "baby@test.com",
+            Phone = "091",
+            FlightSeatInventoryId = 801,
+            PassengerType = (int)PassengerType.Infant,
+            DocumentCheckStatus = (int)PassengerDocumentCheckStatus.NotRequired
+        };
+        db.Bookings.Add(booking);
+        db.BookingPassengers.Add(infant);
+        await db.SaveChangesAsync();
+
+        var uow = new FakeUnitOfWork
+        {
+            BookingRepo = new FakeBookingRepository(new List<Booking> { booking }),
+            PassengerRepo = new FakeBookingPassengerRepository(new List<BookingPassenger> { infant })
+        };
+        var service = BuildBookingServiceForTests(uow, db);
+
+        var rejected = false;
+        try
+        {
+            await service.AddPassengerServiceAsync(9002, 9102, 100, new API.Application.Dtos.Booking.AddPassengerServiceDto
+            {
+                AdditionalServiceId = 11,
+                Quantity = 1
+            });
+        }
+        catch (ValidationException)
+        {
+            rejected = true;
+        }
+
+        AssertEx.True(rejected, "Infant passenger must be rejected when adding optional service");
+    }
+
+    private static async Task TestPassengerServices_RejectServiceNotAllowedBySeatClass()
+    {
+        var db = BuildInMemoryDbContext(nameof(TestPassengerServices_RejectServiceNotAllowedBySeatClass));
+        await SeedPassengerServiceBaseDataAsync(db, seatClassId: 1, includedServiceId: 10, optionalServiceId: 11);
+        db.AdditionalServices.Add(new AdditionalService
+        {
+            Id = 12,
+            ServiceName = "Seat Selection Premium",
+            Price = 200_000m,
+            Description = "not configured for seat class",
+            IsDeleted = false
+        });
+        await db.SaveChangesAsync();
+
+        var booking = new Booking
+        {
+            Id = 9003,
+            UserId = 101,
+            BookingCode = "BK9003",
+            OutboundFlightId = 503,
+            Status = (int)BookingStatus.Pending,
+            ContactEmail = "booker3@test.com",
+            TotalAmount = 1_000_000m,
+            FinalAmount = 1_000_000m,
+            DiscountAmount = 0m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var passenger = new BookingPassenger
+        {
+            Id = 9103,
+            BookingId = 9003,
+            FirstName = "Rule",
+            LastName = "Check",
+            FullName = "Rule Check",
+            Email = "rule@test.com",
+            Phone = "092",
+            FlightSeatInventoryId = 801,
+            PassengerType = (int)PassengerType.Adult,
+            DocumentCheckStatus = (int)PassengerDocumentCheckStatus.Pending
+        };
+        db.Bookings.Add(booking);
+        db.BookingPassengers.Add(passenger);
+        await db.SaveChangesAsync();
+
+        var uow = new FakeUnitOfWork
+        {
+            BookingRepo = new FakeBookingRepository(new List<Booking> { booking }),
+            PassengerRepo = new FakeBookingPassengerRepository(new List<BookingPassenger> { passenger })
+        };
+        var service = BuildBookingServiceForTests(uow, db);
+
+        var rejected = false;
+        try
+        {
+            await service.AddPassengerServiceAsync(9003, 9103, 101, new API.Application.Dtos.Booking.AddPassengerServiceDto
+            {
+                AdditionalServiceId = 12,
+                Quantity = 1
+            });
+        }
+        catch (ValidationException)
+        {
+            rejected = true;
+        }
+
+        AssertEx.True(rejected, "Service outside seat-class optional policy must be rejected");
+    }
+
+    private static FlightBookingDbContext BuildInMemoryDbContext(string databaseName)
+    {
+        var options = new DbContextOptionsBuilder<FlightBookingDbContext>()
+            .UseInMemoryDatabase(databaseName: databaseName)
+            .Options;
+        return new FlightBookingDbContext(options);
+    }
+
+    private static async Task SeedPassengerServiceBaseDataAsync(
+        FlightBookingDbContext db,
+        int seatClassId,
+        int includedServiceId,
+        int optionalServiceId)
+    {
+        var seatClass = new SeatClass { Id = seatClassId, Code = "ECO", Name = "Economy", Priority = 3 };
+        var inventory = new FlightSeatInventory
+        {
+            Id = 801,
+            FlightId = 500,
+            SeatClassId = seatClassId,
+            TotalSeats = 100,
+            AvailableSeats = 100,
+            HeldSeats = 0,
+            SoldSeats = 0,
+            BasePrice = 1_000_000m,
+            CurrentPrice = 1_000_000m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var includedService = new AdditionalService
+        {
+            Id = includedServiceId,
+            ServiceName = "Carry-on",
+            Price = 0m,
+            Description = "included",
+            IsDeleted = false
+        };
+        var optionalService = new AdditionalService
+        {
+            Id = optionalServiceId,
+            ServiceName = "Checked Baggage",
+            Price = 50_000m,
+            Description = "optional",
+            IsDeleted = false
+        };
+
+        db.SeatClasses.Add(seatClass);
+        db.FlightSeatInventories.Add(inventory);
+        db.AdditionalServices.AddRange(includedService, optionalService);
+        db.ClassServiceConfigs.AddRange(
+            new ClassServiceConfig
+            {
+                SeatClassId = seatClassId,
+                AdditionalServiceId = includedServiceId,
+                IsIncluded = true
+            },
+            new ClassServiceConfig
+            {
+                SeatClassId = seatClassId,
+                AdditionalServiceId = optionalServiceId,
+                IsIncluded = false
+            });
+        await db.SaveChangesAsync();
+    }
+
+    private static API.Application.Services.BookingService BuildBookingServiceForTests(FakeUnitOfWork uow, FlightBookingDbContext db)
+    {
+        return new API.Application.Services.BookingService(
+            uow,
+            new FakePromotionService(),
+            new FakeBackgroundJobService(),
+            db,
+            BuildVnpayProvider("test-secret-hash-key-1234567890"),
+            LoggerFactory.Create(_ => { }).CreateLogger<API.Application.Services.BookingService>());
     }
 
     private static async Task TestCreateFlightCreatesSeatInventories()
@@ -518,6 +801,7 @@ internal sealed class Program
             new FakeAirportRepository(),
             new FakeAircraftRepository(new Aircraft()),
             new FakeSeatClassRepository(),
+            new FakePricingService(),
             new FakePromotionService(),
             new FakeDistributedCache(),
             LoggerFactory.Create(_ => { }).CreateLogger<FlightService>());
@@ -785,6 +1069,12 @@ internal sealed class FakePromotionService : IPromotionService
     public Task<decimal> ApplyPromotionAsync(decimal amount, int? promotionId) => Task.FromResult(amount);
     public Task<Promotion?> ValidatePromotionCodeAsync(string promotionCode) => Task.FromResult<Promotion?>(null);
     public Task<bool> RecordPromotionUsageAsync(int promotionId, int bookingId, int userId, decimal discountAmount) => Task.FromResult(true);
+}
+
+internal sealed class FakePricingService : IPricingService
+{
+    public Task<decimal> CalculateCurrentPriceAsync(int flightSeatInventoryId) => Task.FromResult(1_000_000m);
+    public Task UpdateDynamicPricesAsync() => Task.CompletedTask;
 }
 
 internal sealed class FakeDistributedCache : IDistributedCache

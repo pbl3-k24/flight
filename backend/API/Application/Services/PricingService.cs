@@ -2,10 +2,12 @@ namespace API.Application.Services;
 
 using API.Application.Exceptions;
 using API.Application.Interfaces;
+using API.Application.Common;
 using Microsoft.Extensions.Logging;
 
 public class PricingService : IPricingService
 {
+    private const decimal PriceRoundingStep = 10000m;
     private readonly IFlightSeatInventoryRepository _seatInventoryRepository;
     private readonly IBookingRepository _bookingRepository;
     private readonly ILogger<PricingService> _logger;
@@ -32,45 +34,26 @@ public class PricingService : IPricingService
             }
 
             var basePrice = inventory.BasePrice;
+            var departureTime = inventory.Flight?.DepartureTime
+                ?? throw new ValidationException("Flight departure time is required for dynamic pricing");
+            var departureTimeVn = VietnamTime.ToVietnamTime(departureTime);
+            var nowVn = VietnamTime.UtcNowInVietnam();
 
-            // 1. Calculate occupancy factor (0.5x to 1.5x)
-            var occupancyRatio = (decimal)(inventory.SoldSeats + inventory.HeldSeats) / inventory.TotalSeats;
-            var occupancyFactor = occupancyRatio switch
-            {
-                < 0.3m => 0.7m,      // Low occupancy: 30% discount
-                < 0.6m => 1.0m,      // Normal occupancy
-                < 0.9m => 1.2m,      // High occupancy: 20% premium
-                >= 0.9m => 1.5m      // Very high occupancy: 50% premium
-            };
+            var timeToDepartureMultiplier = GetTimeToDepartureMultiplier(departureTimeVn, nowVn);
+            var flightTimeMultiplier = GetFlightTimeMultiplier(departureTimeVn);
+            var dayOfWeekMultiplier = GetDayOfWeekMultiplier(departureTimeVn.DayOfWeek);
 
-            // 2. Calculate time-based factor
-            var daysUntilDeparture = (inventory.Flight.DepartureTime - DateTime.UtcNow).TotalDays;
-            var timeFactor = daysUntilDeparture switch
-            {
-                <= 3 => 1.3m,        // Last-minute premium (30%)
-                <= 7 => 1.2m,        // One week: 20% premium
-                <= 14 => 1.0m,       // Two weeks: normal price
-                > 14 => 0.8m,        // Early booking: 20% discount
-                _ => 1.0m            // Fallback for NaN
-            };
-
-            // 3. Calculate demand factor (1.0x to 1.15x)
-            var demandFactor = await CalculateDemandFactorAsync(inventory.FlightId);
-
-            // 4. Calculate final price
-            var currentPrice = basePrice * occupancyFactor * timeFactor * demandFactor;
-
-            // 5. Apply caps
-            var minPrice = basePrice * 0.5m;  // Min: 50% of base price
-            var maxPrice = basePrice * 2.0m;  // Max: 200% of base price
-
-            currentPrice = Math.Max(minPrice, Math.Min(maxPrice, currentPrice));
+            var currentPrice = basePrice
+                * timeToDepartureMultiplier
+                * flightTimeMultiplier
+                * dayOfWeekMultiplier;
+            currentPrice = RoundToNearestPriceStep(currentPrice);
 
             _logger.LogInformation(
-                "Calculated price for inventory {InventoryId}: Base={BasePrice}, Occupancy={OccupancyFactor}, Time={TimeFactor}, Demand={DemandFactor}, Final={FinalPrice}",
-                flightSeatInventoryId, basePrice, occupancyFactor, timeFactor, demandFactor, currentPrice);
+                "Calculated price for inventory {InventoryId}: Base={BasePrice}, DepartureMultiplier={DepartureMultiplier}, FlightTimeMultiplier={FlightTimeMultiplier}, DayOfWeekMultiplier={DayOfWeekMultiplier}, Final={FinalPrice}",
+                flightSeatInventoryId, basePrice, timeToDepartureMultiplier, flightTimeMultiplier, dayOfWeekMultiplier, currentPrice);
 
-            return Math.Round(currentPrice, 2);
+            return currentPrice;
         }
         catch (Exception ex)
         {
@@ -119,28 +102,86 @@ public class PricingService : IPricingService
         }
     }
 
-    private async Task<decimal> CalculateDemandFactorAsync(int flightId)
+    private static decimal GetTimeToDepartureMultiplier(DateTime departureTime, DateTime nowUtc)
     {
-        try
+        var timeToDeparture = departureTime - nowUtc;
+        if (timeToDeparture.TotalHours < 6)
         {
-            // Query recent bookings for this flight (last 7 days)
-            var recentBookings = await _bookingRepository.GetRecentBookingsForFlightAsync(flightId, 7);
-
-            // If high demand (many recent bookings), apply premium
-            var bookingCount = recentBookings.Count();
-            var demandFactor = bookingCount switch
-            {
-                >= 10 => 1.15m,      // High demand: 15% premium
-                >= 5 => 1.10m,       // Moderate demand: 10% premium
-                _ => 1.0m            // Normal demand
-            };
-
-            return demandFactor;
+            return 1.80m;
         }
-        catch (Exception ex)
+
+        if (timeToDeparture.TotalHours < 24)
         {
-            _logger.LogWarning(ex, "Error calculating demand factor for flight {FlightId}", flightId);
-            return 1.0m; // Return normal if error
+            return 1.50m;
         }
+
+        var days = timeToDeparture.TotalDays;
+        if (days <= 2)
+        {
+            return 1.30m;
+        }
+
+        if (days <= 6)
+        {
+            return 1.15m;
+        }
+
+        if (days <= 14)
+        {
+            return 1.00m;
+        }
+
+        if (days <= 30)
+        {
+            return 0.95m;
+        }
+
+        return 0.85m;
+    }
+
+    private static decimal GetFlightTimeMultiplier(DateTime departureTime)
+    {
+        var time = departureTime.TimeOfDay;
+        if (time < TimeSpan.FromHours(6))
+        {
+            return 0.85m;
+        }
+
+        if (time < TimeSpan.FromHours(9))
+        {
+            return 1.20m;
+        }
+
+        if (time < TimeSpan.FromHours(16))
+        {
+            return 1.00m;
+        }
+
+        if (time < TimeSpan.FromHours(20))
+        {
+            return 1.25m;
+        }
+
+        return 1.05m;
+    }
+
+    private static decimal GetDayOfWeekMultiplier(DayOfWeek dayOfWeek)
+    {
+        return dayOfWeek switch
+        {
+            DayOfWeek.Monday => 0.95m,
+            DayOfWeek.Tuesday => 0.90m,
+            DayOfWeek.Wednesday => 0.90m,
+            DayOfWeek.Thursday => 1.00m,
+            DayOfWeek.Friday => 1.15m,
+            DayOfWeek.Saturday => 1.20m,
+            DayOfWeek.Sunday => 1.15m,
+            _ => 1.00m
+        };
+    }
+
+    private static decimal RoundToNearestPriceStep(decimal price)
+    {
+        return Math.Round(price / PriceRoundingStep, MidpointRounding.AwayFromZero) * PriceRoundingStep;
     }
 }

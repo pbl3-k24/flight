@@ -11,6 +11,7 @@ import {
   cancelBooking,
   getBestPromotion,
   getServices,
+  getSeatClassServices,
   addServiceToBooking,
   getFlightDefinitions,
   getAircrafts,
@@ -155,23 +156,46 @@ function App() {
     passengers: '1',
     seatClass: 'Economy',
   })
+  const [passengerCounts, setPassengerCounts] = useState({
+    adult: 1,
+    child: 0,
+    infant: 0,
+  })
   const [filters, setFilters] = useState({
     maxPrice: 3000000,
     timeSlot: 'all',
     seatClass: 'all',
   })
   const [selectedFlight, setSelectedFlight] = useState(null)
-  const [passengerInfo, setPassengerInfo] = useState({
+  const [passengerForms, setPassengerForms] = useState([])
+  
+  const createEmptyPassenger = (type = 'adult') => ({
+    type,
     fullName: '',
     dob: '',
     gender: 'Nam',
     document: '',
+    age: '',
   })
+
+  const getAgeFromDob = (dobValue) => {
+    if (!dobValue) return null
+    const dobDate = new Date(dobValue)
+    if (Number.isNaN(dobDate.getTime())) return null
+    const now = new Date()
+    let age = now.getFullYear() - dobDate.getFullYear()
+    const monthDiff = now.getMonth() - dobDate.getMonth()
+    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < dobDate.getDate())) {
+      age -= 1
+    }
+    return age
+  }
   const [bookingReference] = useState(() => `FB${Date.now().toString().slice(-8)}`)
   const [apiFlights, setApiFlights] = useState([])
   const [isLoadingFlights, setIsLoadingFlights] = useState(false)
   const [apiError, setApiError] = useState('')
   const [bookingId, setBookingId] = useState(null)
+  const [bookingAmount, setBookingAmount] = useState(null)
   const [paymentData, setPaymentData] = useState(null)
   const [bestPromotion, setBestPromotion] = useState(null)
   const [isLoadingPromotion, setIsLoadingPromotion] = useState(false)
@@ -182,9 +206,11 @@ function App() {
   const [isCancellingBookingId, setIsCancellingBookingId] = useState(null)
   const [services, setServices] = useState([])
   const [isLoadingServices, setIsLoadingServices] = useState(false)
+  const [serviceError, setServiceError] = useState('')
   const [showServicesModal, setShowServicesModal] = useState(false)
   const [currentBookingForServices, setCurrentBookingForServices] = useState(null)
-  const [selectedServices, setSelectedServices] = useState({})
+  const [selectedServicesByPassenger, setSelectedServicesByPassenger] = useState({})
+  const [selectedServicesByPassengerDraft, setSelectedServicesByPassengerDraft] = useState({})
   const [loginData, setLoginData] = useState({
     email: '',
     password: '',
@@ -222,6 +248,52 @@ function App() {
   })
   const [adminNotice, setAdminNotice] = useState('')
   const [viewingTemplateDetail, setViewingTemplateDetail] = useState(null)
+  const totalPassengers = passengerCounts.adult + passengerCounts.child + passengerCounts.infant
+  const passengerDivisor = Math.max(1, totalPassengers)
+
+  useEffect(() => {
+    setSearchData((prev) => ({ ...prev, passengers: String(totalPassengers) }))
+    setPassengerForms((prev) => {
+      const existing = Array.isArray(prev) ? prev : []
+      const existingAdults = existing.filter((item) => item.type === 'adult')
+      const existingChildren = existing.filter((item) => item.type === 'child')
+      const existingInfants = existing.filter((item) => item.type === 'infant')
+      const next = []
+
+      for (let i = 0; i < passengerCounts.adult; i += 1) {
+        next.push(existingAdults[i] || createEmptyPassenger('adult'))
+      }
+      for (let i = 0; i < passengerCounts.child; i += 1) {
+        next.push(existingChildren[i] || createEmptyPassenger('child'))
+      }
+      for (let i = 0; i < passengerCounts.infant; i += 1) {
+        next.push(existingInfants[i] || createEmptyPassenger('infant'))
+      }
+
+      return next
+    })
+  }, [passengerCounts, totalPassengers])
+
+  useEffect(() => {
+    if (screen !== 'passenger' || !selectedFlight) return
+    const seatClassId = seatClassMap[searchData.seatClass]
+    if (!seatClassId) {
+      setServiceError('Khong xac dinh duoc hang ghe de tai dich vu')
+      setServices([])
+      return
+    }
+    loadServices(seatClassId)
+  }, [screen, selectedFlight, searchData.seatClass])
+
+  useEffect(() => {
+    setSelectedServicesByPassengerDraft((prev) => {
+      const next = {}
+      passengerForms.forEach((_, idx) => {
+        if (prev[idx]) next[idx] = prev[idx]
+      })
+      return next
+    })
+  }, [passengerForms])
 
   // Load booking history once
   useEffect(() => {
@@ -278,6 +350,15 @@ function App() {
     const passengerName = [primaryPassenger.firstName, primaryPassenger.lastName]
       .filter(Boolean)
       .join(' ')
+    const passengerCount =
+      Number(booking?.passengerCount) || (Array.isArray(passengers) ? passengers.length : 0) || 1
+    const totalPrice =
+      booking?.finalAmount ??
+      booking?.totalAmount ??
+      booking?.totalPrice ??
+      booking?.amount ??
+      booking?.paymentAmount ??
+      (outbound?.price ?? 0) * passengerCount
 
     return {
       bookingId: booking?.bookingId ?? booking?.bookingCode ?? '---',
@@ -295,10 +376,9 @@ function App() {
       arriveTime: outbound?.arrivalTime || '',
       seatClass: outbound?.seatClass || '',
       passengerName,
-      passengerCount: passengers.length || 1,
+      passengerCount,
       passengers,
-      totalPrice:
-        booking?.finalAmount ?? booking?.totalAmount ?? outbound?.price ?? 0,
+      totalPrice,
     }
   }
 
@@ -327,23 +407,48 @@ function App() {
       mapped.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
       setBookingHistory(mapped)
     } catch (error) {
-      setHistoryError(error.message || 'Không thể tải lịch sử đặt vé')
+      setHistoryError(error.message || 'KhÃ´ng thá»ƒ táº£i lá»‹ch sá»­ Ä‘áº·t vÃ©')
     } finally {
       setIsLoadingHistory(false)
     }
   }
 
-  const loadServices = async () => {
+  const loadServices = async (seatClassId) => {
     setIsLoadingServices(true)
+    setServiceError('')
     try {
-      const data = await getServices()
+      const resolvedSeatClassId = Number(seatClassId)
+      if (!Number.isFinite(resolvedSeatClassId) || resolvedSeatClassId <= 0) {
+        throw new Error('Seat class khong hop le')
+      }
+      const data = await getSeatClassServices(resolvedSeatClassId)
       setServices(Array.isArray(data) ? data : [])
     } catch (error) {
-      setHistoryError(error.message || 'Không thể tải danh sách dịch vụ')
+      setServiceError(error.message || 'Khong the tai danh sach dich vu')
       setServices([])
     } finally {
       setIsLoadingServices(false)
     }
+  }
+
+  const getServicePriceLabel = (price) => {
+    const numeric = Number(price || 0)
+    return numeric === 0 ? 'Miễn phí' : formatCurrency(numeric)
+  }
+
+  const getPaymentAmount = (payment, fallback) => {
+    if (!payment) return fallback
+    const candidates = [
+      payment.amount,
+      payment.totalAmount,
+      payment.finalAmount,
+      payment.totalPrice,
+      payment.paymentAmount,
+    ]
+    const resolved = candidates
+      .map((value) => Number(value))
+      .find((value) => Number.isFinite(value))
+    return resolved ?? fallback
   }
 
   const persistBookingHistory = (next) => {
@@ -421,7 +526,7 @@ function App() {
       departTime: selectedFlight?.departureTime || '',
       arriveTime: selectedFlight?.arrivalTime || '',
       seatClass: searchData.seatClass,
-      passengerName: passengerInfo.fullName,
+      passengerName: passengerForms[0]?.fullName || '',
       passengerCount: Number(searchData.passengers || 1),
       totalPrice,
     }
@@ -443,13 +548,14 @@ function App() {
   }
 
   const filteredFlights = useMemo(() => {
+    const now = new Date()
     return apiFlights.filter((flight) => {
+      const departureDate = new Date(flight.departureTime)
+      if (Number.isNaN(departureDate.getTime()) || departureDate < now) return false
       const pricesByClass = flight.pricesByClass || {}
-      const flightPrice = pricesByClass[searchData.seatClass] || 0
+      const flightPrice = (pricesByClass[searchData.seatClass] || 0) / passengerDivisor
       const byPrice = flightPrice <= filters.maxPrice
-      const byClass =
-        filters.seatClass === 'all' ||
-        flight.availableSeatsByClass?.[filters.seatClass] > 0
+      const byClass = true
 
       let byTime = true
       const departHour = new Date(flight.departureTime).getHours()
@@ -459,9 +565,9 @@ function App() {
 
       return byPrice && byClass && byTime
     })
-  }, [filters, apiFlights, searchData.seatClass])
+  }, [filters, apiFlights, searchData.seatClass, totalPassengers, passengerDivisor])
 
-  const totalPrice = (selectedFlight?.price || selectedFlight?.pricesByClass?.[searchData.seatClass] || 0) * Number(searchData.passengers || 1)
+  const totalPrice = selectedFlight?.price || selectedFlight?.pricesByClass?.[searchData.seatClass] || 0
   
   const discountAmount = bestPromotion?.calculatedDiscount || 0
   const finalPrice = totalPrice - discountAmount
@@ -499,6 +605,118 @@ function App() {
   const getWeekdayName = (dayIndex) => {
     const names = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật']
     return names[dayIndex] || 'Thứ'
+  }
+
+  const getWeekdayLabel = (value) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+    const dayIndex = (date.getDay() + 6) % 7
+    return getWeekdayName(dayIndex)
+  }
+
+  const formatShortDate = (value) => {
+    const date = new Date(value)
+    if (Number.isNaN(date.getTime())) return ''
+    return `${date.getDate()}/${date.getMonth() + 1}`
+  }
+
+  const dateOptions = useMemo(() => {
+    if (!searchData.departDate) return []
+    const base = new Date(`${searchData.departDate}T00:00:00`)
+    if (Number.isNaN(base.getTime())) return []
+    const todayDate = new Date(`${today}T00:00:00`)
+    const range = 3
+    const items = []
+
+    for (let offset = -range; offset <= range; offset += 1) {
+      const date = addDays(base, offset)
+      if (date < todayDate) continue
+      const value = toLocalDateInputValue(date)
+      items.push({
+        value,
+        weekday: getWeekdayLabel(date),
+        label: formatShortDate(date),
+      })
+    }
+
+    return items
+  }, [searchData.departDate, today])
+
+  const lowestPriceForCurrentDate = useMemo(() => {
+    if (!Array.isArray(apiFlights) || apiFlights.length === 0) return null
+    const prices = apiFlights
+      .map((flight) => (flight?.pricesByClass?.[searchData.seatClass] ?? flight?.price) / passengerDivisor)
+      .filter((value) => Number.isFinite(value))
+    if (prices.length === 0) return null
+    return Math.min(...prices)
+  }, [apiFlights, searchData.seatClass, passengerDivisor])
+
+  const performSearch = async (departDateOverride) => {
+    const nextDepartDate = departDateOverride || searchData.departDate
+    const nextReturnDate =
+      tripType === 'roundtrip' && nextDepartDate > searchData.returnDate
+        ? nextDepartDate
+        : searchData.returnDate
+
+    const nextSearchData = {
+      ...searchData,
+      departDate: nextDepartDate,
+      returnDate: nextReturnDate,
+    }
+
+    if (nextSearchData.fromAirportId === nextSearchData.toAirportId) {
+      setApiError('Điểm đi và điểm đến phải khác nhau')
+      return
+    }
+
+    if (!nextSearchData.departDate || nextSearchData.departDate < today) {
+      setApiError('Ngày đi phải từ hôm nay trở đi')
+      return
+    }
+
+    if (tripType === 'roundtrip' && !nextSearchData.returnDate) {
+      setApiError('Vui lòng chọn ngày về')
+      return
+    }
+
+    if (tripType === 'roundtrip' && nextSearchData.returnDate < nextSearchData.departDate) {
+      setApiError('Ngày về phải sau hoặc bằng ngày đi')
+      return
+    }
+
+    setSearchData(nextSearchData)
+    setIsLoadingFlights(true)
+    setApiError('')
+    try {
+      const results = await searchFlights({
+        departureAirportId: nextSearchData.fromAirportId,
+        arrivalAirportId: nextSearchData.toAirportId,
+        departureDate: nextSearchData.departDate,
+        returnDate: tripType === 'roundtrip' ? nextSearchData.returnDate : null,
+        passengerCount: totalPassengers,
+        seatPreference: seatClassMap[nextSearchData.seatClass] || null,
+      })
+
+      setSelectedFlight(null)
+      setBookingId(null)
+      setPaymentData(null)
+      const nextFlights = Array.isArray(results) ? results : []
+      setApiFlights(nextFlights)
+      const resultPrices = nextFlights
+        .map((flight) => flight?.pricesByClass?.[nextSearchData.seatClass] ?? flight?.price)
+        .filter((value) => Number.isFinite(value))
+      const highestResultPrice = resultPrices.length > 0 ? Math.max(...resultPrices) : null
+      setFilters((prev) => ({
+        ...prev,
+        seatClass: nextSearchData.seatClass,
+        maxPrice: Number.isFinite(highestResultPrice) ? Math.max(prev.maxPrice, highestResultPrice) : prev.maxPrice,
+      }))
+      setScreen('list')
+    } catch (error) {
+      setApiError(error.message || 'Lỗi tìm kiếm chuyến bay. Vui lòng thử lại.')
+    } finally {
+      setIsLoadingFlights(false)
+    }
   }
 
   useEffect(() => {
@@ -941,16 +1159,120 @@ function App() {
         )}
 
         <div>
-          <Label>Số hành khách</Label>
-          <Select
-            value={searchData.passengers}
-            onChange={(e) => setSearchData((prev) => ({ ...prev, passengers: e.target.value }))}
-          >
-            <option value="1">1 hành khách</option>
-            <option value="2">2 hành khách</option>
-            <option value="3">3 hành khách</option>
-            <option value="4">4 hành khách</option>
-          </Select>
+          <Label>Hành khách</Label>
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-slate-900">
+                  {totalPassengers} hành khách
+                </p>
+                <p className="text-xs text-slate-500">
+                  Người lớn, trẻ em, trẻ sơ sinh
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-slate-700">Người lớn</p>
+                  <p className="text-xs text-slate-500">Từ 12 tuổi trở lên</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPassengerCounts((prev) => ({
+                        ...prev,
+                        adult: Math.max(1, prev.adult - 1),
+                      }))
+                    }
+                    className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center font-semibold">{passengerCounts.adult}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPassengerCounts((prev) => ({
+                        ...prev,
+                        adult: prev.adult + 1,
+                      }))
+                    }
+                    className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-slate-700">Trẻ em</p>
+                  <p className="text-xs text-slate-500">2 - 12 tuổi</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPassengerCounts((prev) => ({
+                        ...prev,
+                        child: Math.max(0, prev.child - 1),
+                      }))
+                    }
+                    className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center font-semibold">{passengerCounts.child}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPassengerCounts((prev) => ({
+                        ...prev,
+                        child: prev.child + 1,
+                      }))
+                    }
+                    className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-slate-700">Em bé</p>
+                  <p className="text-xs text-slate-500">0 - 2 tuổi</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPassengerCounts((prev) => ({
+                        ...prev,
+                        infant: Math.max(0, prev.infant - 1),
+                      }))
+                    }
+                    className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center font-semibold">{passengerCounts.infant}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPassengerCounts((prev) => ({
+                        ...prev,
+                        infant: prev.infant + 1,
+                      }))
+                    }
+                    className="rounded-full border border-slate-200 px-3 py-1 text-sm font-semibold"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div>
           <Label>Hạng ghế</Label>
@@ -966,51 +1288,7 @@ function App() {
 
       <button
         type="button"
-        onClick={async () => {
-          if (searchData.fromAirportId === searchData.toAirportId) {
-            setApiError('Điểm đi và điểm đến phải khác nhau')
-            return
-          }
-
-          if (!searchData.departDate || searchData.departDate < today) {
-            setApiError('Ngày đi phải từ hôm nay trở đi')
-            return
-          }
-
-          if (tripType === 'roundtrip' && !searchData.returnDate) {
-            setApiError('Vui lòng chọn ngày về')
-            return
-          }
-
-          if (tripType === 'roundtrip' && searchData.returnDate < searchData.departDate) {
-            setApiError('Ngày về phải sau hoặc bằng ngày đi')
-            return
-          }
-
-          setIsLoadingFlights(true)
-          setApiError('')
-          try {
-            const results = await searchFlights({
-              departureAirportId: searchData.fromAirportId,
-              arrivalAirportId: searchData.toAirportId,
-              departureDate: searchData.departDate,
-              returnDate: tripType === 'roundtrip' ? searchData.returnDate : null,
-              passengerCount: parseInt(searchData.passengers, 10),
-              seatPreference: seatClassMap[searchData.seatClass] || null,
-            })
-
-            setSelectedFlight(null)
-            setBookingId(null)
-            setPaymentData(null)
-            setApiFlights(Array.isArray(results) ? results : [])
-            setFilters((prev) => ({ ...prev, seatClass: searchData.seatClass }))
-            setScreen('list')
-          } catch (error) {
-            setApiError(error.message || 'Lỗi tìm kiếm chuyến bay. Vui lòng thử lại.')
-          } finally {
-            setIsLoadingFlights(false)
-          }
-        }}
+        onClick={() => performSearch()}
         disabled={isLoadingFlights}
         className="mt-6 w-full rounded-xl bg-[#1E40AF] px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:opacity-50 md:w-auto"
       >
@@ -1069,8 +1347,46 @@ function App() {
       </aside>
 
       <section className="space-y-4">
+        {dateOptions.length > 0 && (
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {dateOptions.map((option) => {
+              const isActive = option.value === searchData.departDate
+              const priceLabel = isActive && Number.isFinite(lowestPriceForCurrentDate)
+                ? formatCurrency(lowestPriceForCurrentDate)
+                : '—'
+
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  disabled={isLoadingFlights || isActive}
+                  onClick={() => {
+                    if (!isActive) {
+                      performSearch(option.value)
+                    }
+                  }}
+                  className={`min-w-[130px] rounded-2xl border px-4 py-3 text-left text-sm transition ${
+                    isActive
+                      ? 'border-[#1E40AF] bg-blue-50 text-[#1E40AF]'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-[#1E40AF]'
+                  } ${isLoadingFlights ? 'opacity-60' : ''}`}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    {option.weekday}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold">
+                    {option.label}
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-[#1E40AF]">
+                    {priceLabel}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+        )}
         {filteredFlights.map((flight) => {
-          const flightPrice = flight.pricesByClass?.[searchData.seatClass] || 0
+          const flightPrice = (flight.pricesByClass?.[searchData.seatClass] || 0) / passengerDivisor
 
           return (
             <article
@@ -1091,10 +1407,19 @@ function App() {
                   </p>
                 </div>
                 <div className="text-right">
+                  <p className="text-xs text-slate-500">Ngày đi: {formatDateTime(flight.departureTime)}</p>
+                  <p className="text-xs text-slate-500">Giá 1 vé</p>
                   <p className="text-xl font-bold text-slate-900">{formatCurrency(flightPrice)}</p>
                   <button
                     type="button"
                     onClick={() => {
+                      const seatClassId = seatClassMap[searchData.seatClass]
+                      if (seatClassId) {
+                        loadServices(seatClassId)
+                      } else {
+                        setServiceError('Khong xac dinh duoc hang ghe de tai dich vu')
+                        setServices([])
+                      }
                       setSelectedFlight(flight)
                       setScreen('passenger')
                     }}
@@ -1127,55 +1452,187 @@ function App() {
     <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
       <section className="rounded-2xl bg-white p-5 shadow-lg shadow-slate-200 md:p-7">
         <h2 className="title-font mb-6 text-xl font-bold text-slate-900">Thông tin hành khách</h2>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <Label>Họ tên</Label>
-            <Input
-              placeholder="Nguyễn Văn A"
-              value={passengerInfo.fullName}
-              onChange={(e) =>
-                setPassengerInfo((prev) => ({ ...prev, fullName: e.target.value }))
-              }
-            />
-          </div>
-          <div>
-            <Label>Ngày sinh</Label>
-            <Input
-              type="date"
-              value={passengerInfo.dob}
-              onChange={(e) => setPassengerInfo((prev) => ({ ...prev, dob: e.target.value }))}
-            />
-          </div>
-          <div>
-            <Label>Giới tính</Label>
-            <Select
-              value={passengerInfo.gender}
-              onChange={(e) =>
-                setPassengerInfo((prev) => ({ ...prev, gender: e.target.value }))
-              }
-            >
-              <option>Nam</option>
-              <option>Nữ</option>
-              <option>Khác</option>
-            </Select>
-          </div>
-          <div className="md:col-span-2">
-            <Label>CCCD / Passport</Label>
-            <Input
-              placeholder="012345678901"
-              value={passengerInfo.document}
-              onChange={(e) =>
-                setPassengerInfo((prev) => ({ ...prev, document: e.target.value }))
-              }
-            />
-          </div>
+        <div className="space-y-6">
+          {passengerForms.map((passenger, index) => {
+            const isAdult = passenger.type === 'adult'
+            const isChild = passenger.type === 'child'
+            return (
+              <div key={`passenger-${index}`} className="rounded-2xl border border-slate-200 p-4">
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-700">Hành khách {index + 1}</p>
+                  <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                    {isAdult ? 'Người lớn (>= 12 tuổi)' : isChild ? 'Trẻ em (2 - 12 tuổi)' : 'Trẻ sơ sinh (0 - 2 tuổi)'}
+                  </span>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="md:col-span-2">
+                    <Label>Họ tên</Label>
+                    <Input
+                      placeholder="Nguyễn Văn A"
+                      value={passenger.fullName}
+                      onChange={(e) =>
+                        setPassengerForms((prev) =>
+                          prev.map((item, idx) =>
+                            idx === index ? { ...item, fullName: e.target.value } : item
+                          )
+                        )
+                      }
+                    />
+                  </div>
+
+                  <div>
+                    <Label>Ngày sinh</Label>
+                    <Input
+                      type="date"
+                      value={passenger.dob}
+                      onChange={(e) =>
+                        setPassengerForms((prev) =>
+                          prev.map((item, idx) =>
+                            idx === index ? { ...item, dob: e.target.value } : item
+                          )
+                        )
+                      }
+                    />
+                    {isChild && (
+                      <p className="mt-1 text-xs text-slate-500">Trẻ em: từ 2 đến 12 tuổi</p>
+                    )}
+                    {!isAdult && !isChild && (
+                      <p className="mt-1 text-xs text-slate-500">Trẻ sơ sinh: dưới 2 tuổi</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label>Giới tính</Label>
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      {['Nam', 'Nữ', 'Khác'].map((genderOption) => (
+                        <label key={genderOption} className="inline-flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="radio"
+                            name={`gender-${index}`}
+                            value={genderOption}
+                            checked={passenger.gender === genderOption}
+                            onChange={(e) =>
+                              setPassengerForms((prev) =>
+                                prev.map((item, idx) =>
+                                  idx === index ? { ...item, gender: e.target.value } : item
+                                )
+                              )
+                            }
+                          />
+                          {genderOption}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  {isAdult && (
+                    <div className="md:col-span-2">
+                      <Label>CCCD / Passport</Label>
+                      <Input
+                        placeholder="012345678901"
+                        value={passenger.document}
+                        onChange={(e) =>
+                          setPassengerForms((prev) =>
+                            prev.map((item, idx) =>
+                              idx === index ? { ...item, document: e.target.value } : item
+                            )
+                          )
+                        }
+                      />
+                    </div>
+                  )}
+                  {passenger.type !== 'infant' && (
+                    <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <p className="mb-2 text-sm font-semibold text-slate-700">Dịch vụ thêm (theo hạng ghế)</p>
+                      {serviceError && (
+                        <p className="mb-2 text-xs text-red-600">{serviceError}</p>
+                      )}
+                      {isLoadingServices && (
+                        <p className="text-xs text-slate-500">Đang tải dịch vụ...</p>
+                      )}
+                      {!isLoadingServices && services.length === 0 && (
+                        <p className="text-xs text-slate-500">Không có dịch vụ khả dụng cho hạng ghế đã chọn.</p>
+                      )}
+                      {!isLoadingServices && services.length > 0 && (
+                        <div className="space-y-2">
+                          {services.map((service) => {
+                            const serviceId = service.serviceId || service.id
+                            const current = selectedServicesByPassengerDraft[index]?.[serviceId] || 0
+                            return (
+                              <div key={`${index}-${serviceId}`} className="flex items-center justify-between rounded-lg bg-white p-2">
+                                <div>
+                                  <p className="text-sm font-medium text-slate-800">{service.serviceName}</p>
+                                  <p className="text-xs text-slate-500">{getServicePriceLabel(service.price)}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (current > 0) {
+                                        setSelectedServicesByPassengerDraft((prev) => ({
+                                          ...prev,
+                                          [index]: {
+                                            ...(prev[index] || {}),
+                                            [serviceId]: current - 1,
+                                          },
+                                        }))
+                                      }
+                                    }}
+                                    className="rounded-lg bg-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+                                  >
+                                    -
+                                  </button>
+                                  <span className="w-6 text-center text-sm font-semibold">{current}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedServicesByPassengerDraft((prev) => ({
+                                        ...prev,
+                                        [index]: {
+                                          ...(prev[index] || {}),
+                                          [serviceId]: current + 1,
+                                        },
+                                      }))
+                                    }}
+                                    className="rounded-lg bg-[#1E40AF] px-3 py-1 text-sm font-semibold text-white hover:bg-blue-800"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         <button
           type="button"
           onClick={async () => {
-            if (!passengerInfo.fullName || !passengerInfo.dob || !passengerInfo.document) {
+            if (!passengerForms.length) {
               setApiError('Vui lòng điền đầy đủ thông tin hành khách')
+              return
+            }
+
+            const validationError = passengerForms.find((passenger) => {
+              if (!passenger.fullName) return true
+              if (!passenger.dob || !passenger.gender) return true
+              if (passenger.type === 'adult') {
+                return !passenger.dob || !passenger.document
+              }
+              const ageValue = getAgeFromDob(passenger.dob)
+              if (!Number.isFinite(ageValue)) return true
+              if (passenger.type === 'child') return ageValue < 2 || ageValue > 12
+              return ageValue < 0 || ageValue >= 2
+            })
+
+            if (validationError) {
+              setApiError('Vui lòng điền đúng thông tin hành khách theo loại')
               return
             }
 
@@ -1188,6 +1645,31 @@ function App() {
             setApiError('')
             try {
               const seatClassId = seatClassMap[searchData.seatClass] || 1
+              const passengersPayload = passengerForms.map((passenger, idx) => {
+                const [firstName, ...rest] = passenger.fullName.trim().split(' ')
+                const lastName = rest.join(' ')
+                const dateOfBirth = new Date(passenger.dob).toISOString()
+                const draftSelections = selectedServicesByPassengerDraft[idx] || {}
+                const optionalServices = passenger.type === 'infant'
+                  ? []
+                  : Object.entries(draftSelections)
+                    .map(([serviceId, quantity]) => ({
+                      additionalServiceId: Number(serviceId),
+                      quantity: Number(quantity || 0),
+                    }))
+                    .filter((item) => Number.isFinite(item.additionalServiceId) && item.quantity > 0)
+                return {
+                  firstName: firstName || passenger.fullName,
+                  lastName,
+                  email: idx === 0 ? authUser.email : '',
+                  phone: idx === 0 ? '0900000000' : '',
+                  dateOfBirth,
+                  nationality: 'VN',
+                  passportNumber: passenger.type === 'adult' ? passenger.document : '',
+                  optionalServices,
+                }
+              })
+
               const booking = await createBooking({
                 outboundFlightId: getFlightId(selectedFlight),
                 outboundFlightNumber: selectedFlight.flightNumber,
@@ -1197,21 +1679,12 @@ function App() {
                 returnDepartureDate: null,
                 passengerCount: parseInt(searchData.passengers, 10),
                 seatClassId,
-                passengers: [
-                  {
-                    firstName: passengerInfo.fullName.split(' ')[0],
-                    lastName: passengerInfo.fullName.split(' ').slice(1).join(' '),
-                    email: authUser.email,
-                    phone: '0900000000',
-                    dateOfBirth: new Date(passengerInfo.dob).toISOString(),
-                    nationality: 'VN',
-                    passportNumber: passengerInfo.document,
-                  },
-                ],
+                passengers: passengersPayload,
                 promotionId: bestPromotion?.promotionId || null,
                 contactEmail: authUser.email,
               })
               setBookingId(booking.bookingId)
+              setBookingAmount(booking.finalAmount ?? booking.totalAmount ?? null)
               setScreen('payment')
             } catch (error) {
               setApiError(error.message || 'Lỗi tạo booking. Vui lòng thử lại.')
@@ -1250,7 +1723,7 @@ function App() {
         
         <div className="mt-3 border-t border-slate-100 pt-3">
           <div className="flex justify-between text-sm text-slate-600">
-            <span>Giá vé ({searchData.passengers} người):</span>
+            <span>Giá 1 vé:</span>
             <span>{formatCurrency(totalPrice)}</span>
           </div>
           
@@ -1281,7 +1754,11 @@ function App() {
     </div>
   )
 
-  const renderPayment = () => (
+  const renderPayment = () => {
+    const paymentSummaryAmount = Number.isFinite(Number(bookingAmount))
+      ? Number(bookingAmount)
+      : getPaymentAmount(paymentData, null)
+    return (
     <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
       <section className="rounded-2xl bg-white p-5 shadow-lg shadow-slate-200 md:p-7">
         <h2 className="title-font mb-4 text-xl font-bold text-slate-900">Thanh toán</h2>
@@ -1289,7 +1766,7 @@ function App() {
         {paymentData && (
           <div className="mb-4 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
             <p>Trạng thái: {paymentData.status}</p>
-            <p>Số tiền: {formatCurrency(paymentData.amount || totalPrice)}</p>
+            <p>Số tiền: {paymentSummaryAmount !== null ? formatCurrency(paymentSummaryAmount) : '--'}</p>
           </div>
         )}
 
@@ -1301,10 +1778,10 @@ function App() {
             Mã thanh toán: {paymentData?.transactionRef || bookingReference}
           </p>
           <div className="mt-4">
-            {paymentData?.paymentLink ? (
+            {paymentData?.paymentUrl || paymentData?.paymentLink ? (
               <a
                 className="inline-flex items-center justify-center rounded-xl bg-[#1E40AF] px-5 py-3 text-sm font-semibold text-white hover:bg-blue-800"
-                href={paymentData.paymentLink}
+                href={paymentData.paymentUrl || paymentData.paymentLink}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -1356,7 +1833,7 @@ function App() {
           type="button"
           onClick={() => {
             setSelectedFlight(null)
-            setPassengerInfo({ fullName: '', dob: '', gender: 'Nam', document: '' })
+            setPassengerForms([])
             setHistoryNotice('')
             setScreen('search')
           }}
@@ -1371,8 +1848,9 @@ function App() {
         <div className="space-y-2 text-sm text-slate-600">
           <p>ID chuyến bay: {getFlightId(selectedFlight)}</p>
           <p>Số hiệu chuyến bay: {getFlightLabel(selectedFlight)}</p>
+          <p>Ngày cất cánh: {formatDateTime(selectedFlight?.departureTime)}</p>
           <p>Hãng bay: {selectedFlight?.airlineCode}</p>
-          <p>Hành khách: {passengerInfo.fullName || 'Chưa nhập'}</p>
+          <p>Hành khách: {passengerForms[0]?.fullName || 'Chưa nhập'}</p>
           <p>Số lượng: {searchData.passengers}</p>
           {paymentData && (
             <p className="break-all text-xs text-slate-500">Mã giao dịch: {paymentData.transactionRef}</p>
@@ -1381,7 +1859,7 @@ function App() {
         
         <div className="mt-4 border-t border-slate-100 pt-4 space-y-2">
           <div className="flex justify-between text-sm text-slate-600">
-            <span>Giá vé:</span>
+            <span>Giá 1 vé:</span>
             <span>{formatCurrency(totalPrice)}</span>
           </div>
           
@@ -1393,13 +1871,14 @@ function App() {
           )}
           
           <div className="flex justify-between border-t border-slate-100 pt-2 text-base font-bold text-[#1E40AF]">
-            <span>Tổng tiền:</span>
-            <span>{formatCurrency(finalPrice)}</span>
+            <span>Giá sau giảm:</span>
+            <span>{paymentSummaryAmount !== null ? formatCurrency(paymentSummaryAmount) : '--'}</span>
           </div>
         </div>
       </aside>
     </div>
   )
+  }
 
   const renderHistory = () => (
     <div className="rounded-2xl bg-white p-5 shadow-lg shadow-slate-200 md:p-7">
@@ -1465,6 +1944,9 @@ function App() {
                   </p>
                   <p className="mt-1 text-lg font-bold text-slate-900">
                     {formatTime(item.departTime)} - {formatTime(item.arriveTime)}
+                  </p>
+                  <p className="text-sm text-slate-500">
+                    Ngày cất cánh: {formatDateTime(item.departTime)}
                   </p>
                   {formatFlightMeta(item) && (
                     <p className="text-sm text-slate-500">{formatFlightMeta(item)}</p>
@@ -1535,14 +2017,19 @@ function App() {
                         type="button"
                         onClick={() => {
                           const passengers = item?.passengers || []
-                          const defaultPassengerId = passengers[0]?.passengerId ?? null
+                          const seatClassId = seatClassMap[item?.seatClass] || null
                           setCurrentBookingForServices({
                             ...item,
-                            selectedPassengerId: defaultPassengerId,
                           })
-                          setSelectedServices({})
+                          const initialSelection = passengers.reduce((acc, passenger) => {
+                            if (passenger?.passengerId) {
+                              acc[passenger.passengerId] = {}
+                            }
+                            return acc
+                          }, {})
+                          setSelectedServicesByPassenger(initialSelection)
                           setShowServicesModal(true)
-                          loadServices()
+                          loadServices(seatClassId)
                         }}
                         className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
                       >
@@ -1586,7 +2073,7 @@ function App() {
                 onClick={() => {
                   setShowServicesModal(false)
                   setCurrentBookingForServices(null)
-                  setSelectedServices({})
+                  setSelectedServicesByPassenger({})
                 }}
                 className="rounded-lg bg-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-300"
               >
@@ -1596,40 +2083,12 @@ function App() {
 
             {currentBookingForServices?.passengers?.length > 0 ? (
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Chọn hành khách
-                </label>
-                <select
-                  value={
-                    currentBookingForServices.selectedPassengerId ||
-                    currentBookingForServices.passengers[0]?.passengerId ||
-                    ''
-                  }
-                  onChange={(e) => {
-                    const selectedPassengerId = Number(e.target.value)
-                    setCurrentBookingForServices((prev) => ({
-                      ...prev,
-                      selectedPassengerId,
-                    }))
-                  }}
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-500 focus:outline-none"
-                >
-                  {currentBookingForServices.passengers.map((passenger) => {
-                    const passengerName = [passenger.lastName, passenger.firstName]
-                      .filter(Boolean)
-                      .join(' ')
-                    const label =
-                      passengerName ||
-                      passenger.email ||
-                      passenger.phone ||
-                      `Hành khách #${passenger.passengerId}`
-                    return (
-                      <option key={passenger.passengerId} value={passenger.passengerId}>
-                        {label}
-                      </option>
-                    )
-                  })}
-                </select>
+                <p className="text-sm font-semibold text-slate-700">
+                  Chọn dịch vụ theo từng hành khách
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Các dịch vụ có sẵn theo hạng ghế sẽ hiển thị giá 0 (miễn phí).
+                </p>
               </div>
             ) : (
               <div className="mb-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-500">
@@ -1650,58 +2109,90 @@ function App() {
             )}
 
             {!isLoadingServices && services.length > 0 && (
-              <div className="space-y-3">
-                {services.map((service) => (
-                  <div
-                    key={service.serviceId || service.id}
-                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-slate-900">{service.serviceName}</h4>
-                        <p className="mt-1 text-sm text-slate-600">{service.description}</p>
-                        <p className="mt-2 text-lg font-bold text-[#1E40AF]">
-                          {formatCurrency(service.price)}
-                        </p>
+              <div className="space-y-4">
+                {currentBookingForServices.passengers.map((passenger) => {
+                  const passengerName = [passenger.lastName, passenger.firstName]
+                    .filter(Boolean)
+                    .join(' ')
+                  const label =
+                    passengerName ||
+                    passenger.email ||
+                    passenger.phone ||
+                    `Hành khách #${passenger.passengerId}`
+                  const passengerId = passenger.passengerId
+                  const passengerSelection = selectedServicesByPassenger[passengerId] || {}
+
+                  return (
+                    <div
+                      key={passengerId}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                    >
+                      <div className="mb-3 flex items-center justify-between">
+                        <h4 className="text-sm font-semibold text-slate-700">{label}</h4>
+                        <span className="text-xs text-slate-500">Chọn dịch vụ</span>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const serviceId = service.serviceId || service.id
-                            const current = selectedServices[serviceId] || 0
-                            if (current > 0) {
-                              setSelectedServices((prev) => ({
-                                ...prev,
-                                [serviceId]: current - 1,
-                              }))
-                            }
-                          }}
-                          className="rounded-lg bg-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-300"
-                        >
-                          −
-                        </button>
-                        <span className="w-8 text-center font-semibold">
-                          {selectedServices[service.serviceId || service.id] || 0}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const serviceId = service.serviceId || service.id
-                            const current = selectedServices[serviceId] || 0
-                            setSelectedServices((prev) => ({
-                              ...prev,
-                              [serviceId]: current + 1,
-                            }))
-                          }}
-                          className="rounded-lg bg-[#1E40AF] px-3 py-1 text-sm font-semibold text-white hover:bg-blue-800"
-                        >
-                          +
-                        </button>
+                      <div className="space-y-3">
+                        {services.map((service) => {
+                          const serviceId = service.serviceId || service.id
+                          const current = passengerSelection[serviceId] || 0
+                          return (
+                            <div
+                              key={serviceId}
+                              className="flex items-start justify-between gap-4 rounded-lg border border-slate-200 bg-white p-3"
+                            >
+                              <div className="flex-1">
+                                <h5 className="text-sm font-semibold text-slate-900">
+                                  {service.serviceName}
+                                </h5>
+                                <p className="mt-1 text-xs text-slate-600">{service.description}</p>
+                                <p className="mt-2 text-sm font-semibold text-[#1E40AF]">
+                                  {getServicePriceLabel(service.price)}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (current > 0) {
+                                      setSelectedServicesByPassenger((prev) => ({
+                                        ...prev,
+                                        [passengerId]: {
+                                          ...passengerSelection,
+                                          [serviceId]: current - 1,
+                                        },
+                                      }))
+                                    }
+                                  }}
+                                  className="rounded-lg bg-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+                                >
+                                  −
+                                </button>
+                                <span className="w-8 text-center font-semibold">
+                                  {current}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedServicesByPassenger((prev) => ({
+                                      ...prev,
+                                      [passengerId]: {
+                                        ...passengerSelection,
+                                        [serviceId]: current + 1,
+                                      },
+                                    }))
+                                  }}
+                                  className="rounded-lg bg-[#1E40AF] px-3 py-1 text-sm font-semibold text-white hover:bg-blue-800"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
@@ -1711,11 +2202,16 @@ function App() {
                   <p className="text-sm text-slate-600">Tổng tiền dịch vụ:</p>
                   <p className="text-2xl font-bold text-slate-900">
                     {formatCurrency(
-                      Object.entries(selectedServices).reduce((total, [serviceId, quantity]) => {
-                        const service = services.find(
-                          (s) => (s.serviceId || s.id) === Number(serviceId)
+                      Object.entries(selectedServicesByPassenger).reduce((total, [passengerId, selections]) => {
+                        return (
+                          total +
+                          Object.entries(selections || {}).reduce((sum, [serviceId, quantity]) => {
+                            const service = services.find(
+                              (s) => (s.serviceId || s.id) === Number(serviceId)
+                            )
+                            return sum + (service?.price || 0) * Number(quantity || 0)
+                          }, 0)
                         )
-                        return total + (service?.price || 0) * quantity
                       }, 0)
                     )}
                   </p>
@@ -1734,17 +2230,15 @@ function App() {
                       }
 
                       const passengers = currentBookingForServices?.passengers || []
-                      const fallbackPassengerId = Number(passengers[0]?.passengerId)
-                      const passengerIdValue = Number(
-                        currentBookingForServices?.selectedPassengerId || fallbackPassengerId
-                      )
-                      if (!Number.isFinite(passengerIdValue) || passengerIdValue <= 0) {
+                      if (passengers.length === 0) {
                         setHistoryError('Không tìm thấy hành khách để thêm dịch vụ')
                         return
                       }
 
-                      const selectedCount = Object.values(selectedServices).reduce(
-                        (sum, qty) => sum + qty,
+                      const selectedCount = Object.values(selectedServicesByPassenger).reduce(
+                        (sum, selections) =>
+                          sum +
+                          Object.values(selections || {}).reduce((inner, qty) => inner + qty, 0),
                         0
                       )
                       if (selectedCount === 0) {
@@ -1754,21 +2248,29 @@ function App() {
 
                       setHistoryNotice('Đang thêm dịch vụ...')
 
-                      for (const [serviceId, quantity] of Object.entries(selectedServices)) {
-                        if (quantity > 0) {
-                          await addServiceToBooking(
-                            bookingIdValue,
-                            passengerIdValue,
-                            Number(serviceId),
-                            quantity
-                          )
+                      for (const passenger of passengers) {
+                        const passengerIdValue = Number(passenger?.passengerId)
+                        if (!Number.isFinite(passengerIdValue) || passengerIdValue <= 0) {
+                          continue
+                        }
+
+                        const selections = selectedServicesByPassenger[passengerIdValue] || {}
+                        for (const [serviceId, quantity] of Object.entries(selections)) {
+                          if (quantity > 0) {
+                            await addServiceToBooking(
+                              bookingIdValue,
+                              passengerIdValue,
+                              Number(serviceId),
+                              quantity
+                            )
+                          }
                         }
                       }
 
                       setHistoryNotice(`✅ Đã thêm ${selectedCount} dịch vụ vào booking!`)
                       setShowServicesModal(false)
                       setCurrentBookingForServices(null)
-                      setSelectedServices({})
+                      setSelectedServicesByPassenger({})
                     } catch (error) {
                       setHistoryError(error.message || 'Lỗi khi thêm dịch vụ')
                     }
@@ -2528,3 +3030,4 @@ function App() {
 }
 
 export default App
+

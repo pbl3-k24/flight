@@ -15,3 +15,11 @@ public enum PassengerType
     Child = 1,
     Infant = 2
 }
+
+public enum PassengerDocumentCheckStatus
+{
+    NotRequired = 0,
+    Pending = 1,
+    Verified = 2,
+    Rejected = 3
+}

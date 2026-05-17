@@ -1,6 +1,7 @@
 namespace API.Application.Services;
 
 using API.Application.Interfaces;
+using API.Application.Common;
 using API.Domain.Entities;
 using API.Infrastructure.ExternalServices;
 using Microsoft.Extensions.Logging;
@@ -70,8 +71,13 @@ public class BackgroundJobService : IBackgroundJobService
 
                             if (seatInventory != null)
                             {
-                                seatInventory.ReleaseHeldSeats(passengers.Count);
-                                await _seatInventoryRepository.UpdateAsync(seatInventory);
+                                var seatsToRelease = passengers.Count(p => p.PassengerType != (int)PassengerType.Infant);
+                                var releasableSeats = Math.Min(seatsToRelease, seatInventory.HeldSeats);
+                                if (releasableSeats > 0)
+                                {
+                                    seatInventory.ReleaseHeldSeats(releasableSeats);
+                                    await _seatInventoryRepository.UpdateAsync(seatInventory);
+                                }
                             }
 
                             booking.Status = (int)BookingStatus.Cancelled;
@@ -127,8 +133,13 @@ public class BackgroundJobService : IBackgroundJobService
 
                         if (seatInventory != null)
                         {
-                            seatInventory.ReleaseHeldSeats(passengers.Count);
-                            await _seatInventoryRepository.UpdateAsync(seatInventory);
+                            var seatsToRelease = passengers.Count(p => p.PassengerType != (int)PassengerType.Infant);
+                            var releasableSeats = Math.Min(seatsToRelease, seatInventory.HeldSeats);
+                            if (releasableSeats > 0)
+                            {
+                                seatInventory.ReleaseHeldSeats(releasableSeats);
+                                await _seatInventoryRepository.UpdateAsync(seatInventory);
+                            }
                         }
 
                         booking.Status = (int)BookingStatus.Cancelled;
@@ -157,7 +168,8 @@ public class BackgroundJobService : IBackgroundJobService
         try
         {
             var now = DateTime.UtcNow;
-            _logger.LogInformation("Processing expired bookings at {Time}", now);
+            var nowVn = VietnamTime.UtcNowInVietnam();
+            _logger.LogInformation("Processing expired bookings at {TimeVn} (VN, UTC+7)", nowVn);
 
             var allBookings = await _bookingRepository.GetAllAsync();
             var pendingBookings = allBookings
@@ -189,8 +201,13 @@ public class BackgroundJobService : IBackgroundJobService
 
                         if (seatInventory != null)
                         {
-                            seatInventory.ReleaseHeldSeats(passengers.Count);
-                            await _seatInventoryRepository.UpdateAsync(seatInventory);
+                            var seatsToRelease = passengers.Count(p => p.PassengerType != (int)PassengerType.Infant);
+                            var releasableSeats = Math.Min(seatsToRelease, seatInventory.HeldSeats);
+                            if (releasableSeats > 0)
+                            {
+                                seatInventory.ReleaseHeldSeats(releasableSeats);
+                                await _seatInventoryRepository.UpdateAsync(seatInventory);
+                            }
                         }
 
                         booking.Status = (int)BookingStatus.Cancelled;

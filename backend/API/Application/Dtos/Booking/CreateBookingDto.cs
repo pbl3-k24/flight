@@ -134,6 +134,8 @@ public class PassengerDetail
 
     public string Status { get; set; } = null!;
 
+    public string DocumentCheckStatus { get; set; } = null!;
+
     public List<BookingServiceDetail> Services { get; set; } = [];
 }
 

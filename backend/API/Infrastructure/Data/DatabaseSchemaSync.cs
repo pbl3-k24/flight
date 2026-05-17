@@ -452,6 +452,7 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
                 ["Id"] = "integer NOT NULL",
                 ["BookingId"] = "integer NOT NULL",
                 ["PassengerType"] = "integer NOT NULL",
+                ["DocumentCheckStatus"] = "integer NOT NULL DEFAULT 1",
                 ["Title"] = "varchar(10) NULL",
                 ["FirstName"] = "varchar(100) NOT NULL",
                 ["LastName"] = "varchar(100) NOT NULL",

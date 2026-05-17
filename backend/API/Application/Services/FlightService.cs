@@ -3,6 +3,7 @@ namespace API.Application.Services;
 using API.Application.Dtos.Flight;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
+using API.Application.Common;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
@@ -15,6 +16,7 @@ public class FlightService : IFlightService
     private readonly IAirportRepository _airportRepository;
     private readonly IAircraftRepository _aircraftRepository;
     private readonly ISeatClassRepository _seatClassRepository;
+    private readonly IPricingService _pricingService;
     private readonly IPromotionService _promotionService;
     private readonly IDistributedCache _cache;
     private readonly ILogger<FlightService> _logger;
@@ -26,6 +28,7 @@ public class FlightService : IFlightService
         IAirportRepository airportRepository,
         IAircraftRepository aircraftRepository,
         ISeatClassRepository seatClassRepository,
+        IPricingService pricingService,
         IPromotionService promotionService,
         IDistributedCache cache,
         ILogger<FlightService> logger)
@@ -36,6 +39,7 @@ public class FlightService : IFlightService
         _airportRepository = airportRepository;
         _aircraftRepository = aircraftRepository;
         _seatClassRepository = seatClassRepository;
+        _pricingService = pricingService;
         _promotionService = promotionService;
         _cache = cache;
         _logger = logger;
@@ -51,26 +55,18 @@ public class FlightService : IFlightService
                 throw new ValidationException("Departure and arrival airports cannot be the same");
             }
 
-            if (criteria.DepartureDate.Date < DateTime.UtcNow.AddDays(-1).Date)
+            var departureDateVn = VietnamTime.GetVietnamDate(criteria.DepartureDate);
+            if (departureDateVn < VietnamTime.UtcNowInVietnam().AddDays(-1).Date)
             {
                 throw new ValidationException("Departure date cannot be in the past");
-            }
-
-            // Check cache
-            var cacheKey = $"flight-search:{criteria.DepartureAirportId}:{criteria.ArrivalAirportId}:{criteria.DepartureDate:yyyy-MM-dd}:{criteria.PassengerCount}:{criteria.SeatPreference}:{criteria.FlightNumber}";
-            var cachedResult = await _cache.GetStringAsync(cacheKey);
-            if (!string.IsNullOrEmpty(cachedResult))
-            {
-                _logger.LogInformation("Returning cached flight search results");
-                return JsonSerializer.Deserialize<List<FlightSearchResponse>>(cachedResult) ?? [];
             }
 
             // Query flights for the route and date
             var flights = await _flightRepository.GetFlightsByRouteAndDateAsync(
                 criteria.DepartureAirportId,
                 criteria.ArrivalAirportId,
-                criteria.DepartureDate,
-                criteria.DepartureDate.AddDays(1)); // Allow ±1 day for flexibility
+                VietnamTime.VietnamDayStartToUtc(departureDateVn),
+                VietnamTime.VietnamDayEndExclusiveToUtc(departureDateVn));
 
             if (!string.IsNullOrWhiteSpace(criteria.FlightNumber))
             {
@@ -81,10 +77,16 @@ public class FlightService : IFlightService
             }
 
             var results = new List<FlightSearchResponse>();
+            var nowVn = VietnamTime.UtcNowInVietnam();
 
             foreach (var flight in flights)
             {
                 if (flight.Status != 0)
+                {
+                    continue;
+                }
+
+                if (VietnamTime.ToVietnamTime(flight.DepartureTime) <= nowVn)
                 {
                     continue;
                 }
@@ -95,8 +97,8 @@ public class FlightService : IFlightService
                     FlightNumber = flight.FlightNumber,
                     DepartureAirport = flight.Route.DepartureAirport.Code,
                     ArrivalAirport = flight.Route.ArrivalAirport.Code,
-                    DepartureTime = flight.DepartureTime,
-                    ArrivalTime = flight.ArrivalTime,
+                    DepartureTime = VietnamTime.ToVietnamTime(flight.DepartureTime),
+                    ArrivalTime = VietnamTime.ToVietnamTime(flight.ArrivalTime),
                     DurationMinutes = flight.Route.EstimatedDurationMinutes,
                     AirlineCode = "FL", // Placeholder - should come from airline entity
                     AircraftModel = flight.Aircraft.Model,
@@ -111,7 +113,8 @@ public class FlightService : IFlightService
                 {
                     var className = inventory.SeatClass.Name;
                     var availableSeats = inventory.AvailableSeats;
-                    var currentPrice = inventory.CurrentPrice;
+                    var currentPrice = await GetDynamicPriceAsync(inventory.Id);
+                    var bookingPreviewPrice = BuildBookingPreviewPrice(currentPrice, criteria.PassengerCount);
 
                     // Filter out seat classes that don't have enough seats
                     if (criteria.PassengerCount > 0 && availableSeats < criteria.PassengerCount)
@@ -122,11 +125,11 @@ public class FlightService : IFlightService
                     // Apply promotions if applicable
                     if (criteria.PassengerCount > 0)
                     {
-                        currentPrice = await _promotionService.ApplyPromotionAsync(currentPrice, null); // Will add promotion ID param
+                        bookingPreviewPrice = await _promotionService.ApplyPromotionAsync(bookingPreviewPrice, null); // Will add promotion ID param
                     }
 
                     response.AvailableSeatsByClass[className] = availableSeats;
-                    response.PricesByClass[className] = currentPrice;
+                    response.PricesByClass[className] = bookingPreviewPrice;
                 }
 
                 // Filter by seat preference if specified
@@ -146,16 +149,6 @@ public class FlightService : IFlightService
 
             // Sort by price (ascending)
             results = results.OrderBy(f => f.PricesByClass.Values.DefaultIfEmpty(decimal.MaxValue).Min()).ToList();
-
-            // Cache results for 30 minutes only if there are results
-            if (results.Count > 0)
-            {
-                var cacheOptions = new DistributedCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
-                };
-                await _cache.SetStringAsync(cacheKey, JsonSerializer.Serialize(results), cacheOptions);
-            }
 
             _logger.LogInformation("Flight search completed: {Count} flights found", results.Count);
 
@@ -192,8 +185,8 @@ public class FlightService : IFlightService
             {
                 FlightId = flight.Id,
                 FlightNumber = flight.FlightNumber,
-                DepartureTime = flight.DepartureTime,
-                ArrivalTime = flight.ArrivalTime,
+                DepartureTime = VietnamTime.ToVietnamTime(flight.DepartureTime),
+                ArrivalTime = VietnamTime.ToVietnamTime(flight.ArrivalTime),
                 DepartureAirport = flight.Route.DepartureAirport.Code,
                 ArrivalAirport = flight.Route.ArrivalAirport.Code,
                 DistanceKm = flight.Route.DistanceKm,
@@ -214,7 +207,7 @@ public class FlightService : IFlightService
                     AvailableSeats = inventory.AvailableSeats,
                     HeldSeats = inventory.HeldSeats,
                     SoldSeats = inventory.SoldSeats,
-                    CurrentPrice = inventory.CurrentPrice,
+                    CurrentPrice = await GetDynamicPriceAsync(inventory.Id),
                     BasePrice = inventory.BasePrice
                 };
             }
@@ -269,7 +262,7 @@ public class FlightService : IFlightService
         {
             var flights = await _flightRepository.GetFlightsByRouteAndDateAsync(
                 routeId,
-                departureDate);
+                VietnamTime.VietnamDayStartToUtc(departureDate));
 
             var results = new List<FlightSearchResponse>();
 
@@ -286,8 +279,8 @@ public class FlightService : IFlightService
                     FlightNumber = flight.FlightNumber,
                     DepartureAirport = flight.Route.DepartureAirport.Code,
                     ArrivalAirport = flight.Route.ArrivalAirport.Code,
-                    DepartureTime = flight.DepartureTime,
-                    ArrivalTime = flight.ArrivalTime,
+                    DepartureTime = VietnamTime.ToVietnamTime(flight.DepartureTime),
+                    ArrivalTime = VietnamTime.ToVietnamTime(flight.ArrivalTime),
                     DurationMinutes = flight.Route.EstimatedDurationMinutes,
                     AirlineCode = "FL",
                     AircraftModel = flight.Aircraft.Model,
@@ -299,7 +292,7 @@ public class FlightService : IFlightService
                 foreach (var inventory in seatInventories)
                 {
                     response.AvailableSeatsByClass[inventory.SeatClass.Name] = inventory.AvailableSeats;
-                    response.PricesByClass[inventory.SeatClass.Name] = inventory.CurrentPrice;
+                    response.PricesByClass[inventory.SeatClass.Name] = await GetDynamicPriceAsync(inventory.Id);
                 }
 
                 results.Add(response);
@@ -312,5 +305,16 @@ public class FlightService : IFlightService
             _logger.LogError(ex, "Error getting flights for route {RouteId}", routeId);
             throw;
         }
+    }
+
+    private static decimal BuildBookingPreviewPrice(decimal unitPrice, int passengerCount)
+    {
+        var count = passengerCount > 0 ? passengerCount : 1;
+        return unitPrice * count;
+    }
+
+    private async Task<decimal> GetDynamicPriceAsync(int flightSeatInventoryId)
+    {
+        return await _pricingService.CalculateCurrentPriceAsync(flightSeatInventoryId);
     }
 }

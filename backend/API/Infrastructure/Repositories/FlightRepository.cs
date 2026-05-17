@@ -226,8 +226,12 @@ public class FlightRepository : IFlightRepository
     {
         try
         {
-            var start = startDate.Date;
-            var end = endDate.Date.AddDays(1);
+            var start = startDate;
+            var end = endDate;
+            if (end <= start)
+            {
+                end = start.AddDays(1);
+            }
             
             _logger.LogInformation("Searching flights: Dep={Dep}, Arr={Arr}, Start={Start}, End={End}", 
                 departureAirportId, arrivalAirportId, start, end);
@@ -348,7 +352,7 @@ public class FlightRepository : IFlightRepository
     {
         try
         {
-            var start = departureDate.Date;
+            var start = departureDate;
             var end = start.AddDays(1);
             return await _context.Flights
                 .Include(f => f.FlightDefinition)

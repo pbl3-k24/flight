@@ -29,6 +29,17 @@ public class TicketResponse
     public string DepartureAirport { get; set; } = null!;
 
     public string ArrivalAirport { get; set; } = null!;
+
+    public List<TicketPassengerServiceDto> Services { get; set; } = [];
+}
+
+public class TicketPassengerServiceDto
+{
+    public int AdditionalServiceId { get; set; }
+    public string ServiceName { get; set; } = null!;
+    public int Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public decimal TotalPrice { get; set; }
 }
 
 public class TicketDownloadRequest

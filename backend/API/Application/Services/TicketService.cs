@@ -3,7 +3,10 @@ namespace API.Application.Services;
 using API.Application.Dtos.Ticket;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
+using API.Application.Common;
 using API.Domain.Entities;
+using API.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 public class TicketService : ITicketService
@@ -13,6 +16,7 @@ public class TicketService : ITicketService
     private readonly IBookingPassengerRepository _passengerRepository;
     private readonly IFlightRepository _flightRepository;
     private readonly IFlightSeatInventoryRepository _seatInventoryRepository;
+    private readonly FlightBookingDbContext _dbContext;
     private readonly IEmailService _emailService;
     private readonly ILogger<TicketService> _logger;
 
@@ -22,6 +26,7 @@ public class TicketService : ITicketService
         IBookingPassengerRepository passengerRepository,
         IFlightRepository flightRepository,
         IFlightSeatInventoryRepository seatInventoryRepository,
+        FlightBookingDbContext dbContext,
         IEmailService emailService,
         ILogger<TicketService> logger)
     {
@@ -30,6 +35,7 @@ public class TicketService : ITicketService
         _passengerRepository = passengerRepository;
         _flightRepository = flightRepository;
         _seatInventoryRepository = seatInventoryRepository;
+        _dbContext = dbContext;
         _emailService = emailService;
         _logger = logger;
     }
@@ -50,6 +56,7 @@ public class TicketService : ITicketService
                 throw new NotFoundException("Flight not found");
             }
             var passengers = await _passengerRepository.GetByBookingIdAsync(bookingId);
+            var passengerServiceMap = await BuildPassengerServiceMapAsync(passengers.Select(p => p.Id).ToList());
             var tickets = new List<TicketResponse>();
 
             int sequenceNumber = 1;
@@ -85,10 +92,11 @@ public class TicketService : ITicketService
                     FlightNumber = flight.FlightNumber,
                     SeatNumber = "TBD",
                     Status = "Issued",
-                    IssuedAt = createdTicket.IssuedAt,
-                    DepartureTime = flight.DepartureTime,
+                    IssuedAt = VietnamTime.ToVietnamTime(createdTicket.IssuedAt),
+                    DepartureTime = VietnamTime.ToVietnamTime(flight.DepartureTime),
                     DepartureAirport = flight.Route.DepartureAirport.Code,
-                    ArrivalAirport = flight.Route.ArrivalAirport.Code
+                    ArrivalAirport = flight.Route.ArrivalAirport.Code,
+                    Services = passengerServiceMap.GetValueOrDefault(passenger.Id, new List<TicketPassengerServiceDto>())
                 });
             }
 
@@ -115,6 +123,7 @@ public class TicketService : ITicketService
             var passenger = await _passengerRepository.GetByIdAsync(ticket.BookingPassengerId);
             var booking = await _bookingRepository.GetByIdAsync(passenger!.BookingId);
             var flight = await _flightRepository.GetByIdAsync(booking!.OutboundFlightId);
+            var passengerServiceMap = await BuildPassengerServiceMapAsync(new List<int> { passenger.Id });
 
             var statusString = ticket.Status switch
             {
@@ -136,10 +145,11 @@ public class TicketService : ITicketService
                 FlightNumber = flight.FlightNumber,
                 SeatNumber = "TBD",
                 Status = statusString,
-                IssuedAt = ticket.IssuedAt,
-                DepartureTime = flight.DepartureTime,
+                IssuedAt = VietnamTime.ToVietnamTime(ticket.IssuedAt),
+                DepartureTime = VietnamTime.ToVietnamTime(flight.DepartureTime),
                 DepartureAirport = flight.Route.DepartureAirport.Code,
-                ArrivalAirport = flight.Route.ArrivalAirport.Code
+                ArrivalAirport = flight.Route.ArrivalAirport.Code,
+                Services = passengerServiceMap.GetValueOrDefault(passenger.Id, new List<TicketPassengerServiceDto>())
             };
         }
         catch (Exception ex)
@@ -190,6 +200,7 @@ public class TicketService : ITicketService
             }
 
             var passengers = await _passengerRepository.GetByBookingIdAsync(bookingId);
+            var passengerServiceMap = await BuildPassengerServiceMapAsync(passengers.Select(p => p.Id).ToList());
             var tickets = new List<TicketResponse>();
 
             foreach (var passenger in passengers)
@@ -218,11 +229,12 @@ public class TicketService : ITicketService
                         FlightNumber = flight.FlightNumber,
                         SeatNumber = "TBD",
                         Status = statusString,
-                        IssuedAt = ticket.IssuedAt,
-                        DepartureTime = flight.DepartureTime,
-                        DepartureAirport = flight.Route.DepartureAirport.Code,
-                        ArrivalAirport = flight.Route.ArrivalAirport.Code
-                    });
+                            IssuedAt = VietnamTime.ToVietnamTime(ticket.IssuedAt),
+                            DepartureTime = VietnamTime.ToVietnamTime(flight.DepartureTime),
+                            DepartureAirport = flight.Route.DepartureAirport.Code,
+                            ArrivalAirport = flight.Route.ArrivalAirport.Code,
+                            Services = passengerServiceMap.GetValueOrDefault(passenger.Id, new List<TicketPassengerServiceDto>())
+                        });
                 }
             }
 
@@ -253,6 +265,32 @@ public class TicketService : ITicketService
     private string GenerateTicketNumber(string bookingCode, int passengerSequence)
     {
         return $"FL-{bookingCode}-{passengerSequence:D3}";
+    }
+
+    private async Task<Dictionary<int, List<TicketPassengerServiceDto>>> BuildPassengerServiceMapAsync(List<int> passengerIds)
+    {
+        if (passengerIds.Count == 0)
+        {
+            return new Dictionary<int, List<TicketPassengerServiceDto>>();
+        }
+
+        var services = await _dbContext.BookingServices
+            .Include(bs => bs.AdditionalService)
+            .Where(bs => passengerIds.Contains(bs.BookingPassengerId) && !bs.IsDeleted)
+            .ToListAsync();
+
+        return services
+            .GroupBy(bs => bs.BookingPassengerId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(bs => new TicketPassengerServiceDto
+                {
+                    AdditionalServiceId = bs.AdditionalServiceId,
+                    ServiceName = bs.AdditionalService?.ServiceName ?? string.Empty,
+                    Quantity = bs.Quantity,
+                    UnitPrice = bs.Price,
+                    TotalPrice = bs.Price * bs.Quantity
+                }).ToList());
     }
 
     private string GenerateHtmlTicket(TicketResponse ticket)
