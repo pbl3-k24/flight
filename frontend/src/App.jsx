@@ -43,6 +43,14 @@ import {
   getNotificationsUnreadCount,
   markNotificationRead,
   markAllNotificationsRead,
+  getUpgradeQuote,
+  createUpgradeRequest,
+  initiateUpgradePayment,
+  getChangeFlightOptions,
+  getChangeFlightQuote,
+  confirmChangeFlight,
+  forgotPassword,
+  resetPassword,
 } from './api'
 
 const airports = [
@@ -562,6 +570,16 @@ function App() {
   const [notificationError, setNotificationError] = useState('')
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
   const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotStep, setForgotStep] = useState('email')
+  const [resetData, setResetData] = useState({ token: '', password: '' })
+  const [forgotError, setForgotError] = useState('')
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotSuccess, setForgotSuccess] = useState(false)
+  const [resetCode, setResetCode] = useState('')
+  const [resetNewPassword, setResetNewPassword] = useState('')
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('')
+  const [resetSuccess, setResetSuccess] = useState(false)
   
   // Template management states
   const [flightDefinitions, setFlightDefinitions] = useState([])
@@ -1548,6 +1566,195 @@ function App() {
     return code === 0
   }
 
+  // ===== Ticket Upgrade State =====
+  const [upgradeModal, setUpgradeModal] = useState(null)
+  // upgradeModal = { booking, ticket, step: 'select'|'quote'|'confirm'|'payment', selectedClassId, quote, request }
+  const [upgradeLoading, setUpgradeLoading] = useState(false)
+  const [upgradeError, setUpgradeError] = useState('')
+
+  const seatClasses = [
+    { id: 1, name: 'Economy', label: 'Phổ thông', icon: '🪑' },
+    { id: 2, name: 'Business', label: 'Thương gia', icon: '💼' },
+  ]
+
+  const openUpgradeModal = (booking, ticket) => {
+    setUpgradeModal({ booking, ticket, step: 'select', selectedClassId: null, quote: null, request: null })
+    setUpgradeError('')
+  }
+
+  const closeUpgradeModal = () => {
+    setUpgradeModal(null)
+    setUpgradeError('')
+  }
+
+  const handleGetUpgradeQuote = async () => {
+    if (!upgradeModal?.selectedClassId) return
+    setUpgradeLoading(true)
+    setUpgradeError('')
+    try {
+      const quote = await getUpgradeQuote(
+        upgradeModal.booking.bookingId,
+        upgradeModal.ticket.ticketId,
+        upgradeModal.selectedClassId
+      )
+      setUpgradeModal((prev) => ({ ...prev, step: 'quote', quote }))
+    } catch (err) {
+      setUpgradeError(err.message || 'Không thể lấy báo giá nâng hạng.')
+    } finally {
+      setUpgradeLoading(false)
+    }
+  }
+
+  const handleCreateUpgradeRequest = async () => {
+    setUpgradeLoading(true)
+    setUpgradeError('')
+    try {
+      const request = await createUpgradeRequest(
+        upgradeModal.booking.bookingId,
+        upgradeModal.ticket.ticketId,
+        upgradeModal.selectedClassId
+      )
+      setUpgradeModal((prev) => ({ ...prev, step: 'payment', request }))
+    } catch (err) {
+      setUpgradeError(err.message || 'Không thể tạo yêu cầu nâng hạng.')
+    } finally {
+      setUpgradeLoading(false)
+    }
+  }
+
+  const handleInitiateUpgradePayment = async () => {
+    if (!upgradeModal?.request?.requestId) return
+    setUpgradeLoading(true)
+    setUpgradeError('')
+    try {
+      const result = await initiateUpgradePayment(upgradeModal.request.requestId, 'VNPAY')
+      if (result?.payment?.paymentUrl) {
+        window.location.href = result.payment.paymentUrl
+      } else {
+        setUpgradeError('Không nhận được URL thanh toán.')
+      }
+    } catch (err) {
+      setUpgradeError(err.message || 'Không thể khởi tạo thanh toán.')
+    } finally {
+      setUpgradeLoading(false)
+    }
+  }
+
+  // ===== Change Flight State =====
+  const [changeFlightModal, setChangeFlightModal] = useState(null)
+  // changeFlightModal = { booking, step: 'select-flight'|'quote'|'confirm', legType, departureDate, options, selectedFlightId, quote }
+  const [changeFlightLoading, setChangeFlightLoading] = useState(false)
+  const [changeFlightError, setChangeFlightError] = useState('')
+
+  const openChangeFlightModal = (booking) => {
+    const today = new Date().toISOString().split('T')[0]
+    setChangeFlightModal({ booking, step: 'select-flight', legType: 0, departureDate: today, options: null, selectedFlightId: null, quote: null })
+    setChangeFlightError('')
+  }
+
+  const closeChangeFlightModal = () => {
+    setChangeFlightModal(null)
+    setChangeFlightError('')
+  }
+
+  const handleGetChangeOptions = async () => {
+    setChangeFlightLoading(true)
+    setChangeFlightError('')
+    try {
+      const data = await getChangeFlightOptions(
+        changeFlightModal.booking.bookingId,
+        changeFlightModal.legType,
+        changeFlightModal.departureDate
+      )
+      const candidates = Array.isArray(data) ? data : (data?.candidates || [])
+      setChangeFlightModal((prev) => ({ ...prev, options: candidates, selectedFlightId: null }))
+    } catch (err) {
+      setChangeFlightError(err.message || 'Không thể lấy danh sách chuyến bay.')
+    } finally {
+      setChangeFlightLoading(false)
+    }
+  }
+
+  const handleGetChangeQuote = async () => {
+    if (!changeFlightModal?.selectedFlightId) return
+    setChangeFlightLoading(true)
+    setChangeFlightError('')
+    try {
+      const quote = await getChangeFlightQuote(changeFlightModal.booking.bookingId, {
+        legType: changeFlightModal.legType,
+        newFlightId: changeFlightModal.selectedFlightId,
+      })
+      setChangeFlightModal((prev) => ({ ...prev, step: 'quote', quote }))
+    } catch (err) {
+      setChangeFlightError(err.message || 'Không thể lấy báo giá đổi chuyến.')
+    } finally {
+      setChangeFlightLoading(false)
+    }
+  }
+
+  const handleConfirmChangeFlight = async () => {
+    setChangeFlightLoading(true)
+    setChangeFlightError('')
+    try {
+      const result = await confirmChangeFlight(changeFlightModal.booking.bookingId, {
+        legType: changeFlightModal.legType,
+        newFlightId: changeFlightModal.selectedFlightId,
+      })
+      setChangeFlightModal((prev) => ({ ...prev, step: 'confirm', confirmResult: result }))
+      // Reload bookings after change
+      if (result?.paymentRequired && result?.paymentUrl) {
+        window.location.href = result.paymentUrl
+      }
+    } catch (err) {
+      setChangeFlightError(err.message || 'Không thể xác nhận đổi chuyến.')
+    } finally {
+      setChangeFlightLoading(false)
+    }
+  }
+
+  const handleForgotPassword = async () => {
+    if (!forgotEmail || !forgotEmail.includes('@')) {
+      setForgotError('Vui lòng nhập email hợp lệ.')
+      return
+    }
+    setForgotLoading(true)
+    setForgotError('')
+    try {
+      await forgotPassword(forgotEmail)
+      setForgotSuccess(true)
+    } catch (err) {
+      // Backend luon tra OK - van hien thanh success de bao mat
+      setForgotSuccess(true)
+    } finally {
+      setForgotLoading(false)
+    }
+  }
+
+  const handleResetPassword = async () => {
+    if (!resetCode.trim()) {
+      setForgotError('Vui lòng nhập mã xác nhận.')
+      return
+    }
+    if (!resetNewPassword || resetNewPassword.length < 6) {
+      setForgotError('Mật khẩu phải có ít nhất 6 ký tự.')
+      return
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      setForgotError('Mật khẩu xác nhận không khớp.')
+      return
+    }
+    setForgotLoading(true)
+    setForgotError('')
+    try {
+      await resetPassword(resetCode.trim(), resetNewPassword)
+      setResetSuccess(true)
+    } catch (err) {
+      setForgotError(err.message || 'Mã không hợp lệ hoặc đã hết hạn.')
+    } finally {
+      setForgotLoading(false)
+    }
+  }
+
   const cancelTicketFromHistory = async (bookingId, ticket) => {
     if (!bookingId || !ticket?.ticketId) return
     if (!isTicketActionable(ticket.status)) return
@@ -2346,6 +2553,22 @@ function App() {
           Đăng ký
         </button>
       </p>
+      <p className="mt-2 text-center text-sm">
+        <button
+          type="button"
+          onClick={() => {
+            setApiError('')
+            setForgotEmail(loginData.email || '')
+            setForgotStep('email')
+            setForgotError('')
+            setForgotLoading(false)
+            setScreen('forgot-password')
+          }}
+          className="text-slate-400 hover:text-[#1E40AF] hover:underline text-xs"
+        >
+          Quên mật khẩu?
+        </button>
+      </p>
     </div>
   )
 
@@ -2464,6 +2687,182 @@ function App() {
           Đăng nhập
         </button>
       </p>
+    </div>
+  )
+
+  // ===== RENDER: QUEN MAT KHAU =====
+  const renderForgotPassword = () => (
+    <div className="mx-auto w-full max-w-md">
+      <div className="rounded-2xl bg-white p-8 shadow-lg shadow-slate-200">
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
+            <svg className="h-8 w-8 text-[#1E40AF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+            </svg>
+          </div>
+          <h2 className="title-font text-2xl font-bold text-slate-900">Quên mật khẩu?</h2>
+          <p className="mt-1 text-sm text-slate-500">Nhập email để nhận mã đặt lại mật khẩu</p>
+        </div>
+        {!forgotSuccess ? (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Email</label>
+              <input
+                type="email"
+                placeholder="you@email.com"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleForgotPassword() }}
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#1E40AF] focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            {forgotError && (
+              <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{forgotError}</div>
+            )}
+            <button
+              type="button"
+              disabled={forgotLoading}
+              onClick={handleForgotPassword}
+              className="w-full rounded-xl bg-[#1E40AF] px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:opacity-50"
+            >
+              {forgotLoading ? 'Đang gửi...' : 'Gửi mã đặt lại'}
+            </button>
+            <p className="text-xs text-center text-slate-400">
+              Email sẽ được gửi dù địa chỉ có tồn tại hay không (để bảo mật).
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4 text-center">
+            <div className="rounded-xl bg-green-50 p-5">
+              <div className="text-3xl mb-2">✉️</div>
+              <p className="font-semibold text-green-800">Email đã được gửi!</p>
+              <p className="mt-1 text-sm text-green-600">
+                Kiểm tra hộp thư của <strong>{forgotEmail}</strong> để lấy mã đặt lại mật khẩu.
+              </p>
+              <p className="mt-1 text-xs text-green-500">Mã có hiệu lực trong 1 giờ.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setResetCode('')
+                setResetNewPassword('')
+                setResetConfirmPassword('')
+                setResetSuccess(false)
+                setForgotError('')
+                setScreen('reset-password')
+              }}
+              className="w-full rounded-xl bg-[#1E40AF] px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800"
+            >
+              Nhập mã đặt lại mật khẩu →
+            </button>
+          </div>
+        )}
+        <p className="mt-5 text-center text-sm text-slate-500">
+          <button
+            type="button"
+            onClick={() => { setForgotSuccess(false); setForgotError(''); setScreen('login') }}
+            className="font-semibold text-[#1E40AF] hover:underline"
+          >
+            ← Quay lại đăng nhập
+          </button>
+        </p>
+      </div>
+    </div>
+  )
+
+  // ===== RENDER: DAT LAI MAT KHAU =====
+  const renderResetPassword = () => (
+    <div className="mx-auto w-full max-w-md">
+      <div className="rounded-2xl bg-white p-8 shadow-lg shadow-slate-200">
+        <div className="mb-6 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-indigo-100">
+            <svg className="h-8 w-8 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <h2 className="title-font text-2xl font-bold text-slate-900">Đặt lại mật khẩu</h2>
+          <p className="mt-1 text-sm text-slate-500">Nhập mã đã gửi và mật khẩu mới của bạn</p>
+        </div>
+        {!resetSuccess ? (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Mã xác nhận</label>
+              <input
+                type="text"
+                placeholder="Nhập mã từ email..."
+                value={resetCode}
+                onChange={(e) => setResetCode(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm tracking-widest font-mono focus:border-[#1E40AF] focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Mật khẩu mới</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={resetNewPassword}
+                onChange={(e) => setResetNewPassword(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#1E40AF] focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Xác nhận mật khẩu</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={resetConfirmPassword}
+                onChange={(e) => setResetConfirmPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleResetPassword() }}
+                className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm focus:border-[#1E40AF] focus:outline-none focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            {forgotError && (
+              <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{forgotError}</div>
+            )}
+            <button
+              type="button"
+              disabled={forgotLoading}
+              onClick={handleResetPassword}
+              className="w-full rounded-xl bg-[#1E40AF] px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:opacity-50"
+            >
+              {forgotLoading ? 'Đang xử lý...' : 'Đặt lại mật khẩu'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4 text-center">
+            <div className="rounded-xl bg-green-50 p-5">
+              <div className="text-3xl mb-2">✅</div>
+              <p className="font-semibold text-green-800">Mật khẩu đã được đặt lại!</p>
+              <p className="mt-1 text-sm text-green-600">Bạn có thể đăng nhập bằng mật khẩu mới ngay bây giờ.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setForgotSuccess(false)
+                setResetSuccess(false)
+                setForgotError('')
+                setResetCode('')
+                setResetNewPassword('')
+                setResetConfirmPassword('')
+                setScreen('login')
+              }}
+              className="w-full rounded-xl bg-[#1E40AF] px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-800"
+            >
+              Đăng nhập ngay
+            </button>
+          </div>
+        )}
+        <p className="mt-5 text-center text-sm text-slate-500">
+          Chưa có mã?{' '}
+          <button
+            type="button"
+            onClick={() => { setForgotError(''); setForgotSuccess(false); setScreen('forgot-password') }}
+            className="font-semibold text-[#1E40AF] hover:underline"
+          >
+            Gửi lại email
+          </button>
+        </p>
+      </div>
     </div>
   )
 
@@ -3845,6 +4244,16 @@ function App() {
                         ➕ Thêm dịch vụ
                       </button>
                     )}
+                    {/* Nút đổi chuyến */}
+                    {!isBookingCancelled(item.status) && !isPendingDisruptionDecision(item.status) && (
+                      <button
+                        type="button"
+                        onClick={() => openChangeFlightModal(item)}
+                        className="rounded-xl border border-emerald-400 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                      >
+                        🔄 Đổi chuyến
+                      </button>
+                    )}
                     {/* Nút hủy vé */}
                     {!isBookingCancelled(item.status) && !isPendingDisruptionDecision(item.status) && (
                       <button
@@ -4041,14 +4450,23 @@ function App() {
                                   </p>
                                 </div>
                                 {isTicketActionable(ticket.status) && (
-                                  <button
-                                    type="button"
-                                    disabled={isCancellingTicketId === ticket.ticketId}
-                                    onClick={() => cancelTicketFromHistory(item.bookingId, ticket)}
-                                    className="rounded-xl bg-red-500 px-3 py-2 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-60"
-                                  >
-                                    {isCancellingTicketId === ticket.ticketId ? 'Đang hủy...' : 'Hủy vé'}
-                                  </button>
+                                  <div className="flex flex-col gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => openUpgradeModal(item, ticket)}
+                                      className="rounded-xl border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
+                                    >
+                                      ⬆️ Nâng hạng
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={isCancellingTicketId === ticket.ticketId}
+                                      onClick={() => cancelTicketFromHistory(item.bookingId, ticket)}
+                                      className="rounded-xl bg-red-500 px-3 py-2 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-60"
+                                    >
+                                      {isCancellingTicketId === ticket.ticketId ? 'Đang hủy...' : 'Hủy vé'}
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                               {Array.isArray(ticket.services) && ticket.services.length > 0 && (
@@ -5765,6 +6183,8 @@ function App() {
       )}
 
       {screen === 'login' && renderLogin()}
+      {screen === 'forgot-password' && renderForgotPassword()}
+      {screen === 'reset-password' && renderResetPassword()}
       {screen === 'register' && renderRegister()}
       {screen === 'search' && renderSearch()}
       {screen === 'list' && renderFlightList()}
@@ -5775,6 +6195,359 @@ function App() {
       {screen === 'flights' && isAdmin && renderFlightManagement()}
       {screen === 'templates' && isAdmin && renderTemplateManagement()}
       {screen === 'promotions' && isAdmin && renderPromotionManagement()}
+
+      {/* ===== MODAL: NANG HANG VE ===== */}
+      {upgradeModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeUpgradeModal() }}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">⬆️ Nâng hạng vé</h3>
+                <p className="text-xs text-indigo-200">
+                  {upgradeModal.ticket?.ticketNumber || `Vé #${upgradeModal.ticket?.ticketId}`} · {upgradeModal.ticket?.passengerName}
+                </p>
+              </div>
+              <button onClick={closeUpgradeModal} className="text-indigo-200 hover:text-white text-xl font-bold">✕</button>
+            </div>
+            <div className="p-6">
+              <div className="mb-5 flex items-center gap-2 text-xs">
+                {['select', 'quote', 'payment'].map((s, i) => (
+                  <div key={s} className="flex items-center gap-2">
+                    {i > 0 && <div className="h-px w-6 bg-slate-200" />}
+                    <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                      upgradeModal.step === s ? 'bg-indigo-600 text-white'
+                      : ['select', 'quote', 'payment'].indexOf(upgradeModal.step) > i ? 'bg-indigo-200 text-indigo-700'
+                      : 'bg-slate-100 text-slate-400'
+                    }`}>{i + 1}</div>
+                    <span className={upgradeModal.step === s ? 'font-semibold text-slate-800' : 'text-slate-400'}>
+                      {i === 0 ? 'Chọn hạng' : i === 1 ? 'Báo giá' : 'Thanh toán'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {upgradeModal.step === 'select' && (
+                <div className="space-y-3">
+                  <p className="text-sm text-slate-600">Chọn hạng ghế bạn muốn nâng lên:</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {seatClasses.map((cls) => {
+                      const currentClass = upgradeModal.ticket?.seatClass || ''
+                      const isCurrent = currentClass.toLowerCase().includes(cls.name.toLowerCase())
+                      const isSelected = upgradeModal.selectedClassId === cls.id
+                      return (
+                        <button
+                          key={cls.id}
+                          type="button"
+                          disabled={isCurrent}
+                          onClick={() => setUpgradeModal((prev) => ({ ...prev, selectedClassId: cls.id }))}
+                          className={`rounded-xl border-2 p-4 text-left transition-all ${
+                            isCurrent ? 'cursor-not-allowed border-slate-200 bg-slate-50 opacity-50'
+                            : isSelected ? 'border-indigo-500 bg-indigo-50'
+                            : 'border-slate-200 hover:border-indigo-300 hover:bg-indigo-50'
+                          }`}
+                        >
+                          <div className="text-2xl">{cls.icon}</div>
+                          <div className="mt-1 font-semibold text-slate-800">{cls.label}</div>
+                          {isCurrent && <div className="text-xs text-slate-500">(Hạng hiện tại)</div>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {upgradeError && <p className="text-xs text-red-600">{upgradeError}</p>}
+                  <button
+                    type="button"
+                    disabled={!upgradeModal.selectedClassId || upgradeLoading}
+                    onClick={handleGetUpgradeQuote}
+                    className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {upgradeLoading ? 'Đang tính...' : 'Xem báo giá →'}
+                  </button>
+                </div>
+              )}
+
+              {upgradeModal.step === 'quote' && upgradeModal.quote && (
+                <div className="space-y-4">
+                  <div className="rounded-xl bg-indigo-50 p-4 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Giá vé hiện tại</span>
+                      <span className="font-semibold">{formatCurrency(upgradeModal.quote.currentTicketPrice || upgradeModal.quote.paidAmountOfOldTicket || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Giá hạng mới</span>
+                      <span className="font-semibold">{formatCurrency(upgradeModal.quote.newClassPrice || upgradeModal.quote.newTicketAmount || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Chênh lệch giá</span>
+                      <span className="font-semibold text-orange-600">{formatCurrency(upgradeModal.quote.fareDifference || upgradeModal.quote.priceDifference || 0)}</span>
+                    </div>
+                    {(upgradeModal.quote.upgradeFee > 0) && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Phí nâng hạng</span>
+                        <span className="font-semibold text-orange-600">{formatCurrency(upgradeModal.quote.upgradeFee)}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-indigo-200 pt-2 flex justify-between">
+                      <span className="font-bold text-slate-800">Tổng thanh toán</span>
+                      <span className="font-bold text-indigo-700 text-base">{formatCurrency(upgradeModal.quote.upgradeAmount || 0)}</span>
+                    </div>
+                    <p className="text-xs text-slate-500">Đơn vị: {upgradeModal.quote.currency || 'VND'}</p>
+                  </div>
+                  {upgradeError && <p className="text-xs text-red-600">{upgradeError}</p>}
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setUpgradeModal((prev) => ({ ...prev, step: 'select' }))}
+                      className="flex-1 rounded-xl border border-slate-300 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      ← Quay lại
+                    </button>
+                    <button
+                      type="button"
+                      disabled={upgradeLoading}
+                      onClick={handleCreateUpgradeRequest}
+                      className="flex-1 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      {upgradeLoading ? 'Đang xử lý...' : 'Xác nhận nâng hạng →'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {upgradeModal.step === 'payment' && (
+                <div className="space-y-4">
+                  <div className="rounded-xl bg-green-50 p-4 text-center">
+                    <div className="text-3xl mb-2">✅</div>
+                    <p className="font-semibold text-green-800">Yêu cầu nâng hạng đã được tạo!</p>
+                    {upgradeModal.request?.expiresAt && (
+                      <p className="text-xs text-green-600 mt-1">
+                        Hết hạn: {new Date(upgradeModal.request.expiresAt).toLocaleString('vi-VN')}
+                      </p>
+                    )}
+                  </div>
+                  <div className="rounded-xl bg-slate-50 p-4 text-sm space-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Mã yêu cầu</span>
+                      <span className="font-semibold">#{upgradeModal.request?.requestId}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Số tiền thanh toán</span>
+                      <span className="font-bold text-indigo-700">{formatCurrency(upgradeModal.request?.priceDifference || 0)}</span>
+                    </div>
+                  </div>
+                  {upgradeError && <p className="text-xs text-red-600">{upgradeError}</p>}
+                  <button
+                    type="button"
+                    disabled={upgradeLoading}
+                    onClick={handleInitiateUpgradePayment}
+                    className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {upgradeLoading ? 'Đang khởi tạo...' : '💳 Thanh toán VNPay'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: DOI CHUYEN BAY ===== */}
+      {changeFlightModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) closeChangeFlightModal() }}
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl" style={{ maxHeight: '90vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 sticky top-0 z-10">
+              <div>
+                <h3 className="text-lg font-bold text-white">🔄 Đổi chuyến bay</h3>
+                <p className="text-xs text-emerald-200">Booking #{changeFlightModal.booking?.bookingId}</p>
+              </div>
+              <button onClick={closeChangeFlightModal} className="text-emerald-200 hover:text-white text-xl font-bold">✕</button>
+            </div>
+            <div className="p-6">
+              <div className="mb-5 flex items-center gap-2 text-xs">
+                {['select-flight', 'quote', 'confirm'].map((s, i) => (
+                  <div key={s} className="flex items-center gap-2">
+                    {i > 0 && <div className="h-px w-6 bg-slate-200" />}
+                    <div className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+                      changeFlightModal.step === s ? 'bg-emerald-600 text-white'
+                      : ['select-flight', 'quote', 'confirm'].indexOf(changeFlightModal.step) > i ? 'bg-emerald-200 text-emerald-700'
+                      : 'bg-slate-100 text-slate-400'
+                    }`}>{i + 1}</div>
+                    <span className={changeFlightModal.step === s ? 'font-semibold text-slate-800' : 'text-slate-400'}>
+                      {i === 0 ? 'Tìm chuyến' : i === 1 ? 'Báo giá' : 'Xác nhận'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {changeFlightModal.step === 'select-flight' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600">Chặng bay</label>
+                      <select
+                        value={changeFlightModal.legType}
+                        onChange={(e) => setChangeFlightModal((prev) => ({ ...prev, legType: Number(e.target.value), options: null }))}
+                        className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      >
+                        <option value={0}>Chặng đi (Outbound)</option>
+                        <option value={1}>Chặng về (Return)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600">Ngày bay mới</label>
+                      <input
+                        type="date"
+                        value={changeFlightModal.departureDate}
+                        min={new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setChangeFlightModal((prev) => ({ ...prev, departureDate: e.target.value, options: null }))}
+                        className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={changeFlightLoading}
+                    onClick={handleGetChangeOptions}
+                    className="w-full rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {changeFlightLoading ? 'Đang tìm...' : '🔍 Tìm chuyến bay khả dụng'}
+                  </button>
+                  {changeFlightError && <p className="text-xs text-red-600">{changeFlightError}</p>}
+                  {changeFlightModal.options !== null && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-slate-600">
+                        {changeFlightModal.options.length > 0
+                          ? `Tìm thấy ${changeFlightModal.options.length} chuyến bay:`
+                          : 'Không có chuyến bay nào phù hợp.'}
+                      </p>
+                      {changeFlightModal.options.map((flight) => (
+                        <button
+                          key={flight.flightId}
+                          type="button"
+                          onClick={() => setChangeFlightModal((prev) => ({ ...prev, selectedFlightId: flight.flightId }))}
+                          className={`w-full rounded-xl border-2 p-3 text-left transition-all ${
+                            changeFlightModal.selectedFlightId === flight.flightId
+                              ? 'border-emerald-500 bg-emerald-50'
+                              : 'border-slate-200 hover:border-emerald-300'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-bold text-slate-800">{flight.flightNumber}</p>
+                              <p className="text-xs text-slate-500">
+                                {new Date(flight.departureTime).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                                {' → '}
+                                {new Date(flight.arrivalTime).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                              <p className="text-xs text-slate-400">Chỗ trống: {flight.availableSeats}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="font-bold text-emerald-700">{formatCurrency(flight.unitFare)}</p>
+                              {changeFlightModal.selectedFlightId === flight.flightId && (
+                                <span className="text-xs text-emerald-600">✓ Đã chọn</span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {changeFlightModal.selectedFlightId && (
+                    <button
+                      type="button"
+                      disabled={changeFlightLoading}
+                      onClick={handleGetChangeQuote}
+                      className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {changeFlightLoading ? 'Đang tính...' : 'Xem báo giá →'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {changeFlightModal.step === 'quote' && changeFlightModal.quote && (
+                <div className="space-y-4">
+                  <div className="rounded-xl bg-emerald-50 p-4 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Giá vé cũ</span>
+                      <span className="font-semibold">{formatCurrency(changeFlightModal.quote.oldAmount || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Giá vé mới</span>
+                      <span className="font-semibold">{formatCurrency(changeFlightModal.quote.newAmount || 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-600">Chênh lệch</span>
+                      <span className={`font-semibold ${(changeFlightModal.quote.fareDifference || 0) >= 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                        {(changeFlightModal.quote.fareDifference || 0) >= 0 ? '+' : ''}{formatCurrency(changeFlightModal.quote.fareDifference || 0)}
+                      </span>
+                    </div>
+                    {(changeFlightModal.quote.changeFee > 0) && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-600">Phí đổi chuyến</span>
+                        <span className="font-semibold text-orange-600">{formatCurrency(changeFlightModal.quote.changeFee)}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-emerald-200 pt-2 flex justify-between">
+                      <span className="font-bold text-slate-800">Tổng thanh toán thêm</span>
+                      <span className={`font-bold text-base ${(changeFlightModal.quote.netAmount || 0) > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                        {(changeFlightModal.quote.netAmount || 0) > 0 ? '+' : ''}{formatCurrency(changeFlightModal.quote.netAmount || 0)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500">Đơn vị: {changeFlightModal.quote.currency || 'VND'}</p>
+                  </div>
+                  {changeFlightError && <p className="text-xs text-red-600">{changeFlightError}</p>}
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setChangeFlightModal((prev) => ({ ...prev, step: 'select-flight' }))}
+                      className="flex-1 rounded-xl border border-slate-300 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      ← Quay lại
+                    </button>
+                    <button
+                      type="button"
+                      disabled={changeFlightLoading}
+                      onClick={handleConfirmChangeFlight}
+                      className="flex-1 rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {changeFlightLoading ? 'Đang xử lý...' : 'Xác nhận đổi →'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {changeFlightModal.step === 'confirm' && (
+                <div className="space-y-4 text-center">
+                  <div className="rounded-xl bg-green-50 p-6">
+                    <div className="text-4xl mb-3">🎉</div>
+                    <p className="font-bold text-green-800 text-lg">Đổi chuyến thành công!</p>
+                    {changeFlightModal.confirmResult?.paymentRequired ? (
+                      <p className="text-sm text-orange-600 mt-2">Yêu cầu thanh toán bổ sung — đang chuyển hướng...</p>
+                    ) : (
+                      <p className="text-sm text-green-600 mt-2">Chuyến bay của bạn đã được cập nhật.</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { closeChangeFlightModal(); window.location.reload() }}
+                    className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700"
+                  >
+                    Đóng &amp; Tải lại
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

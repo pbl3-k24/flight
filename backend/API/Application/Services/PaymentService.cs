@@ -247,6 +247,10 @@ public class PaymentService : IPaymentService
                 if (_bookingService != null
                     && await _bookingService.IsChangeFlightPaymentAsync(payment.Id))
                 {
+                    _logger.LogInformation(
+                        "Processing change-flight payment callback. PaymentId={PaymentId}, Status={Status}",
+                        payment.Id,
+                        callback.Status);
                     var changeProcessed = await _bookingService.ProcessChangeFlightPaymentAsync(payment.Id, callback.Status);
                     if (!changeProcessed)
                     {

@@ -266,6 +266,17 @@ public class TicketService : ITicketService
                 throw new NotFoundException("Ticket not found");
             }
 
+            var currentFlight = await _flightRepository.GetByIdAsync(ticket.FlightId);
+            if (currentFlight == null || currentFlight.IsDeleted)
+            {
+                throw new ValidationException("Current flight is invalid");
+            }
+
+            if (currentFlight.DepartureTime <= DateTime.UtcNow)
+            {
+                throw new ValidationException("Flight has departed. Booking changes are no longer allowed.");
+            }
+
             var flight = await _flightRepository.GetByIdAsync(dto.NewFlightId);
             if (flight == null || flight.DepartureTime < DateTime.UtcNow)
             {

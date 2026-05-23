@@ -224,7 +224,11 @@ public class TicketUpgradeService : ITicketUpgradeService
                     QrCode = providerResponse.QrCode ?? providerResponse.PaymentLink,
                     CreatedAt = createdPayment.CreatedAt,
                     ExpiresAt = providerResponse.ExpiresAt
-                }
+                },
+                PaymentId = createdPayment.Id,
+                PaymentUrl = providerResponse.PaymentLink,
+                QrCode = providerResponse.QrCode ?? providerResponse.PaymentLink,
+                Amount = createdPayment.Amount
             };
         });
     }

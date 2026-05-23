@@ -190,6 +190,7 @@ public class BackgroundJobService : IBackgroundJobService
             var nowVn = VietnamTime.UtcNowInVietnam();
             _logger.LogInformation("Processing expired bookings at {TimeVn} (VN, UTC+7)", nowVn);
 
+            await ProcessDepartedTicketsAsync(now);
             await ProcessExpiredChangeFlightAwaitingPaymentsAsync(now);
 
             var expiredUpgradeRequests = await _ticketUpgradeService.ExpirePendingRequestsAsync();
@@ -261,6 +262,34 @@ public class BackgroundJobService : IBackgroundJobService
         {
             _logger.LogError(ex, "Error processing expired bookings");
         }
+    }
+
+    private async Task ProcessDepartedTicketsAsync(DateTime nowUtc)
+    {
+        var issuedDepartedTickets = await _dbContext.Tickets
+            .Where(t => !t.IsDeleted && t.Status == 0)
+            .Join(
+                _dbContext.Flights.Where(f => !f.IsDeleted),
+                ticket => ticket.FlightId,
+                flight => flight.Id,
+                (ticket, flight) => new { Ticket = ticket, flight.DepartureTime })
+            .Where(x => x.DepartureTime <= nowUtc)
+            .Select(x => x.Ticket)
+            .ToListAsync();
+
+        if (issuedDepartedTickets.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var ticket in issuedDepartedTickets)
+        {
+            ticket.Status = 1; // Used
+            ticket.UpdatedAt = nowUtc;
+        }
+
+        await _dbContext.SaveChangesAsync();
+        _logger.LogInformation("Auto-marked {Count} departed issued tickets as used", issuedDepartedTickets.Count);
     }
 
     private async Task ProcessExpiredChangeFlightAwaitingPaymentsAsync(DateTime nowUtc)

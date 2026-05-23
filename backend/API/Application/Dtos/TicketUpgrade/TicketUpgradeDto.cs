@@ -52,4 +52,9 @@ public class TicketUpgradePaymentResponseDto
 {
     public int RequestId { get; set; }
     public PaymentResponse Payment { get; set; } = null!;
+    // Backward-compatible fields for FE still reading root-level payment info.
+    public int? PaymentId { get; set; }
+    public string? PaymentUrl { get; set; }
+    public string? QrCode { get; set; }
+    public decimal Amount { get; set; }
 }

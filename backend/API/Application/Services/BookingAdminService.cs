@@ -120,6 +120,26 @@ public class BookingAdminService : IBookingAdminService
                     throw new ValidationException("Only pending or confirmed bookings can be cancelled");
                 }
 
+                var outboundFlight = await _flightRepository.GetByIdAsync(booking.OutboundFlightId);
+                if (outboundFlight == null || outboundFlight.IsDeleted)
+                {
+                    throw new ValidationException("Outbound flight is invalid");
+                }
+
+                if (outboundFlight.DepartureTime <= DateTime.UtcNow)
+                {
+                    throw new ValidationException("Flight has departed. Booking changes are no longer allowed.");
+                }
+
+                if (booking.ReturnFlightId.HasValue)
+                {
+                    var returnFlight = await _flightRepository.GetByIdAsync(booking.ReturnFlightId.Value);
+                    if (returnFlight != null && !returnFlight.IsDeleted && returnFlight.DepartureTime <= DateTime.UtcNow)
+                    {
+                        throw new ValidationException("Flight has departed. Booking changes are no longer allowed.");
+                    }
+                }
+
                 var previousStatus = booking.Status;
 
                 var passengers = await _unitOfWork.BookingPassengers.GetByBookingIdAsync(bookingId);

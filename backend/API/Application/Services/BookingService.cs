@@ -589,6 +589,8 @@ public class BookingService : IBookingService
                 throw new ValidationException("Only pending, confirmed, or partially cancelled bookings can be cancelled");
             }
 
+            await EnsureBookingChangeAllowedAsync(booking.Id);
+
             if (booking.Status == (int)BookingStatus.Confirmed)
             {
                 var flight = await _unitOfWork.Flights.GetByIdAsync(booking.OutboundFlightId);
@@ -731,6 +733,8 @@ public class BookingService : IBookingService
             {
                 throw new ValidationException("Can only update pending bookings");
             }
+
+            await EnsureBookingChangeAllowedAsync(booking.Id);
 
             if (dto.Passengers != null && dto.Passengers.Any())
             {
@@ -1139,6 +1143,10 @@ public class BookingService : IBookingService
         if (requirePending && booking.Status != (int)BookingStatus.Pending)
         {
             throw new ValidationException("Can only modify services for pending bookings");
+        }
+        if (requirePending)
+        {
+            await EnsureBookingChangeAllowedAsync(bookingId);
         }
 
         var passenger = await _unitOfWork.BookingPassengers.GetByIdAsync(passengerId);
@@ -1870,6 +1878,8 @@ public class BookingService : IBookingService
             throw new ValidationException("Booking status does not allow flight change");
         }
 
+        await EnsureBookingChangeAllowedAsync(booking.Id);
+
         var leg = await _dbContext.BookingLegs.FirstOrDefaultAsync(l =>
             !l.IsDeleted && l.BookingId == bookingId && l.LegType == legType);
         if (leg == null)
@@ -1974,6 +1984,8 @@ public class BookingService : IBookingService
             throw new ValidationException("Booking status does not allow flight change");
         }
 
+        await EnsureBookingChangeAllowedAsync(booking.Id);
+
         var leg = await _dbContext.BookingLegs.FirstOrDefaultAsync(l =>
             !l.IsDeleted && l.BookingId == bookingId && l.LegType == dto.LegType);
         if (leg == null)
@@ -2055,6 +2067,8 @@ public class BookingService : IBookingService
             {
                 throw new NotFoundException("Booking not found");
             }
+
+            await EnsureBookingChangeAllowedAsync(booking.Id);
 
             var leg = await _dbContext.BookingLegs.FirstOrDefaultAsync(l =>
                 !l.IsDeleted && l.BookingId == bookingId && l.LegType == dto.LegType);
@@ -2259,80 +2273,72 @@ public class BookingService : IBookingService
 
     public async Task<bool> ProcessChangeFlightPaymentAsync(int paymentId, string paymentStatus)
     {
-        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        var request = await _dbContext.BookingChangeRequests
+            .FirstOrDefaultAsync(r => !r.IsDeleted && r.PaymentId == paymentId);
+        if (request == null)
         {
-            var request = await _dbContext.BookingChangeRequests
-                .FirstOrDefaultAsync(r => !r.IsDeleted && r.PaymentId == paymentId);
-            if (request == null)
-            {
-                return false;
-            }
+            return false;
+        }
 
-            if (request.Status == 2)
-            {
-                return true;
-            }
-
-            if (request.Status != 1)
-            {
-                return false;
-            }
-
-            var isSuccess = IsSuccessfulPaymentStatus(paymentStatus);
-            if (request.CreatedAt < DateTime.UtcNow.AddMinutes(-ChangeFlightPaymentHoldMinutes))
-            {
-                await MarkChangeRequestFailedAndReleaseHoldAsync(request);
-                return false;
-            }
-
-            if (!isSuccess)
-            {
-                await MarkChangeRequestFailedAndReleaseHoldAsync(request);
-                return false;
-            }
-
-            var booking = await _dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == request.BookingId && !b.IsDeleted);
-            var leg = await _dbContext.BookingLegs.FirstOrDefaultAsync(l =>
-                !l.IsDeleted && l.BookingId == request.BookingId && l.LegType == request.LegType);
-            if (booking == null || leg == null)
-            {
-                request.Status = 3;
-                request.UpdatedAt = DateTime.UtcNow;
-                await _dbContext.SaveChangesAsync();
-                return false;
-            }
-
-            var movableTickets = await _dbContext.Tickets
-                .Where(t => !t.IsDeleted && t.BookingId == request.BookingId && t.FlightId == request.OldFlightId && t.Status == 0)
-                .ToListAsync();
-            if (movableTickets.Count == 0 && leg.FlightId != request.OldFlightId)
-            {
-                movableTickets = await _dbContext.Tickets
-                    .Where(t => !t.IsDeleted && t.BookingId == request.BookingId && t.FlightId == leg.FlightId && t.Status == 0)
-                    .ToListAsync();
-            }
-            if (movableTickets.Count == 0)
-            {
-                request.Status = 3;
-                request.UpdatedAt = DateTime.UtcNow;
-                await _dbContext.SaveChangesAsync();
-                return false;
-            }
-
-            var seatsToMove = await CountSeatConsumerTicketsAsync(movableTickets);
-            await ApplyCompletedChangeAsync(
-                request,
-                booking,
-                leg,
-                movableTickets,
-                request.NewAmount - request.OldAmount,
-                request.NewFlightId,
-                seatsAlreadyHeld: true,
-                seatCount: seatsToMove);
-
-            await _dbContext.SaveChangesAsync();
+        var isSuccess = IsSuccessfulPaymentStatus(paymentStatus);
+        if (request.Status == 2)
+        {
             return true;
-        });
+        }
+
+        if (request.Status != 1 && !(request.Status == 3 && isSuccess))
+        {
+            return false;
+        }
+
+        if (!isSuccess)
+        {
+            await MarkChangeRequestFailedAndReleaseHoldAsync(request);
+            return false;
+        }
+        var requestExpired = request.CreatedAt < DateTime.UtcNow.AddMinutes(-ChangeFlightPaymentHoldMinutes);
+
+        var booking = await _dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == request.BookingId && !b.IsDeleted);
+        var leg = await _dbContext.BookingLegs.FirstOrDefaultAsync(l =>
+            !l.IsDeleted && l.BookingId == request.BookingId && l.LegType == request.LegType);
+        if (booking == null || leg == null)
+        {
+            request.Status = 3;
+            request.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync();
+            return false;
+        }
+
+        var movableTickets = await _dbContext.Tickets
+            .Where(t => !t.IsDeleted && t.BookingId == request.BookingId && t.FlightId == request.OldFlightId && t.Status == 0)
+            .ToListAsync();
+        if (movableTickets.Count == 0 && leg.FlightId != request.OldFlightId)
+        {
+            movableTickets = await _dbContext.Tickets
+                .Where(t => !t.IsDeleted && t.BookingId == request.BookingId && t.FlightId == leg.FlightId && t.Status == 0)
+                .ToListAsync();
+        }
+        if (movableTickets.Count == 0)
+        {
+            request.Status = 3;
+            request.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync();
+            return false;
+        }
+
+        var seatsToMove = await CountSeatConsumerTicketsAsync(movableTickets);
+        await ApplyCompletedChangeAsync(
+            request,
+            booking,
+            leg,
+            movableTickets,
+            request.NewAmount - request.OldAmount,
+            request.NewFlightId,
+            seatsAlreadyHeld: !requestExpired,
+            seatCount: seatsToMove);
+
+        await _dbContext.SaveChangesAsync();
+        return true;
     }
 
     private async Task ApplyCompletedChangeAsync(
@@ -2707,6 +2713,8 @@ public class BookingService : IBookingService
                 throw new NotFoundException("Ticket not found in booking");
             }
 
+            await EnsureTicketChangeAllowedAsync(ticket.FlightId);
+
             if (ticket.Status == 1)
             {
                 return false;
@@ -2758,6 +2766,8 @@ public class BookingService : IBookingService
             {
                 throw new NotFoundException("Ticket not found in booking");
             }
+
+            await EnsureTicketChangeAllowedAsync(ticket.FlightId);
 
             if (ticket.Status == 4 || ticket.Status == 5 || ticket.Status == 3)
             {
@@ -2872,6 +2882,38 @@ public class BookingService : IBookingService
             postCommit.RefundAmount);
 
         return true;
+    }
+
+    private async Task EnsureBookingChangeAllowedAsync(int bookingId)
+    {
+        var now = DateTime.UtcNow;
+        var departedLegExists = await _dbContext.BookingLegs
+            .Where(l => !l.IsDeleted && l.BookingId == bookingId)
+            .Join(
+                _dbContext.Flights.Where(f => !f.IsDeleted),
+                leg => leg.FlightId,
+                flight => flight.Id,
+                (leg, flight) => flight.DepartureTime)
+            .AnyAsync(departureTime => departureTime <= now);
+
+        if (departedLegExists)
+        {
+            throw new ValidationException("Flight has departed. Booking changes are no longer allowed.");
+        }
+    }
+
+    private async Task EnsureTicketChangeAllowedAsync(int flightId)
+    {
+        var flight = await _unitOfWork.Flights.GetByIdAsync(flightId);
+        if (flight == null || flight.IsDeleted)
+        {
+            throw new ValidationException("Flight is invalid");
+        }
+
+        if (flight.DepartureTime <= DateTime.UtcNow)
+        {
+            throw new ValidationException("Flight has departed. Booking changes are no longer allowed.");
+        }
     }
 
     private async Task NotifyBookingCancelledAsync(int bookingId, string reason)

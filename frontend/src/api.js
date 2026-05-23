@@ -268,44 +268,51 @@ export const getPaymentStatus = (paymentId) => {
   return makeRequest(`/Payments/${paymentId}`)
 }
 
-export const login = (email, password) => {
-  return makeRequest('/Users/login', {
+export const login = (email, password) =>
+  makeRequest('/Users/login', {
     method: 'POST',
-    body: JSON.stringify({
-      email,
-      password,
-    }),
+    body: JSON.stringify({ email, password }),
   })
-}
 
-export const registerAccount = ({ email, password, fullName, phone }) => {
-  return makeRequest('/Users/register', {
+export const registerAccount = ({ email, password, fullName, phone }) =>
+  makeRequest('/Users/register', {
     method: 'POST',
-    body: JSON.stringify({
-      email,
-      password,
-      fullName,
-      phone,
-    }),
+    body: JSON.stringify({ email, password, fullName, phone }),
   })
-}
 
-export const getFlightDefinitions = (activeOnly = true) => {
-  return makeRequest(`/admin/flight-definitions?activeOnly=${activeOnly}`)
-}
+/**
+ * Yêu cầu đặt lại mật khẩu — gửi email có chứa OTP/link reset
+ * POST /api/v1/Users/forgot-password
+ */
+export const forgotPassword = (email) =>
+  makeRequest('/Users/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+
+/**
+ * Đặt lại mật khẩu bằng code đã nhận qua email
+ * POST /api/v1/Users/reset-password
+ */
+export const resetPassword = (code, newPassword) =>
+  makeRequest('/Users/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ code, newPassword }),
+  })
 
 export const getAircrafts = () => {
   console.log('🔍 Fetching aircrafts from /admin/aircraft...')
   return makeRequest('/admin/aircraft?page=1&pageSize=100&includeDeleted=false')
 }
 
-export const getFlightTemplates = () => {
-  return makeRequest('/admin/flight-templates')
-}
+export const getFlightDefinitions = (activeOnly = true) =>
+  makeRequest(`/admin/flight-definitions?activeOnly=${activeOnly}`)
 
-export const getFlightScheduleTemplate = (templateId) => {
-  return makeRequest(`/admin/flight-templates/${templateId}`)
-}
+export const getFlightTemplates = () =>
+  makeRequest('/admin/flight-templates')
+
+export const getFlightScheduleTemplate = (templateId) =>
+  makeRequest(`/admin/flight-templates/${templateId}`)
 
 export const createFlightTemplate = (templateData) => {
   console.log('📤 Sending template data to API:', JSON.stringify(templateData, null, 2))
