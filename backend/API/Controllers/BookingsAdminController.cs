@@ -1,11 +1,13 @@
 namespace API.Controllers;
 
 using API.Application.Dtos.Admin;
+using API.Application.Dtos.Booking;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 [ApiController]
 [Route("api/v1/admin/[controller]")]
@@ -13,13 +15,16 @@ using Microsoft.AspNetCore.Mvc;
 public class BookingsAdminController : ControllerBase
 {
     private readonly IBookingAdminService _bookingService;
+    private readonly IBookingService _bookingUserService;
     private readonly ILogger<BookingsAdminController> _logger;
 
     public BookingsAdminController(
         IBookingAdminService bookingService,
+        IBookingService bookingUserService,
         ILogger<BookingsAdminController> logger)
     {
         _bookingService = bookingService;
+        _bookingUserService = bookingUserService;
         _logger = logger;
     }
 
@@ -90,6 +95,79 @@ public class BookingsAdminController : ControllerBase
         {
             _logger.LogError(ex, "Error cancelling booking");
             return StatusCode(500, new { message = "Error cancelling booking" });
+        }
+    }
+
+    [HttpPost("{bookingId}/tickets/{ticketId}/cancel")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CancelTicketAsync(
+        int bookingId,
+        int ticketId,
+        [FromBody] CancelTicketDto cancellationRequest)
+    {
+        try
+        {
+            var adminUserIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            int? adminUserId = null;
+            if (int.TryParse(adminUserIdClaim, out var parsedAdminId))
+            {
+                adminUserId = parsedAdminId;
+            }
+
+            var reason = string.IsNullOrWhiteSpace(cancellationRequest?.Reason)
+                ? "Admin operation"
+                : cancellationRequest.Reason.Trim();
+
+            var success = await _bookingUserService.CancelTicketByAdminAsync(bookingId, ticketId, adminUserId, reason);
+            return success ? Ok(new { message = "Ticket cancelled successfully" }) : Ok(new { message = "Ticket already cancelled" });
+        }
+        catch (ValidationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling ticket");
+            return StatusCode(500, new { message = "Error cancelling ticket" });
+        }
+    }
+
+    [HttpPost("{bookingId}/tickets/{ticketId}/checkin")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CheckInTicketAsync(int bookingId, int ticketId)
+    {
+        try
+        {
+            var adminUserIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            int? adminUserId = null;
+            if (int.TryParse(adminUserIdClaim, out var parsedAdminId))
+            {
+                adminUserId = parsedAdminId;
+            }
+
+            var success = await _bookingUserService.CheckInTicketByAdminAsync(bookingId, ticketId, adminUserId);
+            return success ? Ok(new { message = "Ticket checked in successfully" }) : Ok(new { message = "Ticket already checked in" });
+        }
+        catch (ValidationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking in ticket");
+            return StatusCode(500, new { message = "Error checking in ticket" });
         }
     }
 

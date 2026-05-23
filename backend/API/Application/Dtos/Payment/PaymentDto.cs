@@ -15,7 +15,7 @@ public class PaymentResponse
 
     public int BookingId { get; set; }
 
-    public string Status { get; set; } = null!; // Pending, Completed, Failed, Refunded
+    public string Status { get; set; } = null!; // Pending, Completed, Failed, Refunded, RefundFailed, PendingRefund, PartialRefunded
 
     public decimal Amount { get; set; }
 

@@ -14,7 +14,7 @@ public class Payment
 
     public string Currency { get; set; } = "VND";
 
-    public int Status { get; set; } = 0; // 0=Pending, 1=Completed, 2=Failed, 3=Refunded
+    public int Status { get; set; } = 0; // 0=Pending, 1=Completed, 2=Failed, 3=Refunded, 4=RefundFailed, 5=PendingRefund, 6=PartialRefunded
 
     public string? TransactionRef { get; set; }
 
@@ -42,7 +42,7 @@ public class Payment
     // Navigation properties
     public virtual Booking Booking { get; set; } = null!;
 
-    public virtual RefundRequest? RefundRequest { get; set; }
+    public virtual ICollection<RefundRequest> RefundRequests { get; set; } = [];
 
     // Domain methods
     public void MarkAsCompleted(string transactionRef)

@@ -6,9 +6,14 @@ public class Promotion
 
     public string Code { get; set; } = null!;
 
+    public string? Description { get; set; }
+
     public int DiscountType { get; set; } = 0; // 0=PERCENTAGE, 1=FIXED
 
     public decimal DiscountValue { get; set; }
+    public decimal? MaxDiscountAmount { get; set; }
+
+    public decimal MinimumAmount { get; set; } = 0;
 
     public DateTime ValidFrom { get; set; }
 
@@ -21,6 +26,8 @@ public class Promotion
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
 
     // Audit properties
     public int? CreatedBy { get; set; }
@@ -46,9 +53,16 @@ public class Promotion
 
     public decimal CalculateDiscount(decimal amount)
     {
-        return DiscountType == 0
+        var discount = DiscountType == 0
             ? (amount * DiscountValue) / 100 // Percentage
             : DiscountValue; // Fixed amount
+
+        if (MaxDiscountAmount.HasValue)
+        {
+            discount = Math.Min(discount, MaxDiscountAmount.Value);
+        }
+
+        return discount;
     }
 
     public bool CanBeUsed() => IsActive && !IsDeleted && IsAvailable();

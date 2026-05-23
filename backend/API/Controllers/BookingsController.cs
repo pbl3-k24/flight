@@ -230,6 +230,266 @@ public class BookingsController : ControllerBase
             return StatusCode(500, new { message = "An error occurred while cancelling booking" });
         }
     }
+
+    [HttpPost("{bookingId}/tickets/{ticketId}/cancel")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CancelTicketAsync(
+        int bookingId,
+        int ticketId,
+        [FromBody] CancelTicketDto cancellationRequest)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user context" });
+            }
+
+            var reason = string.IsNullOrWhiteSpace(cancellationRequest?.Reason)
+                ? "Customer request"
+                : cancellationRequest.Reason.Trim();
+
+            var success = await _bookingService.CancelTicketAsync(bookingId, ticketId, userId, reason);
+            return success ? Ok(new { message = "Ticket cancelled successfully" }) : Ok(new { message = "Ticket already cancelled" });
+        }
+        catch (ValidationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling ticket {TicketId} in booking {BookingId}", ticketId, bookingId);
+            return StatusCode(500, new { message = "An error occurred while cancelling ticket" });
+        }
+    }
+
+    [HttpGet("{bookingId}/disruption-options")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<List<FlightDisruptionOptionResponse>>> GetDisruptionOptionsAsync(
+        int bookingId,
+        [FromQuery] DateOnly? departureDate = null)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user context" });
+            }
+
+            var response = await _bookingService.GetFlightDisruptionOptionsAsync(bookingId, userId, departureDate);
+            return Ok(response);
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting disruption options for booking {BookingId}", bookingId);
+            return StatusCode(500, new { message = "An error occurred while retrieving disruption options" });
+        }
+    }
+
+    [HttpPost("{bookingId}/disruption-decisions/cancel")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChooseDisruptionCancelAsync(int bookingId, [FromQuery] int decisionId)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user context" });
+            }
+
+            var success = await _bookingService.ChooseDisruptionCancelAsync(bookingId, decisionId, userId);
+            return success ? Ok(new { message = "Disruption cancellation selected" }) : BadRequest();
+        }
+        catch (ValidationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error selecting cancellation for booking {BookingId}", bookingId);
+            return StatusCode(500, new { message = "An error occurred while selecting cancellation" });
+        }
+    }
+
+    [HttpPost("{bookingId}/disruption-decisions/rebook")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChooseDisruptionRebookAsync(int bookingId, [FromBody] RebookDisruptionDecisionDto dto)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user context" });
+            }
+
+            var success = await _bookingService.ChooseDisruptionRebookAsync(bookingId, userId, dto);
+            return success ? Ok(new { message = "Disruption rebook selected" }) : BadRequest();
+        }
+        catch (ValidationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error selecting rebook for booking {BookingId}", bookingId);
+            return StatusCode(500, new { message = "An error occurred while selecting rebook" });
+        }
+    }
+
+    [HttpGet("{bookingId}/change-options")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ChangeFlightOptionResponse>> GetChangeFlightOptionsAsync(
+        int bookingId,
+        [FromQuery] int legType,
+        [FromQuery] DateOnly? departureDate = null)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user context" });
+            }
+
+            var response = await _bookingService.GetChangeFlightOptionsAsync(bookingId, userId, legType, departureDate);
+            return Ok(response);
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting change options for booking {BookingId}", bookingId);
+            return StatusCode(500, new { message = "An error occurred while retrieving change options" });
+        }
+    }
+
+    [HttpPost("{bookingId}/change-quote")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ChangeFlightQuoteResponseDto>> GetChangeFlightQuoteAsync(
+        int bookingId,
+        [FromBody] ChangeFlightQuoteRequestDto dto)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user context" });
+            }
+
+            var response = await _bookingService.GetChangeFlightQuoteAsync(bookingId, userId, dto);
+            return Ok(response);
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting change quote for booking {BookingId}", bookingId);
+            return StatusCode(500, new { message = "An error occurred while quoting flight change" });
+        }
+    }
+
+    [HttpPost("{bookingId}/change-confirm")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<ConfirmChangeFlightResponseDto>> ConfirmChangeFlightAsync(
+        int bookingId,
+        [FromBody] ConfirmChangeFlightRequestDto dto)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+            {
+                return Unauthorized(new { message = "Invalid user context" });
+            }
+
+            var response = await _bookingService.ConfirmChangeFlightAsync(bookingId, userId, dto);
+            return Ok(response);
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error confirming flight change for booking {BookingId}", bookingId);
+            return StatusCode(500, new { message = "An error occurred while confirming flight change" });
+        }
+    }
 }
 
 public class CancellationRequest

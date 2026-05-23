@@ -4,6 +4,7 @@ using API.Application.Dtos.Refund;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Application.Services;
+using API.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
@@ -75,8 +76,15 @@ public class RefundsController : ControllerBase
     {
         try
         {
-            var response = await _refundService.GetRefundStatusAsync(refundId);
+            var userId = User.GetUserIdOrThrow();
+            var isAdmin = User.IsInRole("Admin");
+
+            var response = await _refundService.GetRefundStatusAsync(refundId, userId, isAdmin);
             return Ok(response);
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
         }
         catch (NotFoundException ex)
         {
@@ -98,8 +106,19 @@ public class RefundsController : ControllerBase
     {
         try
         {
-            var response = await _refundService.GetRefundHistoryAsync(bookingId);
+            var userId = User.GetUserIdOrThrow();
+            var isAdmin = User.IsInRole("Admin");
+
+            var response = await _refundService.GetRefundHistoryAsync(bookingId, userId, isAdmin);
             return Ok(response);
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
         }
         catch (Exception ex)
         {

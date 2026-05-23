@@ -58,9 +58,9 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
             .HasForeignKey(p => p.BookingId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne(p => p.RefundRequest)
+        builder.HasMany(p => p.RefundRequests)
             .WithOne(rr => rr.Payment)
-            .HasForeignKey<RefundRequest>(rr => rr.PaymentId)
+            .HasForeignKey(rr => rr.PaymentId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // Add CHECK constraints
@@ -70,7 +70,7 @@ public class PaymentConfiguration : IEntityTypeConfiguration<Payment>
 
         builder.HasCheckConstraint(
             "CK_Payment_Status_Valid",
-            "\"Status\" IN (0, 1, 2, 3, 4)");
+            "\"Status\" IN (0, 1, 2, 3, 4, 5, 6)");
 
         builder.ToTable("Payments");
     }

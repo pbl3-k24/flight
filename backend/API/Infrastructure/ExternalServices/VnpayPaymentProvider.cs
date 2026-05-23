@@ -150,7 +150,9 @@ public class VnpayPaymentProvider : IPaymentProvider
         }
 
         var expectedSignature = CreateHmacSha512(hashSecret, data);
-        return Task.FromResult(FixedTimeEquals(signature, expectedSignature));
+        return Task.FromResult(FixedTimeEquals(
+            signature.Trim().ToLowerInvariant(),
+            expectedSignature.Trim().ToLowerInvariant()));
     }
 
     public Task<string> GetPaymentStatusAsync(string transactionId)

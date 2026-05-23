@@ -39,9 +39,11 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
         builder.HasIndex(t => t.Status);
 
         builder.HasOne(t => t.BookingPassenger)
-            .WithOne(bp => bp.Ticket)
-            .HasForeignKey<Ticket>(t => t.BookingPassengerId)
+            .WithMany(bp => bp.Tickets)
+            .HasForeignKey(t => t.BookingPassengerId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(t => t.BookingPassengerId);
 
         builder.HasOne(t => t.ReplacedByTicket)
             .WithMany()
@@ -49,6 +51,10 @@ public class TicketConfiguration : IEntityTypeConfiguration<Ticket>
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasIndex(t => t.ReplacedByTicketId);
+
+        builder.HasCheckConstraint(
+            "CK_Ticket_Status_Valid",
+            "\"Status\" IN (0, 1, 2, 3, 4, 5)");
 
         builder.ToTable("Tickets");
     }

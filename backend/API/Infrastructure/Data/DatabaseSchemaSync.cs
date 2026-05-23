@@ -132,6 +132,95 @@ public static class DatabaseSchemaSync
             ALTER TABLE ""FlightDefinitions""
                 DROP COLUMN IF EXISTS ""OperatingDays"";
         ");
+
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name = 'Promotions'
+                ) THEN
+                    ALTER TABLE ""Promotions""
+                        DROP CONSTRAINT IF EXISTS ""CK_Promotion_DiscountType_Valid"",
+                        DROP CONSTRAINT IF EXISTS ""CK_Promotion_Percentage_Max100"",
+                        DROP CONSTRAINT IF EXISTS ""CK_Promotion_MinimumAmount_NonNegative"",
+                        DROP CONSTRAINT IF EXISTS ""CK_Promotion_ValidDateRange"";
+
+                    ALTER TABLE ""Promotions""
+                        ADD CONSTRAINT ""CK_Promotion_DiscountType_Valid""
+                            CHECK (""DiscountType"" IN (0, 1)),
+                        ADD CONSTRAINT ""CK_Promotion_Percentage_Max100""
+                            CHECK (""DiscountType"" <> 0 OR ""DiscountValue"" <= 100),
+                        ADD CONSTRAINT ""CK_Promotion_MinimumAmount_NonNegative""
+                            CHECK (""MinimumAmount"" >= 0),
+                        ADD CONSTRAINT ""CK_Promotion_ValidDateRange""
+                            CHECK (""ValidFrom"" < ""ValidTo"");
+                END IF;
+            END $$;
+        ");
+
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name = 'FlightDisruptionDecisions'
+                ) THEN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'FK_FlightDisruptionDecisions_Bookings_BookingId'
+                    ) THEN
+                        ALTER TABLE ""FlightDisruptionDecisions""
+                            ADD CONSTRAINT ""FK_FlightDisruptionDecisions_Bookings_BookingId""
+                            FOREIGN KEY (""BookingId"") REFERENCES ""Bookings"" (""Id"") ON DELETE CASCADE;
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'FK_FlightDisruptionDecisions_Users_UserId'
+                    ) THEN
+                        ALTER TABLE ""FlightDisruptionDecisions""
+                            ADD CONSTRAINT ""FK_FlightDisruptionDecisions_Users_UserId""
+                            FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE RESTRICT;
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'FK_FlightDisruptionDecisions_Flights_AffectedFlightId'
+                    ) THEN
+                        ALTER TABLE ""FlightDisruptionDecisions""
+                            ADD CONSTRAINT ""FK_FlightDisruptionDecisions_Flights_AffectedFlightId""
+                            FOREIGN KEY (""AffectedFlightId"") REFERENCES ""Flights"" (""Id"") ON DELETE RESTRICT;
+                    END IF;
+
+                    IF NOT EXISTS (
+                        SELECT 1 FROM pg_constraint
+                        WHERE conname = 'FK_FlightDisruptionDecisions_Flights_NewFlightId'
+                    ) THEN
+                        ALTER TABLE ""FlightDisruptionDecisions""
+                            ADD CONSTRAINT ""FK_FlightDisruptionDecisions_Flights_NewFlightId""
+                            FOREIGN KEY (""NewFlightId"") REFERENCES ""Flights"" (""Id"") ON DELETE RESTRICT;
+                    END IF;
+                END IF;
+            END $$;
+        ");
+
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            CREATE UNIQUE INDEX IF NOT EXISTS ""IX_FlightDisruptionDecisions_BookingId_AffectedFlightId_LegType""
+            ON ""FlightDisruptionDecisions"" (""BookingId"", ""AffectedFlightId"", ""LegType"");
+        ");
+
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            CREATE INDEX IF NOT EXISTS ""IX_FlightDisruptionDecisions_UserId_Status""
+            ON ""FlightDisruptionDecisions"" (""UserId"", ""Status"");
+        ");
+
+        await dbContext.Database.ExecuteSqlRawAsync(@"
+            CREATE INDEX IF NOT EXISTS ""IX_FlightDisruptionDecisions_DecisionDeadline""
+            ON ""FlightDisruptionDecisions"" (""DecisionDeadline"");
+        ");
     }
 
     private static async Task<HashSet<string>> GetExistingTablesAsync(System.Data.Common.DbConnection connection)
@@ -334,18 +423,19 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
             {
                 ["Id"] = "integer NOT NULL",
                 ["BookingId"] = "integer NOT NULL",
-                ["RequestedAmount"] = "numeric(10,2) NOT NULL",
-                ["ApprovedAmount"] = "numeric(10,2) NULL",
+                ["PaymentId"] = "integer NOT NULL",
+                ["TicketId"] = "integer NULL",
+                ["RefundAmount"] = "numeric(10,2) NOT NULL",
+                ["SourceAmountSnapshot"] = "numeric(10,2) NULL",
                 ["Reason"] = "text NULL",
                 ["Status"] = "integer NOT NULL DEFAULT 0",
-                ["RequestedAt"] = "timestamp with time zone NOT NULL",
+                ["CreatedAt"] = "timestamp with time zone NOT NULL",
                 ["ProcessedAt"] = "timestamp with time zone NULL",
-                ["ProcessedBy"] = "integer NULL",
-                ["RefundMethod"] = "integer NULL",
-                ["RefundTransactionId"] = "varchar(255) NULL",
-                ["Notes"] = "text NULL",
+                ["CreatedBy"] = "integer NULL",
+                ["UpdatedBy"] = "integer NULL",
                 ["IsDeleted"] = "boolean NOT NULL DEFAULT FALSE",
-                ["DeletedAt"] = "timestamp with time zone NULL"
+                ["DeletedAt"] = "timestamp with time zone NULL",
+                ["Version"] = "integer NOT NULL DEFAULT 0"
             },
             ["Aircraft"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -424,8 +514,10 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
             {
                 ["Id"] = "integer NOT NULL",
                 ["Code"] = "varchar(50) NOT NULL",
+                ["Description"] = "varchar(1000) NULL",
                 ["DiscountType"] = "integer NOT NULL DEFAULT 0",
                 ["DiscountValue"] = "numeric(10,2) NOT NULL",
+                ["MinimumAmount"] = "numeric(10,2) NOT NULL DEFAULT 0",
                 ["ValidFrom"] = "timestamp with time zone NOT NULL",
                 ["ValidTo"] = "timestamp with time zone NOT NULL",
                 ["UsageLimit"] = "integer NULL",
@@ -434,6 +526,7 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
                 ["CreatedAt"] = "timestamp with time zone NOT NULL",
                 ["CreatedBy"] = "integer NULL",
                 ["UpdatedBy"] = "integer NULL",
+                ["UpdatedAt"] = "timestamp with time zone NULL",
                 ["IsDeleted"] = "boolean NOT NULL DEFAULT FALSE",
                 ["DeletedAt"] = "timestamp with time zone NULL",
                 ["Version"] = "integer NOT NULL DEFAULT 0"
@@ -446,6 +539,23 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
                 ["UserId"] = "integer NOT NULL",
                 ["DiscountAmount"] = "numeric(10,2) NOT NULL",
                 ["UsedAt"] = "timestamp with time zone NOT NULL"
+            },
+            ["NotificationLogs"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Id"] = "integer NOT NULL",
+                ["UserId"] = "integer NOT NULL",
+                ["Email"] = "varchar(255) NULL",
+                ["Title"] = "varchar(200) NOT NULL",
+                ["Content"] = "text NOT NULL",
+                ["Type"] = "varchar(50) NOT NULL",
+                ["Status"] = "integer NOT NULL DEFAULT 0",
+                ["CreatedAt"] = "timestamp with time zone NOT NULL",
+                ["SentAt"] = "timestamp with time zone NULL",
+                ["IsRead"] = "boolean NOT NULL DEFAULT FALSE",
+                ["ReadAt"] = "timestamp with time zone NULL",
+                ["Category"] = "varchar(50) NOT NULL DEFAULT 'GENERAL'",
+                ["RelatedEntityType"] = "varchar(100) NULL",
+                ["RelatedEntityId"] = "integer NULL"
             },
             ["BookingPassengers"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -500,6 +610,25 @@ CREATE TABLE IF NOT EXISTS ""{tableName}"" (
                 ["IsActive"] = "boolean NOT NULL DEFAULT TRUE",
                 ["CreatedAt"] = "timestamp with time zone NOT NULL",
                 ["UpdatedAt"] = "timestamp with time zone NULL"
+            },
+            ["FlightDisruptionDecisions"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Id"] = "integer NOT NULL",
+                ["BookingId"] = "integer NOT NULL",
+                ["UserId"] = "integer NOT NULL",
+                ["AffectedFlightId"] = "integer NOT NULL",
+                ["LegType"] = "integer NOT NULL DEFAULT 0",
+                ["Status"] = "integer NOT NULL DEFAULT 0",
+                ["DecisionType"] = "integer NOT NULL DEFAULT 0",
+                ["DecisionDeadline"] = "timestamp with time zone NOT NULL",
+                ["DecidedAt"] = "timestamp with time zone NULL",
+                ["NewFlightId"] = "integer NULL",
+                ["Reason"] = "varchar(500) NULL",
+                ["CreatedAt"] = "timestamp with time zone NOT NULL",
+                ["UpdatedAt"] = "timestamp with time zone NOT NULL",
+                ["IsDeleted"] = "boolean NOT NULL DEFAULT FALSE",
+                ["DeletedAt"] = "timestamp with time zone NULL",
+                ["Version"] = "integer NOT NULL DEFAULT 0"
             }
         };
     }

@@ -314,13 +314,14 @@ public class FlightRepository : IFlightRepository
         try
         {
             var turnaround = TimeSpan.FromMinutes(turnaroundMinutes);
+            var newDepartureMinusTurnaround = newDeparture.Subtract(turnaround);
             var newArrivalWithTurnaround = newArrival.Add(turnaround);
 
             return await _context.Flights.AnyAsync(f =>
                 !f.IsDeleted &&
                 f.Status != 1 &&
                 f.AircraftId == aircraftId &&
-                newDeparture < f.ArrivalTime.Add(turnaround) &&
+                newDepartureMinusTurnaround < f.ArrivalTime &&
                 newArrivalWithTurnaround > f.DepartureTime);
         }
         catch (Exception ex)

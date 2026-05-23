@@ -44,6 +44,9 @@ public class CreatePassengerDto
     public string PassportNumber { get; set; } = null!;
 
     public List<PassengerServiceDto>? OptionalServices { get; set; }
+
+    // Optional services for return leg (round-trip only). If null, system falls back to OptionalServices.
+    public List<PassengerServiceDto>? ReturnOptionalServices { get; set; }
 }
 
 public class PassengerServiceDto

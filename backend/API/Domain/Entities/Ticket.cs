@@ -8,7 +8,7 @@ public class Ticket
 
     public string TicketNumber { get; set; } = null!;
 
-    public int Status { get; set; } = 0; // 0=Issued, 1=Used, 2=Refunded, 3=Cancelled
+    public int Status { get; set; } = 0; // 0=Issued, 1=Used, 2=Refunded, 3=Cancelled, 4=CancelledByUser, 5=CancelledByAdmin
 
     public DateTime IssuedAt { get; set; }
 

@@ -10,7 +10,7 @@ public interface IPaymentService
     /// <param name="bookingId">Booking ID</param>
     /// <param name="dto">Payment details</param>
     /// <returns>Payment response with link and QR code</returns>
-    Task<PaymentResponse> InitiatePaymentAsync(int bookingId, InitiatePaymentDto dto);
+    Task<PaymentResponse> InitiatePaymentAsync(int bookingId, InitiatePaymentDto dto, int userId, bool isAdmin = false);
 
     /// <summary>
     /// Processes a payment callback from provider.

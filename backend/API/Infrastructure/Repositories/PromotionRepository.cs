@@ -21,7 +21,8 @@ public class PromotionRepository : IPromotionRepository
     {
         try
         {
-            return await _context.Promotions.FirstOrDefaultAsync(p => p.Code == code);
+            var normalizedCode = code.Trim().ToUpperInvariant();
+            return await _context.Promotions.FirstOrDefaultAsync(p => !p.IsDeleted && p.Code == normalizedCode);
         }
         catch (Exception ex)
         {
@@ -35,7 +36,7 @@ public class PromotionRepository : IPromotionRepository
         try
         {
             return await _context.Promotions
-                .Where(p => p.IsActive && p.ValidFrom <= currentDateTime && p.ValidTo >= currentDateTime)
+                .Where(p => !p.IsDeleted && p.IsActive && p.ValidFrom <= currentDateTime && p.ValidTo >= currentDateTime)
                 .ToListAsync();
         }
         catch (Exception ex)
@@ -49,7 +50,7 @@ public class PromotionRepository : IPromotionRepository
     {
         try
         {
-            return await _context.Promotions.FirstOrDefaultAsync(p => p.Id == id);
+            return await _context.Promotions.FirstOrDefaultAsync(p => !p.IsDeleted && p.Id == id);
         }
         catch (Exception ex)
         {
@@ -99,6 +100,55 @@ public class PromotionRepository : IPromotionRepository
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating promotion");
+            throw;
+        }
+    }
+
+    public async Task<bool> TryReserveUsageAsync(int promotionId)
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var affectedRows = await _context.Promotions
+                .Where(p =>
+                    !p.IsDeleted &&
+                    p.Id == promotionId &&
+                    p.IsActive &&
+                    p.ValidFrom <= now &&
+                    p.ValidTo >= now &&
+                    (!p.UsageLimit.HasValue || p.UsedCount < p.UsageLimit.Value))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(p => p.UsedCount, p => p.UsedCount + 1)
+                    .SetProperty(p => p.UpdatedAt, _ => now));
+
+            return affectedRows == 1;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error reserving promotion usage for id: {Id}", promotionId);
+            throw;
+        }
+    }
+
+    public async Task<bool> ReleaseUsageAsync(int promotionId)
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var affectedRows = await _context.Promotions
+                .Where(p =>
+                    !p.IsDeleted &&
+                    p.Id == promotionId &&
+                    p.UsedCount > 0)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(p => p.UsedCount, p => p.UsedCount - 1)
+                    .SetProperty(p => p.UpdatedAt, _ => now));
+
+            return affectedRows == 1;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error releasing promotion usage for id: {Id}", promotionId);
             throw;
         }
     }

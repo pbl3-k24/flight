@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using API.Application.Dtos.Admin;
 using API.Application.Dtos.Flight;
+using API.Application.Dtos.Logging;
+using API.Application.Dtos.Notification;
 using API.Application.Dtos.Payment;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
@@ -35,12 +37,21 @@ internal sealed class Program
     public static async Task Main()
     {
         await TestCreateFlightCreatesSeatInventories();
+        await TestNotificationServiceSettingsInboxAndReadState();
+        await TestPromotionAdminCreateNormalizesAndPersistsBusinessFields();
+        await TestPromotionAdminRejectsInvalidDiscountAndMinimumAmount();
+        await TestPromotionBroadcastSendsOnlyActiveOptedInUsersAndContinuesAfterUserFailure();
         await TestPaymentSuccessConfirmsBookingAndConvertsSeats();
+        await TestPaymentSuccessRecordsPromotionUsage();
+        await TestPaymentFailureDoesNotRecordPromotionUsage();
         await TestCancelFlightCancelsBookingsQueuesRefundAndSendsEmails();
+        await TestCancelFlightFailureDoesNotCreateNotification();
         await TestPaymentFailedCallbackCancelsBookingAndReleasesHeldSeats();
         await TestPaymentInvalidSignatureDoesNotChangeState();
+        await TestPaymentCallbackAcceptsUppercaseSignatureAndCanonicalAdditionalData();
         await TestFlightSearchValidationErrors();
         await TestAdminCancelBookingQueuesRefundForConfirmedBooking();
+        await TestAdminCancelBookingUpdatesMultipleInventoriesCorrectly();
         await TestAdminCancelBookingRejectsInvalidStatus();
         await TestPassengerServicesFlow_AddUpdateRemove();
         await TestPassengerServices_RejectInfantOptionalService();
@@ -317,13 +328,54 @@ internal sealed class Program
 
     private static API.Application.Services.BookingService BuildBookingServiceForTests(FakeUnitOfWork uow, FlightBookingDbContext db)
     {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>())
+            .Build();
+
         return new API.Application.Services.BookingService(
             uow,
+            new FakePricingService(),
             new FakePromotionService(),
             new FakeBackgroundJobService(),
             db,
             BuildVnpayProvider("test-secret-hash-key-1234567890"),
-            LoggerFactory.Create(_ => { }).CreateLogger<API.Application.Services.BookingService>());
+            LoggerFactory.Create(_ => { }).CreateLogger<API.Application.Services.BookingService>(),
+            configuration);
+    }
+
+    private static NotificationService BuildNotificationService(
+        FakeUserRepository userRepository,
+        FakeNotificationLogRepository notificationLogRepository,
+        FakeEmailService emailService,
+        FakePromotionRepository? promotionRepository = null)
+    {
+        return new NotificationService(
+            emailService,
+            notificationLogRepository,
+            userRepository,
+            promotionRepository ?? new FakePromotionRepository([]),
+            LoggerFactory.Create(_ => { }).CreateLogger<NotificationService>());
+    }
+
+    private static PaymentService BuildPaymentServiceForTests(FakeUnitOfWork uow, FlightBookingDbContext db)
+    {
+        var promotionService = new PromotionService(
+            uow.PromotionRepo,
+            db,
+            LoggerFactory.Create(_ => { }).CreateLogger<PromotionService>());
+
+        return new PaymentService(
+            uow,
+            uow.PaymentRepo,
+            uow.BookingRepo,
+            uow.SeatInventoryRepo,
+            uow.PassengerRepo,
+            new FakeEmailService(),
+            new FakeTicketService(),
+            LoggerFactory.Create(_ => { }).CreateLogger<PaymentService>(),
+            BuildVnpayProvider("test-secret-hash-key-1234567890"),
+            notificationService: null,
+            promotionService);
     }
 
     private static async Task TestCreateFlightCreatesSeatInventories()
@@ -346,11 +398,23 @@ internal sealed class Program
             }
         };
 
+        var flightDefinitionRepo = new FakeFlightDefinitionRepository();
+        var definition = await flightDefinitionRepo.CreateAsync(new FlightDefinition
+        {
+            FlightNumber = "VN123",
+            RouteId = 10,
+            DefaultAircraftId = 20,
+            DepartureTime = new TimeOnly(10, 0),
+            ArrivalTime = new TimeOnly(12, 0),
+            ArrivalOffsetDays = 0,
+            IsActive = true
+        });
+
         var uow = new FakeUnitOfWork
         {
             RoutesRepo = new FakeRouteRepository(route),
             AircraftRepo = new FakeAircraftRepository(aircraft),
-            FlightDefinitionRepo = new FakeFlightDefinitionRepository(),
+            FlightDefinitionRepo = flightDefinitionRepo,
             FlightsRepo = new FakeFlightRepository(),
             SeatInventoryRepo = new FakeSeatInventoryRepository()
         };
@@ -359,15 +423,16 @@ internal sealed class Program
             LoggerFactory.Create(_ => { }).CreateLogger<FlightAdminService>(),
             uow,
             new FakeBackgroundJobService(),
-            new FakeEmailService());
+            new FakeAuditLogService(),
+            new FakeEmailService(),
+            BuildInMemoryDbContext("flight-admin-create-flight"),
+            BuildNotificationService(new FakeUserRepository(), new FakeNotificationLogRepository(), new FakeEmailService()));
 
         var created = await service.CreateFlightAsync(new CreateFlightDto
         {
-            FlightNumber = "VN123",
-            RouteId = 10,
-            AircraftId = 20,
-            DepartureTime = DateTime.UtcNow.AddDays(2),
-            ArrivalTime = DateTime.UtcNow.AddDays(2).AddHours(2),
+            FlightDefinitionId = definition.Id,
+            DepartureDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2)),
+            DepartureTime = new TimeOnly(10, 0),
             IsActive = true
         });
 
@@ -375,6 +440,230 @@ internal sealed class Program
         var inventories = uow.SeatInventoryRepo.Items.Where(x => x.FlightId == created.FlightId).ToList();
         AssertEx.Equal(2, inventories.Count, "CreateFlightAsync should auto-create seat inventories from aircraft templates");
         AssertEx.Equal(140, inventories.Sum(x => x.TotalSeats), "Total seats should match seat template sum");
+    }
+
+    private static async Task TestNotificationServiceSettingsInboxAndReadState()
+    {
+        var user = new User
+        {
+            Id = 7001,
+            Email = "notify@test.com",
+            PasswordHash = "hash",
+            FullName = "Notify User",
+            Status = 0,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var userRepository = new FakeUserRepository([user]);
+        var notificationRepository = new FakeNotificationLogRepository();
+        var emailService = new FakeEmailService();
+        var service = BuildNotificationService(userRepository, notificationRepository, emailService);
+
+        var defaultSettings = await service.GetNotificationSettingsAsync(user.Id);
+        AssertEx.True(!defaultSettings.PromoNotifications, "Default PromoNotifications must be disabled");
+
+        await service.UpdateNotificationSettingsAsync(user.Id, new NotificationSettingsDto
+        {
+            EmailNotifications = true,
+            SmsNotifications = false,
+            PushNotifications = true,
+            BookingConfirmation = true,
+            PaymentReminder = true,
+            RefundNotification = true,
+            PromoNotifications = true
+        });
+
+        var savedSettings = await service.GetNotificationSettingsAsync(user.Id);
+        AssertEx.True(savedSettings.EmailNotifications, "EmailNotifications setting should be persisted");
+        AssertEx.True(savedSettings.PromoNotifications, "PromoNotifications setting should be persisted");
+
+        var sent = await service.SendNotificationAsync(
+            user.Id,
+            "Payment successful",
+            "Payment for booking BK7001 was completed.",
+            type: "IN_APP",
+            category: "PAYMENT",
+            relatedEntityType: "Payment",
+            relatedEntityId: 501,
+            sendEmail: true);
+
+        AssertEx.True(sent, "SendNotificationAsync should return true when inbox log and email succeed");
+        AssertEx.Equal(1, notificationRepository.Items.Count, "One inbox notification should be created");
+        var log = notificationRepository.Items.Single();
+        AssertEx.Equal("PAYMENT", log.Category, "Notification category should be saved");
+        AssertEx.Equal("Payment", log.RelatedEntityType, "Related entity type should be saved");
+        AssertEx.Equal(501, log.RelatedEntityId, "Related entity id should be saved");
+        AssertEx.True(!log.IsRead, "New inbox notification should be unread");
+        AssertEx.Equal(1, emailService.Notifications.Count, "Email should be sent when settings allow it");
+
+        AssertEx.Equal(1, await service.GetUnreadCountAsync(user.Id), "Unread count should include the new notification");
+        var unread = await service.GetUserNotificationsAsync(user.Id, unreadOnly: true, page: 1, pageSize: 20);
+        AssertEx.Equal(1, unread.Count, "Unread-only inbox should return unread notifications");
+        AssertEx.True(!unread[0].IsRead, "Unread response should expose read state");
+
+        var marked = await service.MarkAsReadAsync(user.Id, log.Id);
+        AssertEx.True(marked, "MarkAsReadAsync should return true for owned notification");
+        AssertEx.True(log.IsRead, "Notification log should be marked read");
+        AssertEx.True(log.ReadAt.HasValue, "ReadAt should be set when notification is marked read");
+        AssertEx.Equal(0, await service.GetUnreadCountAsync(user.Id), "Unread count should be zero after marking read");
+
+        await service.SendNotificationAsync(user.Id, "Refund processed", "Refund processed.", category: "REFUND");
+        await service.SendNotificationAsync(user.Id, "Ticket changed", "Ticket changed.", category: "TICKET");
+        AssertEx.Equal(2, await service.GetUnreadCountAsync(user.Id), "Second and third notifications should be unread");
+        var markedAll = await service.MarkAllAsReadAsync(user.Id);
+        AssertEx.Equal(2, markedAll, "MarkAllAsReadAsync should return count of changed notifications");
+        AssertEx.Equal(0, await service.GetUnreadCountAsync(user.Id), "Unread count should be zero after mark-all");
+    }
+
+    private static async Task TestPromotionBroadcastSendsOnlyActiveOptedInUsersAndContinuesAfterUserFailure()
+    {
+        var activeOptInFails = new User
+        {
+            Id = 7101,
+            Email = "fail@test.com",
+            PasswordHash = "hash",
+            FullName = "Failing User",
+            Status = 0,
+            NotificationPreferences = """{"EmailNotifications":true,"PromoNotifications":true}""",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var activeOptIn = new User
+        {
+            Id = 7102,
+            Email = "promo@test.com",
+            PasswordHash = "hash",
+            FullName = "Promo User",
+            Status = 0,
+            NotificationPreferences = """{"EmailNotifications":true,"PromoNotifications":true}""",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var activeOptOut = new User
+        {
+            Id = 7103,
+            Email = "optout@test.com",
+            PasswordHash = "hash",
+            FullName = "Opt Out",
+            Status = 0,
+            NotificationPreferences = """{"EmailNotifications":true,"PromoNotifications":false}""",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var inactiveOptIn = new User
+        {
+            Id = 7104,
+            Email = "inactive@test.com",
+            PasswordHash = "hash",
+            FullName = "Inactive User",
+            Status = 1,
+            NotificationPreferences = """{"EmailNotifications":true,"PromoNotifications":true}""",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var promotion = new Promotion
+        {
+            Id = 601,
+            Code = "SUMMER26",
+            DiscountType = 0,
+            DiscountValue = 15m,
+            ValidFrom = DateTime.UtcNow.AddDays(-1),
+            ValidTo = DateTime.UtcNow.AddDays(10),
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        var notificationRepository = new FakeNotificationLogRepository { FailForUserId = activeOptInFails.Id };
+        var emailService = new FakeEmailService();
+        var service = BuildNotificationService(
+            new FakeUserRepository([activeOptInFails, activeOptIn, activeOptOut, inactiveOptIn]),
+            notificationRepository,
+            emailService,
+            new FakePromotionRepository([promotion]));
+
+        var broadcast = await service.SendPromotionalNotificationAsync(promotion.Id);
+
+        AssertEx.True(broadcast, "Promotion broadcast should be best-effort and return true when at least one user succeeds");
+        AssertEx.Equal(1, notificationRepository.Items.Count, "Only active promo opt-in users that did not fail should receive a notification");
+        var log = notificationRepository.Items.Single();
+        AssertEx.Equal(activeOptIn.Id, log.UserId, "Opted-in active user should receive promotion notification");
+        AssertEx.Equal("PROMOTION", log.Category, "Promotion notification category should be saved");
+        AssertEx.Equal("Promotion", log.RelatedEntityType, "Promotion related entity type should be saved");
+        AssertEx.Equal(promotion.Id, log.RelatedEntityId, "Promotion related entity id should be saved");
+        AssertEx.Equal(1, emailService.Notifications.Count, "Promotion email should be sent only for successful opt-in user with email enabled");
+    }
+
+    private static async Task TestPromotionAdminCreateNormalizesAndPersistsBusinessFields()
+    {
+        var repository = new FakePromotionRepository([]);
+        var service = new PromotionAdminService(
+            repository,
+            LoggerFactory.Create(_ => { }).CreateLogger<PromotionAdminService>());
+
+        var response = await service.CreatePromotionAsync(new CreatePromotionDto
+        {
+            Code = " sale10 ",
+            Description = "Summer campaign",
+            DiscountType = 0,
+            DiscountValue = 10m,
+            MinimumAmount = 500000m,
+            ValidFrom = DateTime.UtcNow.AddHours(-1),
+            ValidTo = DateTime.UtcNow.AddDays(7)
+        });
+
+        var created = (await repository.GetAllAsync()).Single();
+        AssertEx.Equal("SALE10", created.Code, "Promotion code should be normalized before persistence");
+        AssertEx.Equal("Summer campaign", created.Description, "Promotion description should be persisted");
+        AssertEx.Equal(500000m, created.MinimumAmount, "Minimum amount should be persisted");
+        AssertEx.True(created.UpdatedAt.HasValue, "Create should initialize UpdatedAt");
+        AssertEx.Equal("SALE10", response.Code, "Response should return normalized code");
+        AssertEx.Equal("Summer campaign", response.Description, "Response should return persisted description");
+        AssertEx.Equal(500000m, response.MinimumAmount, "Response should return persisted minimum amount");
+    }
+
+    private static async Task TestPromotionAdminRejectsInvalidDiscountAndMinimumAmount()
+    {
+        var service = new PromotionAdminService(
+            new FakePromotionRepository([]),
+            LoggerFactory.Create(_ => { }).CreateLogger<PromotionAdminService>());
+
+        var rejectedPercentage = false;
+        try
+        {
+            await service.CreatePromotionAsync(new CreatePromotionDto
+            {
+                Code = "BADPCT",
+                DiscountType = 0,
+                DiscountValue = 101m,
+                MinimumAmount = 0m,
+                ValidFrom = DateTime.UtcNow.AddHours(-1),
+                ValidTo = DateTime.UtcNow.AddDays(7)
+            });
+        }
+        catch (ValidationException)
+        {
+            rejectedPercentage = true;
+        }
+
+        var rejectedMinimum = false;
+        try
+        {
+            await service.CreatePromotionAsync(new CreatePromotionDto
+            {
+                Code = "BADMIN",
+                DiscountType = 1,
+                DiscountValue = 10000m,
+                MinimumAmount = -1m,
+                ValidFrom = DateTime.UtcNow.AddHours(-1),
+                ValidTo = DateTime.UtcNow.AddDays(7)
+            });
+        }
+        catch (ValidationException)
+        {
+            rejectedMinimum = true;
+        }
+
+        AssertEx.True(rejectedPercentage, "Percentage promotions above 100 should be rejected");
+        AssertEx.True(rejectedMinimum, "Negative minimum amount should be rejected");
     }
 
     private static async Task TestPaymentSuccessConfirmsBookingAndConvertsSeats()
@@ -465,6 +754,189 @@ internal sealed class Program
         AssertEx.Equal(0, inventory.HeldSeats, "Held seats should be converted");
         AssertEx.Equal(2, inventory.SoldSeats, "Sold seats should increase");
         AssertEx.True(ticketService.CreateCalled, "Ticket creation should be triggered");
+    }
+
+    private static async Task TestPaymentSuccessRecordsPromotionUsage()
+    {
+        var promotion = new Promotion
+        {
+            Id = 12,
+            Code = "PAY10",
+            DiscountType = 0,
+            DiscountValue = 10m,
+            MinimumAmount = 0m,
+            ValidFrom = DateTime.UtcNow.AddDays(-1),
+            ValidTo = DateTime.UtcNow.AddDays(7),
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var booking = new Booking
+        {
+            Id = 12,
+            UserId = 77,
+            BookingCode = "BK0012",
+            OutboundFlightId = 120,
+            Status = (int)BookingStatus.Pending,
+            ContactEmail = "promo@test.com",
+            TotalAmount = 1000000m,
+            DiscountAmount = 100000m,
+            FinalAmount = 900000m,
+            PromotionId = promotion.Id,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var payment = new Payment
+        {
+            Id = 12,
+            BookingId = booking.Id,
+            Provider = "VNPAY",
+            Method = "VNPAY",
+            Amount = 900000m,
+            Status = (int)PaymentStatus.Pending,
+            TransactionRef = "TXN-PROMO-SUCCESS",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var inventory = new FlightSeatInventory
+        {
+            Id = 120,
+            FlightId = 120,
+            SeatClassId = 1,
+            TotalSeats = 10,
+            AvailableSeats = 9,
+            HeldSeats = 1,
+            SoldSeats = 0,
+            BasePrice = 1000000m,
+            CurrentPrice = 1000000m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var passengers = new List<BookingPassenger>
+        {
+            new() { Id = 12, BookingId = booking.Id, FirstName = "Promo", LastName = "User", FullName = "Promo User", Email = "promo@test.com", Phone = "1", FlightSeatInventoryId = inventory.Id }
+        };
+        var db = BuildInMemoryDbContext(nameof(TestPaymentSuccessRecordsPromotionUsage));
+        db.Promotions.Add(promotion);
+        await db.SaveChangesAsync();
+
+        var uow = new FakeUnitOfWork
+        {
+            BookingRepo = new FakeBookingRepository(booking),
+            PaymentRepo = new FakePaymentRepository(payment),
+            SeatInventoryRepo = new FakeSeatInventoryRepository(inventory),
+            PassengerRepo = new FakeBookingPassengerRepository(passengers),
+            PromotionRepo = new FakePromotionRepository([promotion])
+        };
+
+        var service = BuildPaymentServiceForTests(uow, db);
+        var rawData = "amount=900000&status=success&transactionId=TXN-PROMO-SUCCESS";
+
+        var ok = await service.ProcessPaymentAsync(payment.Id, new PaymentCallbackDto
+        {
+            TransactionId = "TXN-PROMO-SUCCESS",
+            Status = "success",
+            Amount = 900000m,
+            RawData = rawData,
+            Signature = CreateHmacSha512("test-secret-hash-key-1234567890", rawData)
+        });
+
+        AssertEx.True(ok, "Promotion payment callback should succeed");
+        AssertEx.Equal(1, promotion.UsedCount, "Promotion usage count should increase only after payment success");
+        AssertEx.Equal(1, db.PromotionUsages.Count(), "Payment success should create one PromotionUsage");
+        var usage = db.PromotionUsages.Single();
+        AssertEx.Equal(booking.Id, usage.BookingId, "Usage should reference paid booking");
+        AssertEx.Equal(booking.UserId, usage.UserId, "Usage should reference booking user");
+    }
+
+    private static async Task TestPaymentFailureDoesNotRecordPromotionUsage()
+    {
+        var promotion = new Promotion
+        {
+            Id = 13,
+            Code = "FAIL10",
+            DiscountType = 0,
+            DiscountValue = 10m,
+            MinimumAmount = 0m,
+            ValidFrom = DateTime.UtcNow.AddDays(-1),
+            ValidTo = DateTime.UtcNow.AddDays(7),
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var booking = new Booking
+        {
+            Id = 13,
+            UserId = 78,
+            BookingCode = "BK0013",
+            OutboundFlightId = 130,
+            Status = (int)BookingStatus.Pending,
+            ContactEmail = "fail@test.com",
+            TotalAmount = 1000000m,
+            DiscountAmount = 100000m,
+            FinalAmount = 900000m,
+            PromotionId = promotion.Id,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var payment = new Payment
+        {
+            Id = 13,
+            BookingId = booking.Id,
+            Provider = "VNPAY",
+            Method = "VNPAY",
+            Amount = 900000m,
+            Status = (int)PaymentStatus.Pending,
+            TransactionRef = "TXN-PROMO-FAIL",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var inventory = new FlightSeatInventory
+        {
+            Id = 130,
+            FlightId = 130,
+            SeatClassId = 1,
+            TotalSeats = 10,
+            AvailableSeats = 9,
+            HeldSeats = 1,
+            SoldSeats = 0,
+            BasePrice = 1000000m,
+            CurrentPrice = 1000000m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var passengers = new List<BookingPassenger>
+        {
+            new() { Id = 13, BookingId = booking.Id, FirstName = "Fail", LastName = "User", FullName = "Fail User", Email = "fail@test.com", Phone = "1", FlightSeatInventoryId = inventory.Id }
+        };
+        var db = BuildInMemoryDbContext(nameof(TestPaymentFailureDoesNotRecordPromotionUsage));
+        db.Promotions.Add(promotion);
+        await db.SaveChangesAsync();
+
+        var uow = new FakeUnitOfWork
+        {
+            BookingRepo = new FakeBookingRepository(booking),
+            PaymentRepo = new FakePaymentRepository(payment),
+            SeatInventoryRepo = new FakeSeatInventoryRepository(inventory),
+            PassengerRepo = new FakeBookingPassengerRepository(passengers),
+            PromotionRepo = new FakePromotionRepository([promotion])
+        };
+
+        var service = BuildPaymentServiceForTests(uow, db);
+        var rawData = "amount=900000&status=failed&transactionId=TXN-PROMO-FAIL";
+
+        var ok = await service.ProcessPaymentAsync(payment.Id, new PaymentCallbackDto
+        {
+            TransactionId = "TXN-PROMO-FAIL",
+            Status = "failed",
+            Amount = 900000m,
+            RawData = rawData,
+            Signature = CreateHmacSha512("test-secret-hash-key-1234567890", rawData)
+        });
+
+        AssertEx.True(!ok, "Failed promotion payment callback should return false");
+        AssertEx.Equal(0, promotion.UsedCount, "Payment failure should not consume promotion usage");
+        AssertEx.Equal(0, db.PromotionUsages.Count(), "Payment failure should not create PromotionUsage");
     }
 
     private static VnpayPaymentProvider BuildVnpayProvider(string hashSecret)
@@ -600,11 +1072,42 @@ internal sealed class Program
 
         var backgroundJobs = new FakeBackgroundJobService();
         var emailService = new FakeEmailService();
+        var notificationRepository = new FakeNotificationLogRepository();
+        var notificationService = BuildNotificationService(
+            new FakeUserRepository([
+                new User
+                {
+                    Id = bookingPaid.UserId,
+                    Email = bookingPaid.ContactEmail,
+                    PasswordHash = "hash",
+                    FullName = "Paid Booker",
+                    Status = 0,
+                    NotificationPreferences = """{"EmailNotifications":true,"PromoNotifications":false}""",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                },
+                new User
+                {
+                    Id = bookingPending.UserId,
+                    Email = bookingPending.ContactEmail,
+                    PasswordHash = "hash",
+                    FullName = "Pending Booker",
+                    Status = 0,
+                    NotificationPreferences = """{"EmailNotifications":true,"PromoNotifications":false}""",
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                }
+            ]),
+            notificationRepository,
+            emailService);
         var service = new FlightAdminService(
             LoggerFactory.Create(_ => { }).CreateLogger<FlightAdminService>(),
             uow,
             backgroundJobs,
-            emailService);
+            new FakeAuditLogService(),
+            emailService,
+            BuildInMemoryDbContext("flight-admin-cancel-flight"),
+            notificationService);
 
         var result = await service.CancelFlightAsync(77, new CancelFlightAdminDto
         {
@@ -612,17 +1115,58 @@ internal sealed class Program
         });
 
         AssertEx.Equal(1, flight.Status, "Flight must be marked cancelled");
-        AssertEx.Equal((int)BookingStatus.Cancelled, bookingPaid.Status, "Paid booking must be cancelled");
-        AssertEx.Equal((int)BookingStatus.Cancelled, bookingPending.Status, "Pending booking must be cancelled");
-        AssertEx.Equal(178, inventoryConfirmed.AvailableSeats, "Confirmed inventory available seats should increase after sold-seat cancellation");
-        AssertEx.Equal(2, inventoryConfirmed.SoldSeats, "Confirmed inventory sold seats should decrease");
-        AssertEx.Equal(0, inventoryPending.HeldSeats, "Pending inventory held seats should be released");
-        AssertEx.Equal(180, inventoryPending.AvailableSeats, "Pending inventory available seats should increase after hold release");
-        AssertEx.Equal(1, backgroundJobs.RefundJobs.Count, "Only paid booking should be queued for refund");
+        AssertEx.Equal((int)BookingStatus.PendingDisruptionDecision, bookingPaid.Status, "Paid booking must be pending user disruption decision");
+        AssertEx.Equal((int)BookingStatus.PendingDisruptionDecision, bookingPending.Status, "Pending booking must be pending user disruption decision");
+        AssertEx.Equal(176, inventoryConfirmed.AvailableSeats, "Seat inventory should not be released until user decision");
+        AssertEx.Equal(4, inventoryConfirmed.SoldSeats, "Seat inventory should not be released until user decision");
+        AssertEx.Equal(2, inventoryPending.HeldSeats, "Held seats should remain until user decision");
+        AssertEx.Equal(178, inventoryPending.AvailableSeats, "Available seats should remain until user decision");
+        AssertEx.Equal(0, backgroundJobs.RefundJobs.Count, "Refund should not be queued at admin cancel stage");
         AssertEx.Equal(2, emailService.Notifications.Count, "All affected bookings should receive notification email");
+        AssertEx.Equal(2, notificationRepository.Items.Count, "All affected bookings should receive inbox notification");
+        AssertEx.True(
+            notificationRepository.Items.Any(n => n.UserId == bookingPaid.UserId
+                && n.Content.Contains("BK201")
+                && n.Content.Contains("VN777")),
+            "Paid booking disruption notification should include booking code and flight number");
+        AssertEx.True(
+            notificationRepository.Items.Any(n => n.UserId == bookingPending.UserId
+                && n.Content.Contains("BK202")
+                && n.Content.Contains("VN777")),
+            "Pending booking disruption notification should include booking code and flight number");
         AssertEx.Equal(2, result.CancelledBookings, "Response cancelled bookings count mismatch");
-        AssertEx.Equal(1, result.RefundQueuedBookings, "Response refund queued count mismatch");
+        AssertEx.Equal(2, result.RefundQueuedBookings, "Response pending decision count mismatch");
         AssertEx.Equal(2, result.NotificationSentBookings, "Response notification count mismatch");
+    }
+
+    private static async Task TestCancelFlightFailureDoesNotCreateNotification()
+    {
+        var notificationRepository = new FakeNotificationLogRepository();
+        var notificationService = BuildNotificationService(
+            new FakeUserRepository(),
+            notificationRepository,
+            new FakeEmailService());
+        var service = new FlightAdminService(
+            LoggerFactory.Create(_ => { }).CreateLogger<FlightAdminService>(),
+            new FakeUnitOfWork { FlightsRepo = new FakeFlightRepository([]) },
+            new FakeBackgroundJobService(),
+            new FakeAuditLogService(),
+            new FakeEmailService(),
+            BuildInMemoryDbContext(nameof(TestCancelFlightFailureDoesNotCreateNotification)),
+            notificationService);
+
+        var failed = false;
+        try
+        {
+            await service.CancelFlightAsync(404, new CancelFlightAdminDto { Reason = "Missing flight" });
+        }
+        catch (NotFoundException)
+        {
+            failed = true;
+        }
+
+        AssertEx.True(failed, "CancelFlightAsync should fail when the flight does not exist");
+        AssertEx.Equal(0, notificationRepository.Items.Count, "No notification should be created when cancellation fails");
     }
 
     private static async Task TestPaymentFailedCallbackCancelsBookingAndReleasesHeldSeats()
@@ -792,6 +1336,100 @@ internal sealed class Program
         AssertEx.Equal(1, inventory.HeldSeats, "Seat hold should remain unchanged");
     }
 
+    private static async Task TestPaymentCallbackAcceptsUppercaseSignatureAndCanonicalAdditionalData()
+    {
+        var booking = new Booking
+        {
+            Id = 611,
+            UserId = 9,
+            BookingCode = "BK611",
+            OutboundFlightId = 90,
+            Status = (int)BookingStatus.Pending,
+            ContactEmail = "uppercase-signature@test.com",
+            TotalAmount = 1200000m,
+            FinalAmount = 1200000m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var payment = new Payment
+        {
+            Id = 612,
+            BookingId = 611,
+            Provider = "VNPAY",
+            Method = "VNPAY",
+            Amount = 1200000m,
+            Status = (int)PaymentStatus.Pending,
+            TransactionRef = "TXN-611",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var inventory = new FlightSeatInventory
+        {
+            Id = 613,
+            FlightId = 90,
+            SeatClassId = 1,
+            TotalSeats = 100,
+            AvailableSeats = 99,
+            HeldSeats = 1,
+            SoldSeats = 0,
+            BasePrice = 1000000m,
+            CurrentPrice = 1000000m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var passengers = new List<BookingPassenger>
+        {
+            new() { Id = 1, BookingId = 611, FirstName = "A", LastName = "B", FullName = "A B", Email = "a@x.com", Phone = "1", FlightSeatInventoryId = 613 }
+        };
+
+        var uow = new FakeUnitOfWork
+        {
+            BookingRepo = new FakeBookingRepository(booking),
+            PaymentRepo = new FakePaymentRepository(payment),
+            SeatInventoryRepo = new FakeSeatInventoryRepository(inventory),
+            PassengerRepo = new FakeBookingPassengerRepository(passengers)
+        };
+
+        var vnpay = BuildVnpayProvider("test-secret-hash-key-1234567890");
+        var service = new PaymentService(
+            uow,
+            uow.PaymentRepo,
+            uow.BookingRepo,
+            uow.SeatInventoryRepo,
+            uow.PassengerRepo,
+            new FakeEmailService(),
+            new FakeTicketService(),
+            LoggerFactory.Create(_ => { }).CreateLogger<PaymentService>(),
+            vnpay);
+
+        var additionalData = new Dictionary<string, string>
+        {
+            ["vnp_ResponseCode"] = "00",
+            ["vnp_Amount"] = "120000000",
+            ["vnp_TransactionStatus"] = "00",
+            ["vnp_TxnRef"] = "TXN-611",
+            ["vnp_SecureHashType"] = "HmacSHA512"
+        };
+        var rawData = string.Join("&", additionalData
+            .Where(kv => kv.Key != "vnp_SecureHash" && kv.Key != "vnp_SecureHashType")
+            .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+            .Select(kv => $"{System.Net.WebUtility.UrlEncode(kv.Key)}={System.Net.WebUtility.UrlEncode(kv.Value)}"));
+
+        var callback = new PaymentCallbackDto
+        {
+            TransactionId = "TXN-611",
+            Status = "success",
+            Amount = 1200000m,
+            AdditionalData = additionalData,
+            Signature = CreateHmacSha512("test-secret-hash-key-1234567890", rawData).ToUpperInvariant()
+        };
+
+        var ok = await service.ProcessPaymentAsync(612, callback);
+        AssertEx.True(ok, "Uppercase signature with canonicalized AdditionalData should be accepted");
+        AssertEx.Equal((int)PaymentStatus.Completed, payment.Status, "Payment should be marked completed");
+        AssertEx.Equal((int)BookingStatus.Confirmed, booking.Status, "Booking should be confirmed after successful payment");
+    }
+
     private static async Task TestFlightSearchValidationErrors()
     {
         var service = new FlightService(
@@ -941,6 +1579,83 @@ internal sealed class Program
 
         AssertEx.True(rejected, "Admin cancel should reject non-pending/non-confirmed booking");
     }
+
+    private static async Task TestAdminCancelBookingUpdatesMultipleInventoriesCorrectly()
+    {
+        var booking = new Booking
+        {
+            Id = 711,
+            BookingCode = "BK711",
+            UserId = 1,
+            OutboundFlightId = 66,
+            Status = (int)BookingStatus.Confirmed,
+            FinalAmount = 1200000m,
+            TotalAmount = 1200000m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        var inventoryOutbound = new FlightSeatInventory
+        {
+            Id = 801,
+            FlightId = 66,
+            SeatClassId = 1,
+            TotalSeats = 100,
+            AvailableSeats = 98,
+            HeldSeats = 0,
+            SoldSeats = 2,
+            BasePrice = 1000000m,
+            CurrentPrice = 1000000m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var inventoryReturn = new FlightSeatInventory
+        {
+            Id = 802,
+            FlightId = 67,
+            SeatClassId = 1,
+            TotalSeats = 100,
+            AvailableSeats = 99,
+            HeldSeats = 0,
+            SoldSeats = 1,
+            BasePrice = 1000000m,
+            CurrentPrice = 1000000m,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        var passengers = new List<BookingPassenger>
+        {
+            new() { Id = 1, BookingId = 711, FullName = "P1", FirstName = "P", LastName = "1", Email = "p1@test.com", Phone = "1", FlightSeatInventoryId = 801, PassengerType = (int)PassengerType.Adult },
+            new() { Id = 2, BookingId = 711, FullName = "P2", FirstName = "P", LastName = "2", Email = "p2@test.com", Phone = "2", FlightSeatInventoryId = 801, PassengerType = (int)PassengerType.Child },
+            new() { Id = 3, BookingId = 711, FullName = "P3", FirstName = "P", LastName = "3", Email = "p3@test.com", Phone = "3", FlightSeatInventoryId = 802, PassengerType = (int)PassengerType.Adult }
+        };
+
+        var uow = new FakeUnitOfWork
+        {
+            BookingRepo = new FakeBookingRepository(booking),
+            PassengerRepo = new FakeBookingPassengerRepository(passengers),
+            SeatInventoryRepo = new FakeSeatInventoryRepository(new List<FlightSeatInventory> { inventoryOutbound, inventoryReturn })
+        };
+
+        var service = new BookingAdminService(
+            uow,
+            uow.BookingRepo,
+            new FakeRefundRequestRepository(),
+            new FakeFlightRepository(),
+            new FakeUserRepository(),
+            new FakeBackgroundJobService(),
+            LoggerFactory.Create(_ => { }).CreateLogger<BookingAdminService>());
+
+        var ok = await service.CancelBookingAsync(711, new CancelBookingAdminDto { Reason = "Admin cancel", FullRefund = false });
+
+        AssertEx.True(ok, "Admin cancel should succeed for multi-inventory booking");
+        AssertEx.Equal((int)BookingStatus.Cancelled, booking.Status, "Booking should be cancelled");
+        AssertEx.Equal(100, inventoryOutbound.AvailableSeats, "Outbound inventory should restore 2 sold seats");
+        AssertEx.Equal(0, inventoryOutbound.SoldSeats, "Outbound sold seats should reduce by 2");
+        AssertEx.Equal(100, inventoryReturn.AvailableSeats, "Return inventory should restore 1 sold seat");
+        AssertEx.Equal(0, inventoryReturn.SoldSeats, "Return sold seats should reduce by 1");
+    }
 }
 
 internal sealed class DummyHttpClientFactory : IHttpClientFactory
@@ -958,8 +1673,11 @@ internal sealed class FakeUnitOfWork : IUnitOfWork
     public FakeRouteRepository RoutesRepo { get; set; } = new(new Route());
     public FakeAircraftRepository AircraftRepo { get; set; } = new(new Aircraft());
     public FakeFlightDefinitionRepository FlightDefinitionRepo { get; set; } = new();
+    public FakeUserRepository UserRepo { get; set; } = new();
+    public FakePromotionRepository PromotionRepo { get; set; } = new([]);
+    public FakeNotificationLogRepository NotificationLogRepo { get; set; } = new();
 
-    public IUserRepository Users => throw new NotImplementedException();
+    public IUserRepository Users => UserRepo;
     public IRoleRepository Roles => throw new NotImplementedException();
     public IAirportRepository Airports => throw new NotImplementedException();
     public IAircraftRepository Aircraft => AircraftRepo;
@@ -971,9 +1689,9 @@ internal sealed class FakeUnitOfWork : IUnitOfWork
     public IBookingPassengerRepository BookingPassengers => PassengerRepo;
     public IPaymentRepository Payments => PaymentRepo;
     public IRefundRequestRepository RefundRequests => throw new NotImplementedException();
-    public IPromotionRepository Promotions => throw new NotImplementedException();
+    public IPromotionRepository Promotions => PromotionRepo;
     public ITicketRepository Tickets => throw new NotImplementedException();
-    public INotificationLogRepository NotificationLogs => throw new NotImplementedException();
+    public INotificationLogRepository NotificationLogs => NotificationLogRepo;
     public IAuditLogRepository AuditLogs => throw new NotImplementedException();
     public IFlightScheduleTemplateRepository FlightScheduleTemplates => throw new NotImplementedException();
     public IFlightTemplateDetailRepository FlightTemplateDetails => throw new NotImplementedException();
@@ -1069,6 +1787,83 @@ internal sealed class FakePromotionService : IPromotionService
     public Task<decimal> ApplyPromotionAsync(decimal amount, int? promotionId) => Task.FromResult(amount);
     public Task<Promotion?> ValidatePromotionCodeAsync(string promotionCode) => Task.FromResult<Promotion?>(null);
     public Task<bool> RecordPromotionUsageAsync(int promotionId, int bookingId, int userId, decimal discountAmount) => Task.FromResult(true);
+    public Task<List<API.Application.Dtos.Promotion.AvailablePromotionResponse>> GetAvailablePromotionsAsync()
+        => Task.FromResult(new List<API.Application.Dtos.Promotion.AvailablePromotionResponse>());
+}
+
+internal sealed class FakePromotionRepository : IPromotionRepository
+{
+    private readonly List<Promotion> _promotions;
+
+    public FakePromotionRepository(List<Promotion> promotions)
+    {
+        _promotions = promotions;
+    }
+
+    public Task<Promotion?> GetByCodeAsync(string code)
+    {
+        return Task.FromResult(_promotions.FirstOrDefault(p => string.Equals(p.Code, code, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    public Task<IEnumerable<Promotion>> GetActiveAsync(DateTime currentDateTime)
+    {
+        return Task.FromResult<IEnumerable<Promotion>>(_promotions.Where(p => p.IsValid(currentDateTime)));
+    }
+
+    public Task<Promotion?> GetByIdAsync(int id)
+    {
+        return Task.FromResult(_promotions.FirstOrDefault(p => p.Id == id));
+    }
+
+    public Task<IEnumerable<Promotion>> GetAllAsync() => Task.FromResult<IEnumerable<Promotion>>(_promotions);
+
+    public Task<Promotion> CreateAsync(Promotion promotion)
+    {
+        if (promotion.Id == 0)
+        {
+            promotion.Id = _promotions.Count == 0 ? 1 : _promotions.Max(p => p.Id) + 1;
+        }
+
+        _promotions.Add(promotion);
+        return Task.FromResult(promotion);
+    }
+
+    public Task UpdateAsync(Promotion promotion) => Task.CompletedTask;
+
+    public Task<bool> TryReserveUsageAsync(int promotionId)
+    {
+        var promo = _promotions.FirstOrDefault(p => p.Id == promotionId);
+        if (promo == null || !promo.IsValid(DateTime.UtcNow))
+        {
+            return Task.FromResult(false);
+        }
+
+        if (promo.UsageLimit.HasValue && promo.UsedCount >= promo.UsageLimit.Value)
+        {
+            return Task.FromResult(false);
+        }
+
+        promo.UsedCount++;
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> ReleaseUsageAsync(int promotionId)
+    {
+        var promo = _promotions.FirstOrDefault(p => p.Id == promotionId);
+        if (promo == null || promo.UsedCount <= 0)
+        {
+            return Task.FromResult(false);
+        }
+
+        promo.UsedCount--;
+        return Task.FromResult(true);
+    }
+
+    public Task DeleteAsync(int id)
+    {
+        _promotions.RemoveAll(p => p.Id == id);
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class FakePricingService : IPricingService
@@ -1199,6 +1994,58 @@ internal sealed class FakeBookingPassengerRepository : IBookingPassengerReposito
     public Task DeleteAsync(int id) => Task.CompletedTask;
 }
 
+internal sealed class FakeNotificationLogRepository : INotificationLogRepository
+{
+    private int _id = 1;
+    public readonly List<NotificationLog> Items = [];
+    public int? FailForUserId { get; set; }
+
+    public Task<NotificationLog?> GetByIdAsync(int id) => Task.FromResult(Items.FirstOrDefault(n => n.Id == id));
+
+    public Task<IEnumerable<NotificationLog>> GetByUserIdAsync(int userId)
+    {
+        return Task.FromResult<IEnumerable<NotificationLog>>(Items
+            .Where(n => n.UserId == userId)
+            .OrderByDescending(n => n.CreatedAt));
+    }
+
+    public Task<int> GetUnreadCountByUserIdAsync(int userId)
+    {
+        return Task.FromResult(Items.Count(n => n.UserId == userId && !n.IsRead));
+    }
+
+    public Task<IEnumerable<NotificationLog>> GetByStatusAsync(int status)
+    {
+        return Task.FromResult<IEnumerable<NotificationLog>>(Items.Where(n => n.Status == status));
+    }
+
+    public Task<IEnumerable<NotificationLog>> GetAllAsync() => Task.FromResult<IEnumerable<NotificationLog>>(Items);
+
+    public Task<NotificationLog> CreateAsync(NotificationLog notificationLog)
+    {
+        if (FailForUserId == notificationLog.UserId)
+        {
+            throw new InvalidOperationException("Simulated notification failure");
+        }
+
+        if (notificationLog.Id == 0)
+        {
+            notificationLog.Id = _id++;
+        }
+
+        Items.Add(notificationLog);
+        return Task.FromResult(notificationLog);
+    }
+
+    public Task UpdateAsync(NotificationLog notificationLog) => Task.CompletedTask;
+
+    public Task DeleteAsync(int id)
+    {
+        Items.RemoveAll(n => n.Id == id);
+        return Task.CompletedTask;
+    }
+}
+
 internal sealed class FakeEmailService : IEmailService
 {
     public readonly List<(string Email, string Title)> Notifications = [];
@@ -1229,8 +2076,27 @@ internal sealed class FakeBackgroundJobService : IBackgroundJobService
     public void EnqueueVnpayRefund(int bookingId, string reason) => RefundJobs.Add((bookingId, reason));
     public Task ProcessVnpayRefundQueueAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task ProcessExpiredBookingsAsync() => Task.CompletedTask;
+    public Task ProcessFlightDisruptionTimeoutsAsync() => Task.CompletedTask;
     public void StartRecurringJobs() { }
     public Task<Dictionary<string, string>> GetJobStatusAsync() => Task.FromResult(new Dictionary<string, string>());
+}
+
+internal sealed class FakeAuditLogService : IAuditLogService
+{
+    public Task LogActionAsync(int? userId, string action, string entity, int? entityId, string? oldValues = null, string? newValues = null, string? ipAddress = null)
+        => Task.CompletedTask;
+
+    public Task<List<AuditLogResponse>> GetAuditLogsAsync(AuditLogFilterDto filter)
+        => Task.FromResult(new List<AuditLogResponse>());
+
+    public Task<ActivitySummaryResponse> GetActivitySummaryAsync(DateTime? fromDate = null, DateTime? toDate = null)
+        => Task.FromResult(new ActivitySummaryResponse());
+
+    public Task<List<AuditLogResponse>> GetUserActivityAsync(int userId, int days = 30)
+        => Task.FromResult(new List<AuditLogResponse>());
+
+    public Task<List<AuditLogResponse>> GetEntityHistoryAsync(string entity, int entityId)
+        => Task.FromResult(new List<AuditLogResponse>());
 }
 
 internal sealed class FakeRefundRequestRepository : IRefundRequestRepository
@@ -1246,21 +2112,62 @@ internal sealed class FakeRefundRequestRepository : IRefundRequestRepository
 
 internal sealed class FakeUserRepository : IUserRepository
 {
-    public Task<User?> GetByEmailAsync(string email) => Task.FromResult<User?>(null);
-    public Task<User?> GetByEmailWithRolesAsync(string email) => Task.FromResult<User?>(null);
-    public Task<User?> GetByIdAsync(int id) => Task.FromResult<User?>(null);
-    public Task<User?> GetWithRolesAsync(int id) => Task.FromResult<User?>(null);
-    public Task<IEnumerable<User>> GetAllAsync() => Task.FromResult<IEnumerable<User>>([]);
-    public Task<IEnumerable<User>> GetAllWithRolesAsync() => Task.FromResult<IEnumerable<User>>([]);
-    public Task<User> CreateAsync(User user) => Task.FromResult(user);
-    public Task UpdateAsync(User user) => Task.CompletedTask;
-    public Task DeleteAsync(int id) => Task.CompletedTask;
-    public Task<bool> ExistsAsync(int id) => Task.FromResult(false);
-    public Task<bool> EmailExistsAsync(string email) => Task.FromResult(false);
+    private readonly List<User> _users;
+
+    public FakeUserRepository()
+        : this([])
+    {
+    }
+
+    public FakeUserRepository(List<User> users)
+    {
+        _users = users;
+    }
+
+    public Task<User?> GetByEmailAsync(string email)
+    {
+        return Task.FromResult(_users.FirstOrDefault(u => string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    public Task<User?> GetByEmailWithRolesAsync(string email) => GetByEmailAsync(email);
+    public Task<User?> GetByIdAsync(int id) => Task.FromResult(_users.FirstOrDefault(u => u.Id == id));
+    public Task<User?> GetWithRolesAsync(int id) => GetByIdAsync(id);
+    public Task<IEnumerable<User>> GetAllAsync() => Task.FromResult<IEnumerable<User>>(_users);
+    public Task<IEnumerable<User>> GetAllWithRolesAsync() => Task.FromResult<IEnumerable<User>>(_users);
+    public Task<User> CreateAsync(User user)
+    {
+        if (user.Id == 0)
+        {
+            user.Id = _users.Count == 0 ? 1 : _users.Max(u => u.Id) + 1;
+        }
+
+        _users.Add(user);
+        return Task.FromResult(user);
+    }
+
+    public Task UpdateAsync(User user)
+    {
+        var existing = _users.FindIndex(u => u.Id == user.Id);
+        if (existing >= 0)
+        {
+            _users[existing] = user;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(int id)
+    {
+        _users.RemoveAll(u => u.Id == id);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> ExistsAsync(int id) => Task.FromResult(_users.Any(u => u.Id == id));
+    public Task<bool> EmailExistsAsync(string email) => Task.FromResult(_users.Any(u => string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase)));
     public Task<bool> UserHasRoleAsync(int userId, int roleId) => Task.FromResult(false);
     public Task AddRoleAsync(int userId, int roleId) => Task.CompletedTask;
     public Task RemoveRoleAsync(int userId, int roleId) => Task.CompletedTask;
-    public Task<User?> GetByGoogleIdAsync(string googleId) => Task.FromResult<User?>(null);
+    public Task<User?> GetByGoogleIdAsync(string googleId) => Task.FromResult(_users.FirstOrDefault(u => u.GoogleId == googleId));
 }
 
 internal sealed class FakeTicketService : ITicketService

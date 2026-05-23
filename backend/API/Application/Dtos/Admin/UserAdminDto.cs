@@ -48,6 +48,7 @@ public class PromotionManagementResponse
     public int DiscountType { get; set; } // 0=PERCENTAGE, 1=FIXED
 
     public decimal DiscountValue { get; set; }
+    public decimal? MaxDiscountAmount { get; set; }
 
     public decimal MinimumAmount { get; set; }
 
@@ -62,6 +63,8 @@ public class PromotionManagementResponse
     public DateTime ValidTo { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
 }
 
 public class CreatePromotionDto
@@ -73,6 +76,7 @@ public class CreatePromotionDto
     public int DiscountType { get; set; } // 0=PERCENTAGE, 1=FIXED
 
     public decimal DiscountValue { get; set; }
+    public decimal? MaxDiscountAmount { get; set; }
 
     public decimal MinimumAmount { get; set; } = 0;
 
@@ -85,11 +89,20 @@ public class CreatePromotionDto
 
 public class UpdatePromotionDto
 {
+    public string? Code { get; set; }
+
     public string? Description { get; set; }
 
+    public int? DiscountType { get; set; }
+
     public decimal? DiscountValue { get; set; }
+    public decimal? MaxDiscountAmount { get; set; }
+
+    public decimal? MinimumAmount { get; set; }
 
     public int? UsageLimit { get; set; }
+
+    public DateTime? ValidFrom { get; set; }
 
     public DateTime? ValidTo { get; set; }
 

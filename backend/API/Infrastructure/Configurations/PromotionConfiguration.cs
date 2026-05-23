@@ -14,12 +14,22 @@ public class PromotionConfiguration : IEntityTypeConfiguration<Promotion>
             .HasMaxLength(50)
             .IsRequired();
 
+        builder.Property(p => p.Description)
+            .HasMaxLength(1000);
+
         builder.Property(p => p.DiscountType)
             .HasDefaultValue(0);
 
         builder.Property(p => p.DiscountValue)
             .HasPrecision(10, 2)
             .IsRequired();
+
+        builder.Property(p => p.MaxDiscountAmount)
+            .HasPrecision(10, 2);
+
+        builder.Property(p => p.MinimumAmount)
+            .HasPrecision(10, 2)
+            .HasDefaultValue(0m);
 
         builder.Property(p => p.UsedCount)
             .HasDefaultValue(0);
@@ -31,6 +41,8 @@ public class PromotionConfiguration : IEntityTypeConfiguration<Promotion>
         builder.Property(p => p.CreatedBy);
 
         builder.Property(p => p.UpdatedBy);
+
+        builder.Property(p => p.UpdatedAt);
 
         // Soft delete
         builder.Property(p => p.IsDeleted)
@@ -55,6 +67,22 @@ public class PromotionConfiguration : IEntityTypeConfiguration<Promotion>
         builder.HasCheckConstraint(
             "CK_Promotion_DiscountValue_Positive",
             "\"DiscountValue\" > 0");
+
+        builder.HasCheckConstraint(
+            "CK_Promotion_DiscountType_Valid",
+            "\"DiscountType\" IN (0, 1)");
+
+        builder.HasCheckConstraint(
+            "CK_Promotion_Percentage_Max100",
+            "\"DiscountType\" <> 0 OR \"DiscountValue\" <= 100");
+
+        builder.HasCheckConstraint(
+            "CK_Promotion_MinimumAmount_NonNegative",
+            "\"MinimumAmount\" >= 0");
+
+        builder.HasCheckConstraint(
+            "CK_Promotion_ValidDateRange",
+            "\"ValidFrom\" < \"ValidTo\"");
 
         builder.HasCheckConstraint(
             "CK_Promotion_UsedCount_NonNegative",

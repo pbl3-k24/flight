@@ -6,6 +6,7 @@ using API.Application.Interfaces;
 using API.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 [ApiController]
 [Route("api/v1/admin/[controller]")]
@@ -62,7 +63,7 @@ public class FlightsAdminController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Creating flight: {FlightNumber}", dto.FlightNumber);
+            _logger.LogInformation("Creating flight from definition {FlightDefinitionId}", dto.FlightDefinitionId);
             var response = await _flightService.CreateFlightAsync(dto);
             return Ok(response);
         }
@@ -107,6 +108,39 @@ public class FlightsAdminController : ControllerBase
         {
             _logger.LogError(ex, "Error updating flight");
             return StatusCode(500, new { message = "Error updating flight" });
+        }
+    }
+
+    [HttpPut("{flightId}/prices")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateFlightPricesAsync(int flightId, [FromBody] UpdateFlightPricesDto dto)
+    {
+        try
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            int? adminUserId = null;
+            if (int.TryParse(userIdClaim, out var parsed))
+            {
+                adminUserId = parsed;
+            }
+
+            var success = await _flightService.UpdateFlightPricesAsync(flightId, dto, adminUserId);
+            return success ? Ok(new { message = "Flight prices updated successfully" }) : BadRequest();
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (NotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating flight prices");
+            return StatusCode(500, new { message = "Error updating flight prices" });
         }
     }
 

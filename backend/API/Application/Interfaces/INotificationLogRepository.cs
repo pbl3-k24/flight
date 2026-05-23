@@ -7,6 +7,7 @@ public interface INotificationLogRepository
     Task<NotificationLog?> GetByIdAsync(int id);
 
     Task<IEnumerable<NotificationLog>> GetByUserIdAsync(int userId);
+    Task<int> GetUnreadCountByUserIdAsync(int userId);
 
     Task<IEnumerable<NotificationLog>> GetByStatusAsync(int status);
 

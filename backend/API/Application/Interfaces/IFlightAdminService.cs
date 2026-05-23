@@ -20,6 +20,11 @@ public interface IFlightAdminService
     Task<bool> UpdateFlightAsync(int flightId, UpdateFlightDto dto);
 
     /// <summary>
+    /// Updates per-seat-class prices for a flight and writes audit logs.
+    /// </summary>
+    Task<bool> UpdateFlightPricesAsync(int flightId, UpdateFlightPricesDto dto, int? adminUserId);
+
+    /// <summary>
     /// Deletes a flight (soft delete).
     /// </summary>
     Task<bool> DeleteFlightAsync(int flightId);

@@ -11,6 +11,26 @@ public class SendNotificationDto
     public string Type { get; set; } = null!; // EMAIL, SMS, PUSH, IN_APP
 }
 
+public class BroadcastNotificationDto
+{
+    public string Subject { get; set; } = null!;
+
+    public string Message { get; set; } = null!;
+
+    public string Category { get; set; } = "SYSTEM";
+
+    public bool SendEmail { get; set; } = false;
+}
+
+public class BroadcastNotificationResponse
+{
+    public int TotalUsers { get; set; }
+
+    public int SuccessCount { get; set; }
+
+    public int FailedCount { get; set; }
+}
+
 public class NotificationResponse
 {
     public int NotificationId { get; set; }
@@ -32,6 +52,16 @@ public class NotificationResponse
     public DateTime? SentAt { get; set; }
 
     public string? ErrorMessage { get; set; }
+
+    public bool IsRead { get; set; }
+
+    public DateTime? ReadAt { get; set; }
+
+    public string Category { get; set; } = "GENERAL";
+
+    public string? RelatedEntityType { get; set; }
+
+    public int? RelatedEntityId { get; set; }
 }
 
 public class NotificationSettingsDto

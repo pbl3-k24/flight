@@ -50,6 +50,11 @@ public interface IBackgroundJobService
     Task ProcessExpiredBookingsAsync();
 
     /// <summary>
+    /// Processes expired flight disruption decisions.
+    /// </summary>
+    Task ProcessFlightDisruptionTimeoutsAsync();
+
+    /// <summary>
     /// Starts recurring jobs.
     /// </summary>
     void StartRecurringJobs();

@@ -77,8 +77,10 @@ builder.Services.AddScoped<IPromotionService, PromotionService>();
 
 // Register application services - Phase 3: Payment & Ticketing
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<ITicketUpgradeService, TicketUpgradeService>();
 builder.Services.AddScoped<ITicketService, TicketService>();
 builder.Services.AddScoped<IRefundService, RefundService>();
+builder.Services.AddScoped<ISavedPassengerService, SavedPassengerService>();
 
 // Register application services - Phase 4: Admin Management
 builder.Services.AddScoped<IFlightAdminService, FlightAdminService>();
@@ -125,6 +127,7 @@ builder.Services.AddScoped<IRouteRepository, RouteRepository>();
 builder.Services.AddScoped<IAircraftRepository, AircraftRepository>();
 builder.Services.AddScoped<ISeatClassRepository, SeatClassRepository>();
 builder.Services.AddScoped<IBookingPassengerRepository, BookingPassengerRepository>();
+builder.Services.AddScoped<ISavedPassengerRepository, SavedPassengerRepository>();
 
 // Unit of Work for atomic transaction operations
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();

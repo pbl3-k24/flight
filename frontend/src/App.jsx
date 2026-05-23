@@ -9,7 +9,6 @@ import {
   setAuthToken,
   getBookings,
   cancelBooking,
-  getBestPromotion,
   getServices,
   getSeatClassServices,
   addServiceToBooking,
@@ -20,6 +19,30 @@ import {
   createFlightTemplate,
   deleteFlightTemplate,
   generateFlightsFromTemplate,
+  getActivePromotions,
+  getSavedPassengers,
+  createSavedPassenger,
+  updateSavedPassenger,
+  deleteSavedPassenger,
+  getAdminFlights,
+  createAdminFlight,
+  updateAdminFlight,
+  deleteAdminFlight,
+  cancelAdminFlight,
+  getAdminRoutes,
+  getAdminPromotions,
+  createPromotion,
+  updatePromotion,
+  deletePromotion,
+  getTicketsByBooking,
+  cancelTicket,
+  getDisruptionOptions,
+  cancelDisruptionDecision,
+  rebookDisruptionDecision,
+  getNotifications,
+  getNotificationsUnreadCount,
+  markNotificationRead,
+  markAllNotificationsRead,
 } from './api'
 
 const airports = [
@@ -65,6 +88,16 @@ const formatDateTime = (value) => {
   }).format(date)
 }
 
+const toDateMs = (value) => {
+  if (!value) return 0
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 0
+  return date.getTime()
+}
+
+const sortNotificationsByTime = (items = []) =>
+  [...items].sort((a, b) => toDateMs(b?.createdAt || b?.sentAt) - toDateMs(a?.createdAt || a?.sentAt))
+
 const formatRouteLabel = (item) => {
   const from = item?.fromAirport || '---'
   const to = item?.toAirport || '---'
@@ -76,6 +109,259 @@ const formatRouteLabel = (item) => {
 const formatFlightMeta = (item) => {
   const parts = [item?.airlineCode, item?.flightNumber, item?.seatClass].filter(Boolean)
   return parts.join(' · ')
+}
+
+const getPromotionId = (promotion) => promotion?.promotionId ?? promotion?.id
+const getPromotionCode = (promotion) => promotion?.promoCode ?? promotion?.code
+
+const getFlightPrice = (flight, seatClass) =>
+  (flight?.pricesByClass?.[seatClass] ?? flight?.price ?? 0)
+
+const calculatePromotionDiscount = (promotion, bookingAmount) => {
+  if (!promotion || !Number.isFinite(Number(bookingAmount))) return 0
+  const amount = Number(bookingAmount)
+  let discountAmount = 0
+
+  if (promotion.discountType === 'Percentage' || promotion.discountType === 0) {
+    discountAmount = (amount * Number(promotion.discountValue || 0)) / 100
+    if (promotion.maxDiscountAmount && discountAmount > promotion.maxDiscountAmount) {
+      discountAmount = promotion.maxDiscountAmount
+    }
+  } else if (promotion.discountType === 'FixedAmount' || promotion.discountType === 1) {
+    discountAmount = Number(promotion.discountValue || 0)
+  }
+
+  return Math.max(0, discountAmount)
+}
+
+const getPromotionDisplayText = (promotion) => {
+  if (!promotion) return ''
+  const code = getPromotionCode(promotion)
+  if (promotion.discountType === 'Percentage' || promotion.discountType === 0) {
+    const percentValue = Number(promotion.discountValue || 0)
+    const maxAmount = Number(promotion.maxDiscountAmount || 0)
+    const maxLabel = maxAmount > 0 ? ` (tối đa ${formatCurrency(maxAmount)})` : ''
+    return `${code} - Giảm ${percentValue}%${maxLabel}`
+  }
+  return `${code} - Giảm ${formatCurrency(Number(promotion.discountValue || 0))}`
+}
+
+const getPromotionTypeLabel = (discountType) =>
+  Number(discountType) === 0 ? 'Giảm %' : 'Giảm tiền'
+
+const getSeatInventorySummary = (seatInventory) => {
+  if (!seatInventory || typeof seatInventory !== 'object') return []
+  return Object.values(seatInventory)
+    .filter(Boolean)
+    .map((seat) => ({
+      label: seat.className || (seat.seatClassId ? `Hạng ${seat.seatClassId}` : 'Hạng vé'),
+      price: seat.currentPrice ?? seat.basePrice,
+    }))
+}
+
+const toDateInputValueFromApi = (value) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const toApiDateTimeValue = (value) => {
+  if (!value) return null
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}
+
+const toDateTimeLocalInputValue = (value) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const offsetMs = date.getTimezoneOffset() * 60000
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
+}
+
+const toApiDateTimeFromLocal = (value) => {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date.toISOString()
+}
+
+const TICKET_STATUS_LABELS = {
+  0: 'Đã xuất vé',
+  1: 'Đã sử dụng',
+  2: 'Đã hoàn tiền',
+  3: 'Đã hủy',
+  4: 'Đã hủy bởi bạn',
+  5: 'Đã hủy bởi hãng',
+}
+
+const LEGACY_TICKET_STATUS_MAP = {
+  issued: 0,
+  daxuatve: 0,
+  xacnhan: 0,
+  confirmed: 0,
+  active: 0,
+  0: 0,
+
+  used: 1,
+  dasudung: 1,
+  1: 1,
+
+  refunded: 2,
+  dahoantien: 2,
+  hoantien: 2,
+  2: 2,
+
+  cancelled: 3,
+  canceled: 3,
+  dahuy: 3,
+  huy: 3,
+  3: 3,
+
+  cancelledbyuser: 4,
+  canceledbyuser: 4,
+  dahuyboinguoidung: 4,
+  huyboinguoidung: 4,
+  4: 4,
+
+  cancelledbyadmin: 5,
+  canceledbyadmin: 5,
+  dahuyboiquantrivien: 5,
+  huyboiquantrivien: 5,
+  5: 5,
+}
+
+const resolveTicketStatusCode = (status) => {
+  if (status === null || status === undefined) return null
+  if (typeof status === 'number' && Number.isFinite(status)) return status
+
+  const trimmed = String(status).trim()
+  if (!trimmed) return null
+
+  if (/^-?\d+$/.test(trimmed)) {
+    const numeric = Number(trimmed)
+    return Number.isFinite(numeric) ? numeric : null
+  }
+
+  const normalized = normalizeAscii(trimmed)
+  if (normalized in LEGACY_TICKET_STATUS_MAP) {
+    return LEGACY_TICKET_STATUS_MAP[normalized]
+  }
+
+  return null
+}
+
+const getTicketStatusLabel = (status) => {
+  const code = resolveTicketStatusCode(status)
+  if (code !== null && code !== undefined) {
+    return TICKET_STATUS_LABELS[code] || 'Không xác định'
+  }
+  if (status === null || status === undefined || String(status).trim() === '') {
+    return TICKET_STATUS_LABELS[0]
+  }
+  return String(status)
+}
+
+const BOOKING_STATUS_LABELS = {
+  0: 'Pending',
+  1: 'Completed',
+  2: 'Failed',
+  3: 'Refunded',
+  4: 'RefundFailed',
+  5: 'PendingRefund',
+}
+
+const LEGACY_BOOKING_STATUS_MAP = {
+  pending: 0,
+  cho: 0,
+  'cho thanh toan': 0,
+  'chua thanh toan': 0,
+  unpaid: 0,
+  'da dat': 0,
+  completed: 1,
+  paid: 1,
+  'da thanh toan': 1,
+  success: 1,
+  failed: 2,
+  'that bai': 2,
+  loi: 2,
+  refunded: 3,
+  'da hoan': 3,
+  'hoan tien': 3,
+  refundfailed: 4,
+  'hoan that bai': 4,
+  pendingrefund: 5,
+  'cho hoan': 5,
+  'cho hoan tien': 5,
+  'da huy': 5,
+  huy: 5,
+  cancel: 5,
+  cancelled: 5,
+  canceled: 5,
+}
+
+const normalizeAscii = (value) =>
+  String(value || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+const resolveBookingStatusCode = (status) => {
+  if (status === null || status === undefined) return null
+  if (typeof status === 'number' && Number.isFinite(status)) return status
+
+  const trimmed = String(status).trim()
+  if (!trimmed) return null
+
+  if (/^-?\d+$/.test(trimmed)) {
+    const numeric = Number(trimmed)
+    return Number.isFinite(numeric) ? numeric : null
+  }
+
+  const normalized = normalizeAscii(trimmed)
+  if (normalized in LEGACY_BOOKING_STATUS_MAP) {
+    return LEGACY_BOOKING_STATUS_MAP[normalized]
+  }
+
+  return null
+}
+
+const getBookingStatusLabel = (status) => {
+  const code = resolveBookingStatusCode(status)
+  if (code !== null && code !== undefined) {
+    return BOOKING_STATUS_LABELS[code] || 'Unknown'
+  }
+  if (status === null || status === undefined || String(status).trim() === '') {
+    return BOOKING_STATUS_LABELS[0]
+  }
+  return String(status)
+}
+
+const getBookingStatusClassName = (status) => {
+  const code = resolveBookingStatusCode(status)
+  if (code === 1) return 'text-emerald-600'
+  if (code === 3) return 'text-blue-600'
+  if (code === 2 || code === 4) return 'text-red-600'
+  if (code === 0 || code === 5) return 'text-yellow-600'
+  return 'text-slate-600'
+}
+
+const isPendingDisruptionDecision = (status) => {
+  const normalized = normalizeAscii(status)
+  return normalized.includes('pendingdisruptiondecision') || normalized.includes('disruption')
+}
+
+const getDisruptionLegLabel = (legType) => {
+  if (legType === 0) return 'Chuyến đi'
+  if (legType === 1) return 'Chuyến về'
+  if (legType === 2) return 'Chặng nối'
+  return 'Chuyến bay'
 }
 
 const toLocalDateInputValue = (date = new Date()) => {
@@ -167,6 +453,10 @@ function App() {
     seatClass: 'all',
   })
   const [selectedFlight, setSelectedFlight] = useState(null)
+  const [returnFlight, setReturnFlight] = useState(null)
+  const [outboundFlights, setOutboundFlights] = useState([])
+  const [returnFlights, setReturnFlights] = useState([])
+  const [roundtripStep, setRoundtripStep] = useState('outbound')
   const [passengerForms, setPassengerForms] = useState([])
   
   const createEmptyPassenger = (type = 'adult') => ({
@@ -175,6 +465,9 @@ function App() {
     dob: '',
     gender: 'Nam',
     document: '',
+    email: '',
+    phone: '',
+    savedPassengerId: '',
     age: '',
   })
 
@@ -197,20 +490,58 @@ function App() {
   const [bookingId, setBookingId] = useState(null)
   const [bookingAmount, setBookingAmount] = useState(null)
   const [paymentData, setPaymentData] = useState(null)
-  const [bestPromotion, setBestPromotion] = useState(null)
+  const [availablePromotions, setAvailablePromotions] = useState([])
+  const [selectedPromotionId, setSelectedPromotionId] = useState('')
   const [isLoadingPromotion, setIsLoadingPromotion] = useState(false)
   const [bookingHistory, setBookingHistory] = useState([])
   const [historyNotice, setHistoryNotice] = useState('')
   const [historyError, setHistoryError] = useState('')
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [isCancellingBookingId, setIsCancellingBookingId] = useState(null)
+  const [bookingTicketsMap, setBookingTicketsMap] = useState({})
+  const [loadingTicketsMap, setLoadingTicketsMap] = useState({})
+  const [ticketErrorMap, setTicketErrorMap] = useState({})
+  const [isCancellingTicketId, setIsCancellingTicketId] = useState(null)
+  const [disruptionOptionsMap, setDisruptionOptionsMap] = useState({})
+  const [disruptionLoadingMap, setDisruptionLoadingMap] = useState({})
+  const [disruptionErrorMap, setDisruptionErrorMap] = useState({})
+  const [disruptionNoticeMap, setDisruptionNoticeMap] = useState({})
+  const [selectedDisruptionDecisionMap, setSelectedDisruptionDecisionMap] = useState({})
+  const [selectedDisruptionActionMap, setSelectedDisruptionActionMap] = useState({})
+  const [submittingDisruptionMap, setSubmittingDisruptionMap] = useState({})
+  const [rebookModalState, setRebookModalState] = useState({
+    isOpen: false,
+    bookingId: null,
+    decisionId: null,
+    date: '',
+    selectedFlightId: '',
+  })
+  const emptySavedPassengerForm = {
+    firstName: '',
+    lastName: '',
+    dateOfBirth: '',
+    gender: '',
+    nationality: '',
+    documentNumber: '',
+    email: '',
+    phone: '',
+  }
+  const [savedPassengers, setSavedPassengers] = useState([])
+  const [savedPassengerForm, setSavedPassengerForm] = useState(emptySavedPassengerForm)
+  const [isLoadingSavedPassengers, setIsLoadingSavedPassengers] = useState(false)
+  const [savedPassengerError, setSavedPassengerError] = useState('')
+  const [savedPassengerNotice, setSavedPassengerNotice] = useState('')
+  const [editingSavedPassengerId, setEditingSavedPassengerId] = useState(null)
   const [services, setServices] = useState([])
   const [isLoadingServices, setIsLoadingServices] = useState(false)
   const [serviceError, setServiceError] = useState('')
   const [showServicesModal, setShowServicesModal] = useState(false)
   const [currentBookingForServices, setCurrentBookingForServices] = useState(null)
   const [selectedServicesByPassenger, setSelectedServicesByPassenger] = useState({})
-  const [selectedServicesByPassengerDraft, setSelectedServicesByPassengerDraft] = useState({})
+  const [selectedServicesByPassengerDraft, setSelectedServicesByPassengerDraft] = useState({
+    outbound: {},
+    return: {},
+  })
   const [loginData, setLoginData] = useState({
     email: '',
     password: '',
@@ -226,6 +557,11 @@ function App() {
   const [isRegistering, setIsRegistering] = useState(false)
   const [registerError, setRegisterError] = useState('')
   const [authUser, setAuthUser] = useState(null)
+  const [notifications, setNotifications] = useState([])
+  const [isLoadingNotifications, setIsLoadingNotifications] = useState(false)
+  const [notificationError, setNotificationError] = useState('')
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false)
   
   // Template management states
   const [flightDefinitions, setFlightDefinitions] = useState([])
@@ -248,8 +584,124 @@ function App() {
   })
   const [adminNotice, setAdminNotice] = useState('')
   const [viewingTemplateDetail, setViewingTemplateDetail] = useState(null)
+  const emptyFlightForm = {
+    flightNumber: '',
+    routeId: '',
+    aircraftId: '',
+    departureTime: '',
+    arrivalTime: '',
+    isActive: true,
+  }
+  const [adminFlights, setAdminFlights] = useState([])
+  const [adminRoutes, setAdminRoutes] = useState([])
+  const [isLoadingFlightsAdmin, setIsLoadingFlightsAdmin] = useState(false)
+  const [flightAdminError, setFlightAdminError] = useState('')
+  const [flightAdminNotice, setFlightAdminNotice] = useState('')
+  const [flightFormData, setFlightFormData] = useState(emptyFlightForm)
+  const [editingFlightId, setEditingFlightId] = useState(null)
+  const [isCancellingAdminFlightId, setIsCancellingAdminFlightId] = useState(null)
+  const [adminFlightFilters, setAdminFlightFilters] = useState({
+    date: '',
+    from: '',
+    to: '',
+    code: '',
+  })
+  const emptyPromotionForm = {
+    code: '',
+    description: '',
+    discountType: 0,
+    discountValue: '',
+    maxDiscountAmount: '',
+    minimumAmount: '',
+    usageLimit: '',
+    validFrom: '',
+    validTo: '',
+    isActive: true,
+  }
+  const [adminPromotions, setAdminPromotions] = useState([])
+  const [isLoadingPromotionsAdmin, setIsLoadingPromotionsAdmin] = useState(false)
+  const [promotionAdminError, setPromotionAdminError] = useState('')
+  const [promotionAdminNotice, setPromotionAdminNotice] = useState('')
+  const [promotionFormData, setPromotionFormData] = useState(emptyPromotionForm)
+  const [editingPromotionId, setEditingPromotionId] = useState(null)
   const totalPassengers = passengerCounts.adult + passengerCounts.child + passengerCounts.infant
   const passengerDivisor = Math.max(1, totalPassengers)
+  const sortedNotifications = useMemo(
+    () => sortNotificationsByTime(notifications),
+    [notifications],
+  )
+  const resolveAdminRouteInfo = (flight) => {
+    if (!flight?.routeId || adminRoutes.length === 0) {
+      return {
+        from: '',
+        to: '',
+        code: flight?.routeCode || '',
+      }
+    }
+
+    const matched = adminRoutes.find(
+      (route) => String(route?.routeId) === String(flight?.routeId),
+    )
+
+    return {
+      from: matched?.departureAirport || '',
+      to: matched?.arrivalAirport || '',
+      code: matched?.routeCode || matched?.code || flight?.routeCode || '',
+    }
+  }
+  const filteredAdminFlights = useMemo(() => {
+    const dateFilter = adminFlightFilters.date
+    const fromFilter = normalizeAscii(adminFlightFilters.from)
+    const toFilter = normalizeAscii(adminFlightFilters.to)
+    const codeFilter = normalizeAscii(adminFlightFilters.code)
+
+    if (!dateFilter && !fromFilter && !toFilter && !codeFilter) return adminFlights
+
+    return adminFlights.filter((flight) => {
+      const departDate = toDateInputValueFromApi(flight?.departureTime)
+      const routeInfo = resolveAdminRouteInfo(flight)
+      const resolvedFrom = routeInfo.from
+      const resolvedTo = routeInfo.to
+      const resolvedCode = routeInfo.code
+      const matchesDate = dateFilter ? departDate === dateFilter : true
+
+      const fromHaystack = normalizeAscii([
+        flight?.departureAirport,
+        flight?.departureAirportName,
+        flight?.fromAirport,
+        flight?.origin,
+        flight?.originName,
+        resolvedFrom,
+        flight?.routeCode,
+      ]
+        .filter(Boolean)
+        .join(' '))
+      const toHaystack = normalizeAscii([
+        flight?.arrivalAirport,
+        flight?.arrivalAirportName,
+        flight?.toAirport,
+        flight?.destination,
+        flight?.destinationName,
+        resolvedTo,
+        flight?.routeCode,
+      ]
+        .filter(Boolean)
+        .join(' '))
+      const codeHaystack = normalizeAscii([
+        flight?.flightNumber,
+        flight?.routeCode,
+        resolvedCode,
+      ]
+        .filter(Boolean)
+        .join(' '))
+
+      const matchesFrom = fromFilter ? fromHaystack.includes(fromFilter) : true
+      const matchesTo = toFilter ? toHaystack.includes(toFilter) : true
+      const matchesCode = codeFilter ? codeHaystack.includes(codeFilter) : true
+
+      return matchesDate && matchesFrom && matchesTo && matchesCode
+    })
+  }, [adminFlightFilters, adminFlights, adminRoutes])
 
   useEffect(() => {
     setSearchData((prev) => ({ ...prev, passengers: String(totalPassengers) }))
@@ -286,10 +738,19 @@ function App() {
   }, [screen, selectedFlight, searchData.seatClass])
 
   useEffect(() => {
+    if (tripType !== 'roundtrip') {
+      setReturnFlight(null)
+      setReturnFlights([])
+      setRoundtripStep('outbound')
+    }
+  }, [tripType])
+
+  useEffect(() => {
     setSelectedServicesByPassengerDraft((prev) => {
-      const next = {}
+      const next = { outbound: {}, return: {} }
       passengerForms.forEach((_, idx) => {
-        if (prev[idx]) next[idx] = prev[idx]
+        if (prev?.outbound?.[idx]) next.outbound[idx] = prev.outbound[idx]
+        if (prev?.return?.[idx]) next.return[idx] = prev.return[idx]
       })
       return next
     })
@@ -333,11 +794,88 @@ function App() {
     }
   }, [])
 
+  const extractUnreadCount = (payload) => {
+    if (typeof payload === 'number') return payload
+    if (typeof payload?.count === 'number') return payload.count
+    if (typeof payload?.data === 'number') return payload.data
+    if (typeof payload?.unreadCount === 'number') return payload.unreadCount
+    return 0
+  }
+
+  const loadNotifications = async () => {
+    if (!authUser) return
+    setIsLoadingNotifications(true)
+    setNotificationError('')
+    try {
+      const [list, unreadCount] = await Promise.all([
+        getNotifications({ page: 1, pageSize: 20 }),
+        getNotificationsUnreadCount(),
+      ])
+      setNotifications(Array.isArray(list) ? list : [])
+      setUnreadNotificationCount(extractUnreadCount(unreadCount))
+    } catch (error) {
+      setNotificationError(error.message || 'Không thể tải thông báo')
+    } finally {
+      setIsLoadingNotifications(false)
+    }
+  }
+
+  const handleMarkNotificationRead = async (notificationId) => {
+    if (!notificationId) return
+    try {
+      await markNotificationRead(notificationId)
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item?.notificationId === notificationId
+            ? { ...item, isRead: true, readAt: item?.readAt || new Date().toISOString() }
+            : item,
+        ),
+      )
+      setUnreadNotificationCount((prev) => Math.max(0, prev - 1))
+    } catch (error) {
+      setNotificationError(error.message || 'Không thể cập nhật trạng thái thông báo')
+    }
+  }
+
+  const handleMarkAllNotificationsRead = async () => {
+    try {
+      await markAllNotificationsRead()
+      setNotifications((prev) =>
+        prev.map((item) => ({
+          ...item,
+          isRead: true,
+          readAt: item?.readAt || new Date().toISOString(),
+        })),
+      )
+      setUnreadNotificationCount(0)
+    } catch (error) {
+      setNotificationError(error.message || 'Không thể cập nhật trạng thái thông báo')
+    }
+  }
+
+  useEffect(() => {
+    if (!authUser) {
+      setNotifications([])
+      setUnreadNotificationCount(0)
+      return
+    }
+    loadNotifications()
+  }, [authUser])
+
+  useEffect(() => {
+    if (isNotificationPanelOpen && authUser) {
+      loadNotifications()
+    }
+  }, [isNotificationPanelOpen, authUser])
+
   const logout = () => {
     try {
       clearAuthToken()
     } catch (e) {}
     setAuthUser(null)
+    setNotifications([])
+    setUnreadNotificationCount(0)
+    setIsNotificationPanelOpen(false)
     setBookingHistory([])
     setHistoryError('')
     setScreen('login')
@@ -360,10 +898,18 @@ function App() {
       booking?.paymentAmount ??
       (outbound?.price ?? 0) * passengerCount
 
+    const rawStatus =
+      booking?.status ??
+      booking?.bookingStatus ??
+      booking?.bookingStatusName ??
+      booking?.paymentStatus ??
+      booking?.paymentStatusName ??
+      null
+
     return {
       bookingId: booking?.bookingId ?? booking?.bookingCode ?? '---',
       transactionRef: booking?.bookingCode || '',
-      status: booking?.status || 'Đã đặt',
+      status: getBookingStatusLabel(rawStatus),
       createdAt: booking?.createdAt,
       fromAirport: outbound?.departureAirport || '',
       toAirport: outbound?.arrivalAirport || '',
@@ -413,6 +959,663 @@ function App() {
     }
   }
 
+  const loadDisruptionOptionsForBooking = async (bookingId, departureDate) => {
+    const bookingIdValue = Number(bookingId)
+    if (!Number.isFinite(bookingIdValue) || bookingIdValue <= 0) {
+      setDisruptionErrorMap((prev) => ({
+        ...prev,
+        [bookingId]: 'Mã booking không hợp lệ.',
+      }))
+      return null
+    }
+
+    const normalizedDate = departureDate
+      ? toDateInputValueFromApi(departureDate) || String(departureDate)
+      : ''
+
+    setDisruptionLoadingMap((prev) => ({ ...prev, [bookingId]: true }))
+    setDisruptionErrorMap((prev) => ({ ...prev, [bookingId]: '' }))
+    setDisruptionNoticeMap((prev) => ({ ...prev, [bookingId]: '' }))
+
+    try {
+      const options = await getDisruptionOptions(bookingIdValue, normalizedDate)
+      setDisruptionOptionsMap((prev) => ({ ...prev, [bookingId]: options }))
+
+      if (!Array.isArray(options) || options.length === 0) {
+        setDisruptionNoticeMap((prev) => ({
+          ...prev,
+          [bookingId]: 'Không có lựa chọn xử lý hủy chuyến cho booking này.',
+        }))
+        return options
+      }
+
+      const firstDecisionId = Number(options[0]?.decisionId)
+      if (Number.isFinite(firstDecisionId)) {
+        setSelectedDisruptionDecisionMap((prev) => ({
+          ...prev,
+          [bookingId]: String(firstDecisionId),
+        }))
+      }
+
+      setSelectedDisruptionActionMap((prev) => ({
+        ...prev,
+        [bookingId]: prev[bookingId] || 'refund',
+      }))
+
+      return options
+    } catch (error) {
+      setDisruptionErrorMap((prev) => ({
+        ...prev,
+        [bookingId]: error.message || 'Không thể tải lựa chọn xử lý hủy chuyến.',
+      }))
+      return null
+    } finally {
+      setDisruptionLoadingMap((prev) => ({ ...prev, [bookingId]: false }))
+    }
+  }
+
+  const handleDisruptionRefund = async (bookingId, decisionId) => {
+    const bookingIdValue = Number(bookingId)
+    const decisionIdValue = Number(decisionId)
+    if (!Number.isFinite(bookingIdValue) || !Number.isFinite(decisionIdValue)) {
+      setDisruptionErrorMap((prev) => ({
+        ...prev,
+        [bookingId]: 'Thiếu thông tin quyết định để hoàn tiền.',
+      }))
+      return
+    }
+
+    setSubmittingDisruptionMap((prev) => ({ ...prev, [decisionId]: true }))
+    setDisruptionErrorMap((prev) => ({ ...prev, [bookingId]: '' }))
+    setDisruptionNoticeMap((prev) => ({ ...prev, [bookingId]: '' }))
+
+    try {
+      await cancelDisruptionDecision(bookingIdValue, decisionIdValue)
+      setDisruptionNoticeMap((prev) => ({
+        ...prev,
+        [bookingId]: 'Đã gửi yêu cầu hoàn tiền. Vui lòng chờ hệ thống xử lý.',
+      }))
+      await loadBookingHistory()
+      await loadDisruptionOptionsForBooking(bookingIdValue)
+    } catch (error) {
+      setDisruptionErrorMap((prev) => ({
+        ...prev,
+        [bookingId]: error.message || 'Không thể gửi yêu cầu hoàn tiền.',
+      }))
+    } finally {
+      setSubmittingDisruptionMap((prev) => ({ ...prev, [decisionId]: false }))
+    }
+  }
+
+  const handleDisruptionRebook = async (bookingId, decisionId, newFlightId) => {
+    const bookingIdValue = Number(bookingId)
+    const decisionIdValue = Number(decisionId)
+    const selectedFlightId = Number(newFlightId)
+
+    if (!Number.isFinite(bookingIdValue) || !Number.isFinite(decisionIdValue)) {
+      setDisruptionErrorMap((prev) => ({
+        ...prev,
+        [bookingId]: 'Thiếu thông tin quyết định để đổi chuyến.',
+      }))
+      return
+    }
+
+    if (!Number.isFinite(selectedFlightId) || selectedFlightId <= 0) {
+      setDisruptionErrorMap((prev) => ({
+        ...prev,
+        [bookingId]: 'Vui lòng chọn chuyến bay mới trước khi đổi chuyến.',
+      }))
+      return
+    }
+
+    setSubmittingDisruptionMap((prev) => ({ ...prev, [decisionId]: true }))
+    setDisruptionErrorMap((prev) => ({ ...prev, [bookingId]: '' }))
+    setDisruptionNoticeMap((prev) => ({ ...prev, [bookingId]: '' }))
+
+    try {
+      await rebookDisruptionDecision(bookingIdValue, decisionIdValue, selectedFlightId)
+      setDisruptionNoticeMap((prev) => ({
+        ...prev,
+        [bookingId]: 'Đã gửi yêu cầu đổi chuyến. Vui lòng kiểm tra lại trạng thái booking.',
+      }))
+      await loadBookingHistory()
+      await loadDisruptionOptionsForBooking(bookingIdValue)
+    } catch (error) {
+      setDisruptionErrorMap((prev) => ({
+        ...prev,
+        [bookingId]: error.message || 'Không thể đổi chuyến.',
+      }))
+    } finally {
+      setSubmittingDisruptionMap((prev) => ({ ...prev, [decisionId]: false }))
+    }
+  }
+
+  const getDisruptionDecisionOptions = (bookingIdValue, decisionIdValue) => {
+    const list = Array.isArray(disruptionOptionsMap[bookingIdValue])
+      ? disruptionOptionsMap[bookingIdValue]
+      : []
+    return list.find((option) => Number(option?.decisionId) === Number(decisionIdValue))
+  }
+
+  const filterDisruptionFlightsByDate = (flightOptions, dateValue) => {
+    if (!dateValue) return flightOptions
+    return flightOptions.filter((flight) => {
+      const flightDate = toDateInputValueFromApi(flight?.departureTime)
+      return flightDate === dateValue
+    })
+  }
+
+  const openRebookModal = async (bookingIdValue, decisionIdValue, cancelledFlightDate) => {
+    const decision = getDisruptionDecisionOptions(bookingIdValue, decisionIdValue)
+    const flightOptions = Array.isArray(decision?.flightOptions) ? decision.flightOptions : []
+    const defaultDate = toDateInputValueFromApi(cancelledFlightDate)
+    const filteredOptions = filterDisruptionFlightsByDate(flightOptions, defaultDate)
+    const firstOption = filteredOptions[0] || flightOptions[0]
+
+    setRebookModalState({
+      isOpen: true,
+      bookingId: bookingIdValue,
+      decisionId: decisionIdValue,
+      date: defaultDate,
+      selectedFlightId: firstOption?.flightId ? String(firstOption.flightId) : '',
+    })
+
+    if (!defaultDate) {
+      return
+    }
+
+    const options = await loadDisruptionOptionsForBooking(bookingIdValue, defaultDate)
+    const selectedDecision = Array.isArray(options)
+      ? options.find((option) => Number(option?.decisionId) === Number(decisionIdValue))
+      : null
+    const selectedOptions = Array.isArray(selectedDecision?.flightOptions)
+      ? selectedDecision.flightOptions
+      : []
+
+    setRebookModalState((prev) => ({
+      ...prev,
+      selectedFlightId: selectedOptions[0]?.flightId ? String(selectedOptions[0].flightId) : '',
+    }))
+  }
+
+  const handleRebookDateChange = async (nextDate) => {
+    setRebookModalState((prev) => ({
+      ...prev,
+      date: nextDate,
+    }))
+
+    if (!rebookModalState.bookingId || !rebookModalState.decisionId) return
+
+    const options = await loadDisruptionOptionsForBooking(
+      rebookModalState.bookingId,
+      nextDate,
+    )
+    const selectedDecision = Array.isArray(options)
+      ? options.find((option) => Number(option?.decisionId) === Number(rebookModalState.decisionId))
+      : null
+    const selectedOptions = Array.isArray(selectedDecision?.flightOptions)
+      ? selectedDecision.flightOptions
+      : []
+
+    setRebookModalState((prev) => ({
+      ...prev,
+      selectedFlightId: selectedOptions[0]?.flightId ? String(selectedOptions[0].flightId) : '',
+    }))
+  }
+
+  const closeRebookModal = () => {
+    setRebookModalState({
+      isOpen: false,
+      bookingId: null,
+      decisionId: null,
+      date: '',
+      selectedFlightId: '',
+    })
+  }
+
+  const mapSavedPassengerForm = (passenger) => ({
+    firstName: passenger?.firstName || '',
+    lastName: passenger?.lastName || '',
+    dateOfBirth: toDateInputValueFromApi(passenger?.dateOfBirth),
+    gender: passenger?.gender || '',
+    nationality: passenger?.nationality || '',
+    documentNumber: passenger?.documentNumber || '',
+    email: passenger?.email || '',
+    phone: passenger?.phone || '',
+  })
+
+  const loadSavedPassengers = async () => {
+    setIsLoadingSavedPassengers(true)
+    setSavedPassengerError('')
+    try {
+      const data = await getSavedPassengers()
+      setSavedPassengers(Array.isArray(data) ? data : [])
+    } catch (error) {
+      setSavedPassengerError(error.message || 'Không thể tải danh sách hành khách đã lưu.')
+    } finally {
+      setIsLoadingSavedPassengers(false)
+    }
+  }
+
+  const mapFlightToForm = (flight) => ({
+    flightNumber: flight?.flightNumber || '',
+    routeId: '',
+    aircraftId: '',
+    departureTime: toDateTimeLocalInputValue(flight?.departureTime),
+    arrivalTime: toDateTimeLocalInputValue(flight?.arrivalTime),
+    isActive: flight?.isActive !== false,
+  })
+
+  const buildCreateFlightPayload = (form) => ({
+    flightNumber: form.flightNumber?.trim() || null,
+    routeId: Number(form.routeId || 0),
+    aircraftId: Number(form.aircraftId || 0),
+    departureTime: toApiDateTimeFromLocal(form.departureTime),
+    arrivalTime: toApiDateTimeFromLocal(form.arrivalTime),
+    isActive: Boolean(form.isActive),
+  })
+
+  const buildUpdateFlightPayload = (form) => ({
+    flightNumber: form.flightNumber?.trim() || null,
+    aircraftId: form.aircraftId ? Number(form.aircraftId) : null,
+    departureTime: form.departureTime ? toApiDateTimeFromLocal(form.departureTime) : null,
+    arrivalTime: form.arrivalTime ? toApiDateTimeFromLocal(form.arrivalTime) : null,
+    isActive: Boolean(form.isActive),
+  })
+
+  const loadAdminFlights = async () => {
+    setIsLoadingFlightsAdmin(true)
+    setFlightAdminError('')
+    try {
+      const data = await getAdminFlights(1, 100)
+      setAdminFlights(Array.isArray(data) ? data : [])
+    } catch (error) {
+      setFlightAdminError(error.message || 'Không thể tải danh sách chuyến bay.')
+    } finally {
+      setIsLoadingFlightsAdmin(false)
+    }
+  }
+
+  const loadAdminRoutes = async () => {
+    try {
+      const data = await getAdminRoutes(1, 200)
+      setAdminRoutes(Array.isArray(data) ? data : [])
+    } catch (error) {
+      setFlightAdminError(error.message || 'Không thể tải danh sách tuyến bay.')
+    }
+  }
+
+  const startCreateFlight = () => {
+    setEditingFlightId(null)
+    setFlightFormData(emptyFlightForm)
+    setFlightAdminError('')
+    setFlightAdminNotice('')
+  }
+
+  const startEditFlight = (flight) => {
+    if (!flight) return
+    setEditingFlightId(flight.flightId)
+    setFlightFormData(mapFlightToForm(flight))
+    setFlightAdminError('')
+    setFlightAdminNotice('')
+  }
+
+  const handleFlightSubmit = async (event) => {
+    event.preventDefault()
+    setFlightAdminError('')
+    setFlightAdminNotice('')
+
+    try {
+      if (editingFlightId) {
+        const payload = buildUpdateFlightPayload(flightFormData)
+        await updateAdminFlight(editingFlightId, payload)
+        setFlightAdminNotice('Đã cập nhật chuyến bay.')
+      } else {
+        if (!flightFormData.routeId || !flightFormData.aircraftId) {
+          setFlightAdminError('Vui lòng chọn tuyến bay và máy bay.')
+          return
+        }
+        if (!flightFormData.departureTime || !flightFormData.arrivalTime) {
+          setFlightAdminError('Vui lòng nhập giờ bay và giờ đến.')
+          return
+        }
+        const payload = buildCreateFlightPayload(flightFormData)
+        await createAdminFlight(payload)
+        setFlightAdminNotice('Đã tạo chuyến bay mới.')
+      }
+      setFlightFormData(emptyFlightForm)
+      setEditingFlightId(null)
+      await loadAdminFlights()
+    } catch (error) {
+      setFlightAdminError(error.message || 'Không thể lưu chuyến bay.')
+    }
+  }
+
+  const handleDeleteFlight = async (flight) => {
+    if (!flight?.flightId) return
+    const confirmed = window.confirm('Bạn chắc chắn muốn xóa chuyến bay này?')
+    if (!confirmed) return
+
+    setFlightAdminError('')
+    setFlightAdminNotice('')
+    try {
+      await deleteAdminFlight(flight.flightId)
+      setFlightAdminNotice('Đã xóa chuyến bay.')
+      if (editingFlightId === flight.flightId) {
+        setEditingFlightId(null)
+        setFlightFormData(emptyFlightForm)
+      }
+      await loadAdminFlights()
+    } catch (error) {
+      setFlightAdminError(error.message || 'Không thể xóa chuyến bay.')
+    }
+  }
+
+  const handleCancelAdminFlight = async (flight) => {
+    if (!flight?.flightId) return
+    const confirmed = window.confirm('Bạn chắc chắn muốn hủy chuyến bay này?')
+    if (!confirmed) return
+
+    const reason = window.prompt('Lý do hủy chuyến bay:', 'Operational issue')
+    if (reason === null) return
+    if (!reason.trim()) {
+      setFlightAdminError('Vui lòng nhập lý do hủy chuyến bay.')
+      return
+    }
+
+    setIsCancellingAdminFlightId(flight.flightId)
+    setFlightAdminError('')
+    setFlightAdminNotice('')
+    try {
+      await cancelAdminFlight(flight.flightId, reason.trim())
+      setFlightAdminNotice('Đã hủy chuyến bay.')
+      await loadAdminFlights()
+    } catch (error) {
+      setFlightAdminError(error.message || 'Không thể hủy chuyến bay.')
+    } finally {
+      setIsCancellingAdminFlightId(null)
+    }
+  }
+
+  const mapPromotionToForm = (promotion) => ({
+    code: promotion?.code || '',
+    description: promotion?.description || '',
+    discountType: Number.isFinite(Number(promotion?.discountType)) ? Number(promotion.discountType) : 0,
+    discountValue: Number.isFinite(Number(promotion?.discountValue)) ? String(promotion.discountValue) : '',
+    maxDiscountAmount:
+      promotion?.maxDiscountAmount === null || promotion?.maxDiscountAmount === undefined
+        ? ''
+        : String(promotion.maxDiscountAmount),
+    minimumAmount: Number.isFinite(Number(promotion?.minimumAmount)) ? String(promotion.minimumAmount) : '',
+    usageLimit:
+      promotion?.usageLimit === null || promotion?.usageLimit === undefined
+        ? ''
+        : String(promotion.usageLimit),
+    validFrom: toDateInputValueFromApi(promotion?.validFrom),
+    validTo: toDateInputValueFromApi(promotion?.validTo),
+    isActive: promotion?.isActive !== false,
+  })
+
+  const buildCreatePromotionPayload = (form) => ({
+    code: form.code?.trim() || null,
+    description: form.description?.trim() || null,
+    discountType: Number(form.discountType || 0),
+    discountValue: Number(form.discountValue || 0),
+    maxDiscountAmount:
+      form.maxDiscountAmount === '' || form.maxDiscountAmount === null
+        ? null
+        : Number(form.maxDiscountAmount),
+    minimumAmount: Number(form.minimumAmount || 0),
+    usageLimit: form.usageLimit === '' || form.usageLimit === null ? null : Number(form.usageLimit),
+    validFrom: toApiDateTimeValue(form.validFrom),
+    validTo: toApiDateTimeValue(form.validTo),
+    isActive: Boolean(form.isActive),
+  })
+
+  const buildUpdatePromotionPayload = (form) => ({
+    description: form.description?.trim() || null,
+    discountValue: form.discountValue === '' || form.discountValue === null ? null : Number(form.discountValue),
+    maxDiscountAmount:
+      form.maxDiscountAmount === '' || form.maxDiscountAmount === null
+        ? null
+        : Number(form.maxDiscountAmount),
+    usageLimit: form.usageLimit === '' || form.usageLimit === null ? null : Number(form.usageLimit),
+    validTo: toApiDateTimeValue(form.validTo),
+    isActive: Boolean(form.isActive),
+  })
+
+  const loadAdminPromotions = async () => {
+    setIsLoadingPromotionsAdmin(true)
+    setPromotionAdminError('')
+    try {
+      const data = await getAdminPromotions(1, 100)
+      setAdminPromotions(Array.isArray(data) ? data : [])
+    } catch (error) {
+      setPromotionAdminError(error.message || 'Không thể tải danh sách khuyến mãi.')
+    } finally {
+      setIsLoadingPromotionsAdmin(false)
+    }
+  }
+
+  const startCreatePromotion = () => {
+    setEditingPromotionId(null)
+    setPromotionFormData(emptyPromotionForm)
+    setPromotionAdminError('')
+    setPromotionAdminNotice('')
+  }
+
+  const startEditPromotion = (promotion) => {
+    if (!promotion) return
+    setEditingPromotionId(promotion.promotionId)
+    setPromotionFormData(mapPromotionToForm(promotion))
+    setPromotionAdminError('')
+    setPromotionAdminNotice('')
+  }
+
+  const handlePromotionSubmit = async (event) => {
+    event.preventDefault()
+    setPromotionAdminError('')
+    setPromotionAdminNotice('')
+
+    try {
+      if (editingPromotionId) {
+        const payload = buildUpdatePromotionPayload(promotionFormData)
+        await updatePromotion(editingPromotionId, payload)
+        setPromotionAdminNotice('Đã cập nhật mã khuyến mãi.')
+      } else {
+        const payload = buildCreatePromotionPayload(promotionFormData)
+        await createPromotion(payload)
+        setPromotionAdminNotice('Đã tạo mã khuyến mãi mới.')
+      }
+      setPromotionFormData(emptyPromotionForm)
+      setEditingPromotionId(null)
+      await loadAdminPromotions()
+    } catch (error) {
+      setPromotionAdminError(error.message || 'Không thể lưu mã khuyến mãi.')
+    }
+  }
+
+  const handleDeletePromotion = async (promotion) => {
+    if (!promotion?.promotionId) return
+    const confirmed = window.confirm('Bạn chắc chắn muốn xóa mã khuyến mãi này?')
+    if (!confirmed) return
+
+    setPromotionAdminError('')
+    setPromotionAdminNotice('')
+    try {
+      await deletePromotion(promotion.promotionId)
+      setPromotionAdminNotice('Đã xóa mã khuyến mãi.')
+      if (editingPromotionId === promotion.promotionId) {
+        setEditingPromotionId(null)
+        setPromotionFormData(emptyPromotionForm)
+      }
+      await loadAdminPromotions()
+    } catch (error) {
+      setPromotionAdminError(error.message || 'Không thể xóa mã khuyến mãi.')
+    }
+  }
+
+  const startCreateSavedPassenger = () => {
+    setEditingSavedPassengerId(null)
+    setSavedPassengerForm(emptySavedPassengerForm)
+    setSavedPassengerError('')
+    setSavedPassengerNotice('')
+  }
+
+  const startEditSavedPassenger = (passenger) => {
+    if (!passenger) return
+    setEditingSavedPassengerId(passenger.id)
+    setSavedPassengerForm(mapSavedPassengerForm(passenger))
+    setSavedPassengerError('')
+    setSavedPassengerNotice('')
+  }
+
+  const buildSavedPassengerPayload = (form) => ({
+    firstName: form.firstName?.trim() || null,
+    lastName: form.lastName?.trim() || null,
+    dateOfBirth: toApiDateTimeValue(form.dateOfBirth),
+    gender: form.gender?.trim() || null,
+    nationality: form.nationality?.trim() || null,
+    documentNumber: form.documentNumber?.trim() || null,
+    email: form.email?.trim() || null,
+    phone: form.phone?.trim() || null,
+  })
+
+  const handleSavedPassengerSubmit = async (event) => {
+    event.preventDefault()
+    setSavedPassengerError('')
+    setSavedPassengerNotice('')
+
+    try {
+      const payload = buildSavedPassengerPayload(savedPassengerForm)
+      if (editingSavedPassengerId) {
+        await updateSavedPassenger(editingSavedPassengerId, payload)
+        setSavedPassengerNotice('Đã cập nhật hành khách đã lưu.')
+      } else {
+        await createSavedPassenger(payload)
+        setSavedPassengerNotice('Đã thêm hành khách đã lưu.')
+      }
+      setSavedPassengerForm(emptySavedPassengerForm)
+      setEditingSavedPassengerId(null)
+      await loadSavedPassengers()
+    } catch (error) {
+      setSavedPassengerError(error.message || 'Không thể lưu hành khách.')
+    }
+  }
+
+  const handleDeleteSavedPassenger = async (passenger) => {
+    if (!passenger?.id) return
+    const confirmed = window.confirm('Bạn chắc chắn muốn xóa hành khách này?')
+    if (!confirmed) return
+
+    setSavedPassengerError('')
+    setSavedPassengerNotice('')
+    try {
+      await deleteSavedPassenger(passenger.id)
+      setSavedPassengerNotice('Đã xóa hành khách đã lưu.')
+      await loadSavedPassengers()
+    } catch (error) {
+      setSavedPassengerError(error.message || 'Không thể xóa hành khách.')
+    }
+  }
+
+  const loadTicketsForBooking = async (bookingId) => {
+    if (!bookingId) return
+    setLoadingTicketsMap((prev) => ({ ...prev, [bookingId]: true }))
+    setTicketErrorMap((prev) => ({ ...prev, [bookingId]: '' }))
+    try {
+      const tickets = await getTicketsByBooking(bookingId)
+      setBookingTicketsMap((prev) => ({ ...prev, [bookingId]: tickets }))
+    } catch (error) {
+      setTicketErrorMap((prev) => ({
+        ...prev,
+        [bookingId]: error.message || 'Không thể tải danh sách vé.',
+      }))
+    } finally {
+      setLoadingTicketsMap((prev) => ({ ...prev, [bookingId]: false }))
+    }
+  }
+
+  const isTicketCancelled = (status) => {
+    const code = resolveTicketStatusCode(status)
+    if (code === 3 || code === 4 || code === 5) return true
+    const normalized = String(status || '').trim().toLowerCase()
+    return normalized.includes('cancel') || normalized.includes('huy')
+  }
+
+  const isTicketActionable = (status) => {
+    const code = resolveTicketStatusCode(status)
+    return code === 0
+  }
+
+  const cancelTicketFromHistory = async (bookingId, ticket) => {
+    if (!bookingId || !ticket?.ticketId) return
+    if (!isTicketActionable(ticket.status)) return
+
+    const confirmed = window.confirm('Bạn chắc chắn muốn hủy vé này?')
+    if (!confirmed) return
+
+    const reason = window.prompt('Lý do hủy vé (không bắt buộc):', '')
+    if (reason === null) return
+
+    setIsCancellingTicketId(ticket.ticketId)
+    setTicketErrorMap((prev) => ({ ...prev, [bookingId]: '' }))
+    try {
+      await cancelTicket(bookingId, ticket.ticketId, reason.trim())
+      await loadTicketsForBooking(bookingId)
+    } catch (error) {
+      setTicketErrorMap((prev) => ({
+        ...prev,
+        [bookingId]: error.message || 'Hủy vé thất bại.',
+      }))
+    } finally {
+      setIsCancellingTicketId(null)
+    }
+  }
+
+  const applySavedPassengerToForm = (index, passenger) => {
+    if (!passenger) return
+    const fullName = [passenger.lastName, passenger.firstName].filter(Boolean).join(' ')
+    setPassengerForms((prev) =>
+      prev.map((item, idx) =>
+        idx === index
+          ? {
+              ...item,
+              fullName: fullName || item.fullName,
+              dob: toDateInputValueFromApi(passenger.dateOfBirth),
+              gender: passenger.gender || item.gender,
+              document: passenger.documentNumber || item.document,
+              email: passenger.email || item.email,
+              phone: passenger.phone || item.phone,
+              savedPassengerId: String(passenger.id || ''),
+            }
+          : item
+      )
+    )
+  }
+
+  const updateServiceDraft = (leg, index, serviceId, nextValue) => {
+    setSelectedServicesByPassengerDraft((prev) => {
+      const currentLeg = prev?.[leg] || {}
+      const currentPassenger = currentLeg[index] || {}
+      return {
+        ...prev,
+        [leg]: {
+          ...currentLeg,
+          [index]: {
+            ...currentPassenger,
+            [serviceId]: nextValue,
+          },
+        },
+      }
+    })
+  }
+
+  useEffect(() => {
+    if (screen !== 'saved-passengers' && screen !== 'passenger') return
+    loadSavedPassengers()
+  }, [screen])
+
   const loadServices = async (seatClassId) => {
     setIsLoadingServices(true)
     setServiceError('')
@@ -461,9 +1664,13 @@ function App() {
   }
 
   const isBookingCancelled = (status) => {
-    const normalized = String(status || '').trim().toLowerCase()
-    const ascii = normalized.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    return ['huy', 'da huy', 'canceled', 'cancelled', 'cancel'].includes(ascii)
+    const code = resolveBookingStatusCode(status)
+    return code === 2 || code === 3 || code === 4 || code === 5
+  }
+
+  const isBookingPendingPayment = (status) => {
+    const code = resolveBookingStatusCode(status)
+    return code === 0
   }
 
   const cancelBookingFromHistory = async (item) => {
@@ -493,7 +1700,7 @@ function App() {
       await cancelBooking(bookingIdValue, reason.trim())
       const next = bookingHistory.map((entry) =>
         entry.bookingId === item.bookingId
-          ? { ...entry, status: 'Đã hủy' }
+          ? { ...entry, status: getBookingStatusLabel(5) }
           : entry
       )
       persistBookingHistory(next)
@@ -514,7 +1721,7 @@ function App() {
     const entry = {
       bookingId: bookingId || bookingReference,
       transactionRef: paymentData?.transactionRef || bookingReference,
-      status: paymentData?.status || 'Đã thanh toán',
+      status: getBookingStatusLabel(1),
       createdAt: new Date().toISOString(),
       fromAirport: selectedFromAirport?.City || '',
       toAirport: selectedToAirport?.City || '',
@@ -547,54 +1754,70 @@ function App() {
     setHistoryNotice('Đã lưu vé vào lịch sử đặt chỗ.')
   }
 
-  const filteredFlights = useMemo(() => {
-    const now = new Date()
-    return apiFlights.filter((flight) => {
-      const departureDate = new Date(flight.departureTime)
-      if (Number.isNaN(departureDate.getTime()) || departureDate < now) return false
-      const pricesByClass = flight.pricesByClass || {}
-      const flightPrice = (pricesByClass[searchData.seatClass] || 0) / passengerDivisor
-      const byPrice = flightPrice <= filters.maxPrice
-      const byClass = true
-
-      let byTime = true
-      const departHour = new Date(flight.departureTime).getHours()
-      if (filters.timeSlot === 'morning') byTime = departHour < 12
-      if (filters.timeSlot === 'afternoon') byTime = departHour >= 12 && departHour < 18
-      if (filters.timeSlot === 'evening') byTime = departHour >= 18
-
-      return byPrice && byClass && byTime
-    })
-  }, [filters, apiFlights, searchData.seatClass, totalPassengers, passengerDivisor])
-
-  const totalPrice = selectedFlight?.price || selectedFlight?.pricesByClass?.[searchData.seatClass] || 0
+  const totalPrice =
+    getFlightPrice(selectedFlight, searchData.seatClass) +
+    (tripType === 'roundtrip' && returnFlight
+      ? getFlightPrice(returnFlight, searchData.seatClass)
+      : 0)
   
-  const discountAmount = bestPromotion?.calculatedDiscount || 0
+  const selectedPromotion = useMemo(() => {
+    if (!selectedPromotionId) return null
+    return availablePromotions.find(
+      (promotion) => String(getPromotionId(promotion)) === String(selectedPromotionId)
+    ) || null
+  }, [availablePromotions, selectedPromotionId])
+
+  const appliedPromotion = selectedPromotionId ? selectedPromotion : null
+  const discountAmount = appliedPromotion?.calculatedDiscount || 0
   const finalPrice = totalPrice - discountAmount
 
   useEffect(() => {
     if (!selectedFlight || totalPrice === 0) {
-      setBestPromotion(null)
+      setAvailablePromotions([])
+      setSelectedPromotionId('')
       return
     }
 
-    const fetchBestPromotion = async () => {
+    const fetchPromotions = async () => {
       setIsLoadingPromotion(true)
       try {
-        const promotion = await getBestPromotion(totalPrice)
-        setBestPromotion(promotion)
-        if (promotion) {
-          console.log('🎁 Áp dụng mã giảm giá:', promotion.promoCode, '- Giảm:', promotion.calculatedDiscount)
+        const promotions = await getActivePromotions()
+        const now = new Date()
+        const validPromotions = (Array.isArray(promotions) ? promotions : [])
+          .filter((promo) => {
+            const startDate = promo.startDate ? new Date(promo.startDate) : null
+            const endDate = promo.endDate ? new Date(promo.endDate) : null
+            const validFrom = promo.validFrom ? new Date(promo.validFrom) : null
+            const validTo = promo.validTo ? new Date(promo.validTo) : null
+            const isActive = (!startDate || startDate <= now) && (!endDate || endDate >= now)
+            const isWithinValidRange = (!validFrom || validFrom <= now) && (!validTo || validTo >= now)
+            const meetsMinimum = !promo.minPurchaseAmount || totalPrice >= promo.minPurchaseAmount
+            return (isActive || isWithinValidRange) && meetsMinimum
+          })
+          .map((promo) => ({
+            ...promo,
+            calculatedDiscount: calculatePromotionDiscount(promo, totalPrice),
+          }))
+          .sort((a, b) => b.calculatedDiscount - a.calculatedDiscount)
+
+        const best = validPromotions[0] || null
+        setAvailablePromotions(validPromotions)
+
+        if (!selectedPromotionId || !validPromotions.some(
+          (promo) => String(getPromotionId(promo)) === String(selectedPromotionId)
+        )) {
+          setSelectedPromotionId(best ? String(getPromotionId(best)) : '')
         }
       } catch (error) {
         console.error('Lỗi khi tìm promotion:', error)
-        setBestPromotion(null)
+        setAvailablePromotions([])
+        setSelectedPromotionId('')
       } finally {
         setIsLoadingPromotion(false)
       }
     }
 
-    fetchBestPromotion()
+    fetchPromotions()
   }, [selectedFlight, totalPrice])
 
   const selectedFromAirport = airports.find((airport) => airport.Id === searchData.fromAirportId)
@@ -620,9 +1843,14 @@ function App() {
     return `${date.getDate()}/${date.getMonth() + 1}`
   }
 
+  const currentListDate =
+    tripType === 'roundtrip' && roundtripStep === 'return'
+      ? searchData.returnDate
+      : searchData.departDate
+
   const dateOptions = useMemo(() => {
-    if (!searchData.departDate) return []
-    const base = new Date(`${searchData.departDate}T00:00:00`)
+    if (!currentListDate) return []
+    const base = new Date(`${currentListDate}T00:00:00`)
     if (Number.isNaN(base.getTime())) return []
     const todayDate = new Date(`${today}T00:00:00`)
     const range = 3
@@ -640,16 +1868,41 @@ function App() {
     }
 
     return items
-  }, [searchData.departDate, today])
+  }, [currentListDate, today])
+
+  const currentFlights =
+    tripType === 'roundtrip' && roundtripStep === 'return'
+      ? returnFlights
+      : outboundFlights
 
   const lowestPriceForCurrentDate = useMemo(() => {
-    if (!Array.isArray(apiFlights) || apiFlights.length === 0) return null
-    const prices = apiFlights
+    if (!Array.isArray(currentFlights) || currentFlights.length === 0) return null
+    const prices = currentFlights
       .map((flight) => (flight?.pricesByClass?.[searchData.seatClass] ?? flight?.price) / passengerDivisor)
       .filter((value) => Number.isFinite(value))
     if (prices.length === 0) return null
     return Math.min(...prices)
-  }, [apiFlights, searchData.seatClass, passengerDivisor])
+  }, [currentFlights, searchData.seatClass, passengerDivisor])
+
+  const filteredFlights = useMemo(() => {
+    const now = new Date()
+    return currentFlights.filter((flight) => {
+      const departureDate = new Date(flight.departureTime)
+      if (Number.isNaN(departureDate.getTime()) || departureDate < now) return false
+      const pricesByClass = flight.pricesByClass || {}
+      const flightPrice = (pricesByClass[searchData.seatClass] || 0) / passengerDivisor
+      const byPrice = flightPrice <= filters.maxPrice
+      const byClass = true
+
+      let byTime = true
+      const departHour = new Date(flight.departureTime).getHours()
+      if (filters.timeSlot === 'morning') byTime = departHour < 12
+      if (filters.timeSlot === 'afternoon') byTime = departHour >= 12 && departHour < 18
+      if (filters.timeSlot === 'evening') byTime = departHour >= 18
+
+      return byPrice && byClass && byTime
+    })
+  }, [filters, currentFlights, searchData.seatClass, totalPassengers, passengerDivisor])
 
   const performSearch = async (departDateOverride) => {
     const nextDepartDate = departDateOverride || searchData.departDate
@@ -692,16 +1945,19 @@ function App() {
         departureAirportId: nextSearchData.fromAirportId,
         arrivalAirportId: nextSearchData.toAirportId,
         departureDate: nextSearchData.departDate,
-        returnDate: tripType === 'roundtrip' ? nextSearchData.returnDate : null,
+        returnDate: null,
         passengerCount: totalPassengers,
         seatPreference: seatClassMap[nextSearchData.seatClass] || null,
       })
 
       setSelectedFlight(null)
+      setReturnFlight(null)
       setBookingId(null)
       setPaymentData(null)
       const nextFlights = Array.isArray(results) ? results : []
-      setApiFlights(nextFlights)
+      setOutboundFlights(nextFlights)
+      setReturnFlights([])
+      setRoundtripStep('outbound')
       const resultPrices = nextFlights
         .map((flight) => flight?.pricesByClass?.[nextSearchData.seatClass] ?? flight?.price)
         .filter((value) => Number.isFinite(value))
@@ -712,6 +1968,36 @@ function App() {
         maxPrice: Number.isFinite(highestResultPrice) ? Math.max(prev.maxPrice, highestResultPrice) : prev.maxPrice,
       }))
       setScreen('list')
+    } catch (error) {
+      setApiError(error.message || 'Lỗi tìm kiếm chuyến bay. Vui lòng thử lại.')
+    } finally {
+      setIsLoadingFlights(false)
+    }
+  }
+
+  const loadReturnFlights = async (originId, destinationId, returnDate) => {
+    setIsLoadingFlights(true)
+    setApiError('')
+    try {
+      const results = await searchFlights({
+        departureAirportId: originId,
+        arrivalAirportId: destinationId,
+        departureDate: returnDate,
+        returnDate: null,
+        passengerCount: totalPassengers,
+        seatPreference: seatClassMap[searchData.seatClass] || null,
+      })
+      const nextFlights = Array.isArray(results) ? results : []
+      setReturnFlights(nextFlights)
+      const resultPrices = nextFlights
+        .map((flight) => flight?.pricesByClass?.[searchData.seatClass] ?? flight?.price)
+        .filter((value) => Number.isFinite(value))
+      const highestResultPrice = resultPrices.length > 0 ? Math.max(...resultPrices) : null
+      setFilters((prev) => ({
+        ...prev,
+        seatClass: searchData.seatClass,
+        maxPrice: Number.isFinite(highestResultPrice) ? Math.max(prev.maxPrice, highestResultPrice) : prev.maxPrice,
+      }))
     } catch (error) {
       setApiError(error.message || 'Lỗi tìm kiếm chuyến bay. Vui lòng thử lại.')
     } finally {
@@ -781,6 +2067,20 @@ function App() {
     return () => {
       cancelled = true
     }
+  }, [screen, isAdmin])
+
+  useEffect(() => {
+    if (screen !== 'promotions' || !isAdmin) return
+    loadAdminPromotions()
+  }, [screen, isAdmin])
+
+  useEffect(() => {
+    if (screen !== 'flights' || !isAdmin) return
+    loadAdminFlights()
+    loadAdminRoutes()
+    getAircrafts()
+      .then((data) => setAircrafts(Array.isArray(data) ? data : []))
+      .catch(() => setFlightAdminError('Không thể tải danh sách máy bay.'))
   }, [screen, isAdmin])
 
   // Load aircrafts khi vào màn hình templates
@@ -859,6 +2159,102 @@ function App() {
         <div>
           {authUser ? (
             <div className="flex items-center gap-3">
+              <div
+                className="relative"
+                onMouseEnter={() => setIsNotificationPanelOpen(true)}
+                onMouseLeave={() => setIsNotificationPanelOpen(false)}
+              >
+                <button
+                  type="button"
+                  onClick={() => setIsNotificationPanelOpen((prev) => !prev)}
+                  className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-white transition hover:bg-white/25"
+                  aria-label="Thông báo"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-5 w-5"
+                  >
+                    <path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
+                    <path d="M13.73 21a2 2 0 01-3.46 0" />
+                  </svg>
+                  {unreadNotificationCount > 0 && (
+                    <span className="absolute -right-1 -top-1 min-w-[20px] rounded-full bg-rose-500 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+                      {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                    </span>
+                  )}
+                </button>
+                <div
+                  className={`absolute right-0 top-full mt-3 w-80 rounded-2xl bg-white text-slate-900 shadow-xl ring-1 ring-black/5 transition ${
+                    isNotificationPanelOpen
+                      ? 'pointer-events-auto translate-y-0 opacity-100'
+                      : 'pointer-events-none -translate-y-1 opacity-0'
+                  }`}
+                >
+                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                    <div className="text-sm font-semibold text-slate-900">Thông báo</div>
+                    {unreadNotificationCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={handleMarkAllNotificationsRead}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                      >
+                        Đánh dấu tất cả đã đọc
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-80 overflow-auto">
+                    {isLoadingNotifications && (
+                      <div className="px-4 py-5 text-sm text-slate-500">Đang tải thông báo...</div>
+                    )}
+                    {!isLoadingNotifications && notificationError && (
+                      <div className="px-4 py-4 text-sm text-rose-600">{notificationError}</div>
+                    )}
+                    {!isLoadingNotifications && !notificationError && sortedNotifications.length === 0 && (
+                      <div className="px-4 py-5 text-sm text-slate-500">Chưa có thông báo nào.</div>
+                    )}
+                    {!isLoadingNotifications && !notificationError && sortedNotifications.length > 0 && (
+                      <div className="divide-y divide-slate-100">
+                        {sortedNotifications.map((item) => {
+                          const title = item?.subject || item?.category || 'Thông báo'
+                          const message = item?.message || item?.errorMessage || item?.type || ''
+                          const timestamp = formatDateTime(item?.createdAt || item?.sentAt)
+                          const isRead = Boolean(item?.isRead)
+
+                          return (
+                            <button
+                              type="button"
+                              key={item?.notificationId || `${title}-${timestamp}`}
+                              onClick={() => {
+                                if (!isRead) {
+                                  handleMarkNotificationRead(item?.notificationId)
+                                }
+                              }}
+                              className={`flex w-full flex-col gap-1 px-4 py-3 text-left transition hover:bg-slate-50 ${
+                                isRead ? 'text-slate-500' : 'text-slate-900'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-sm font-semibold">{title}</span>
+                                {!isRead && (
+                                  <span className="h-2 w-2 flex-none rounded-full bg-blue-600" />
+                                )}
+                              </div>
+                              {message && <div className="text-xs text-slate-500">{message}</div>}
+                              {timestamp && <div className="text-[11px] text-slate-400">{timestamp}</div>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
               <div className="text-sm text-blue-100">Xin chào, {authUser.fullName || authUser.email}</div>
               <button
                 type="button"
@@ -1347,10 +2743,17 @@ function App() {
       </aside>
 
       <section className="space-y-4">
+        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          {tripType === 'roundtrip'
+            ? roundtripStep === 'outbound'
+              ? 'Bước 1: Chọn chuyến đi (A → B)'
+              : 'Bước 2: Chọn chuyến về (B → A)'
+            : 'Chọn chuyến bay'}
+        </div>
         {dateOptions.length > 0 && (
           <div className="flex gap-3 overflow-x-auto pb-2">
             {dateOptions.map((option) => {
-              const isActive = option.value === searchData.departDate
+              const isActive = option.value === currentListDate
               const priceLabel = isActive && Number.isFinite(lowestPriceForCurrentDate)
                 ? formatCurrency(lowestPriceForCurrentDate)
                 : '—'
@@ -1361,7 +2764,11 @@ function App() {
                   type="button"
                   disabled={isLoadingFlights || isActive}
                   onClick={() => {
-                    if (!isActive) {
+                    if (isActive) return
+                    if (tripType === 'roundtrip' && roundtripStep === 'return') {
+                      setSearchData((prev) => ({ ...prev, returnDate: option.value }))
+                      loadReturnFlights(searchData.toAirportId, searchData.fromAirportId, option.value)
+                    } else {
                       performSearch(option.value)
                     }
                   }}
@@ -1420,8 +2827,19 @@ function App() {
                         setServiceError('Khong xac dinh duoc hang ghe de tai dich vu')
                         setServices([])
                       }
-                      setSelectedFlight(flight)
-                      setScreen('passenger')
+                      if (tripType === 'roundtrip' && roundtripStep === 'outbound') {
+                        setSelectedFlight(flight)
+                        setReturnFlight(null)
+                        setRoundtripStep('return')
+                        loadReturnFlights(searchData.toAirportId, searchData.fromAirportId, searchData.returnDate)
+                      } else {
+                        if (tripType === 'roundtrip') {
+                          setReturnFlight(flight)
+                        } else {
+                          setSelectedFlight(flight)
+                        }
+                        setScreen('passenger')
+                      }
                     }}
                     className="mt-2 rounded-xl bg-[#1E40AF] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
                   >
@@ -1433,13 +2851,13 @@ function App() {
           )
         })}
 
-        {!isLoadingFlights && filteredFlights.length === 0 && apiFlights.length > 0 && (
+        {!isLoadingFlights && filteredFlights.length === 0 && outboundFlights.length > 0 && (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
             Không tìm thấy chuyến bay phù hợp bộ lọc.
           </div>
         )}
 
-        {!isLoadingFlights && apiFlights.length === 0 && (
+        {!isLoadingFlights && outboundFlights.length === 0 && (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
             Vui lòng tìm kiếm chuyến bay trước.
           </div>
@@ -1464,6 +2882,38 @@ function App() {
                     {isAdult ? 'Người lớn (>= 12 tuổi)' : isChild ? 'Trẻ em (2 - 12 tuổi)' : 'Trẻ sơ sinh (0 - 2 tuổi)'}
                   </span>
                 </div>
+
+                {savedPassengers.length > 0 && (
+                  <div className="mb-4">
+                    <Label>Chọn hành khách đã lưu</Label>
+                    <Select
+                      value={passenger.savedPassengerId}
+                      onChange={(e) => {
+                        const selectedId = Number(e.target.value)
+                        const selected = savedPassengers.find((item) => item.id === selectedId)
+                        if (selected) {
+                          applySavedPassengerToForm(index, selected)
+                        } else {
+                          setPassengerForms((prev) =>
+                            prev.map((item, idx) =>
+                              idx === index ? { ...item, savedPassengerId: '' } : item
+                            )
+                          )
+                        }
+                      }}
+                    >
+                      <option value="">-- Chọn từ danh bạ --</option>
+                      {savedPassengers.map((item) => {
+                        const label = [item.lastName, item.firstName].filter(Boolean).join(' ') || '---'
+                        return (
+                          <option key={item.id} value={item.id}>
+                            {label}{item.email ? ` · ${item.email}` : ''}
+                          </option>
+                        )
+                      })}
+                    </Select>
+                  </div>
+                )}
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="md:col-span-2">
@@ -1540,69 +2990,105 @@ function App() {
                       />
                     </div>
                   )}
-                  {passenger.type !== 'infant' && (
-                    <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <p className="mb-2 text-sm font-semibold text-slate-700">Dịch vụ thêm (theo hạng ghế)</p>
-                      {serviceError && (
-                        <p className="mb-2 text-xs text-red-600">{serviceError}</p>
-                      )}
-                      {isLoadingServices && (
-                        <p className="text-xs text-slate-500">Đang tải dịch vụ...</p>
-                      )}
-                      {!isLoadingServices && services.length === 0 && (
-                        <p className="text-xs text-slate-500">Không có dịch vụ khả dụng cho hạng ghế đã chọn.</p>
-                      )}
-                      {!isLoadingServices && services.length > 0 && (
-                        <div className="space-y-2">
-                          {services.map((service) => {
-                            const serviceId = service.serviceId || service.id
-                            const current = selectedServicesByPassengerDraft[index]?.[serviceId] || 0
-                            return (
-                              <div key={`${index}-${serviceId}`} className="flex items-center justify-between rounded-lg bg-white p-2">
-                                <div>
-                                  <p className="text-sm font-medium text-slate-800">{service.serviceName}</p>
-                                  <p className="text-xs text-slate-500">{getServicePriceLabel(service.price)}</p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (current > 0) {
-                                        setSelectedServicesByPassengerDraft((prev) => ({
-                                          ...prev,
-                                          [index]: {
-                                            ...(prev[index] || {}),
-                                            [serviceId]: current - 1,
-                                          },
-                                        }))
-                                      }
-                                    }}
-                                    className="rounded-lg bg-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-300"
-                                  >
-                                    -
-                                  </button>
-                                  <span className="w-6 text-center text-sm font-semibold">{current}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setSelectedServicesByPassengerDraft((prev) => ({
-                                        ...prev,
-                                        [index]: {
-                                          ...(prev[index] || {}),
-                                          [serviceId]: current + 1,
-                                        },
-                                      }))
-                                    }}
-                                    className="rounded-lg bg-[#1E40AF] px-3 py-1 text-sm font-semibold text-white hover:bg-blue-800"
-                                  >
-                                    +
-                                  </button>
-                                </div>
-                              </div>
+                  {isAdult && (
+                    <>
+                      <div>
+                        <Label>Email</Label>
+                        <Input
+                          type="email"
+                          placeholder="email@example.com"
+                          value={passenger.email}
+                          onChange={(e) =>
+                            setPassengerForms((prev) =>
+                              prev.map((item, idx) =>
+                                idx === index ? { ...item, email: e.target.value } : item
+                              )
                             )
-                          })}
-                        </div>
-                      )}
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label>Số điện thoại</Label>
+                        <Input
+                          placeholder="0901234567"
+                          value={passenger.phone}
+                          onChange={(e) =>
+                            setPassengerForms((prev) =>
+                              prev.map((item, idx) =>
+                                idx === index ? { ...item, phone: e.target.value } : item
+                              )
+                            )
+                          }
+                        />
+                      </div>
+                    </>
+                  )}
+                  {passenger.type !== 'infant' && (
+                    <div className="md:col-span-2 space-y-3">
+                      {['outbound', tripType === 'roundtrip' ? 'return' : null]
+                        .filter(Boolean)
+                        .map((leg) => (
+                          <div
+                            key={`${index}-${leg}`}
+                            className="rounded-xl border border-slate-200 bg-slate-50 p-3"
+                          >
+                            <p className="mb-2 text-sm font-semibold text-slate-700">
+                              Dịch vụ thêm ({leg === 'outbound' ? 'chuyến đi' : 'chuyến về'})
+                            </p>
+                            {serviceError && (
+                              <p className="mb-2 text-xs text-red-600">{serviceError}</p>
+                            )}
+                            {isLoadingServices && (
+                              <p className="text-xs text-slate-500">Đang tải dịch vụ...</p>
+                            )}
+                            {!isLoadingServices && services.length === 0 && (
+                              <p className="text-xs text-slate-500">Không có dịch vụ khả dụng cho hạng ghế đã chọn.</p>
+                            )}
+                            {!isLoadingServices && services.length > 0 && (
+                              <div className="space-y-2">
+                                {services.map((service) => {
+                                  const serviceId = service.serviceId || service.id
+                                  const current =
+                                    selectedServicesByPassengerDraft?.[leg]?.[index]?.[serviceId] || 0
+                                  return (
+                                    <div
+                                      key={`${index}-${leg}-${serviceId}`}
+                                      className="flex items-center justify-between rounded-lg bg-white p-2"
+                                    >
+                                      <div>
+                                        <p className="text-sm font-medium text-slate-800">{service.serviceName}</p>
+                                        <p className="text-xs text-slate-500">{getServicePriceLabel(service.price)}</p>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (current > 0) {
+                                              updateServiceDraft(leg, index, serviceId, current - 1)
+                                            }
+                                          }}
+                                          className="rounded-lg bg-slate-200 px-3 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+                                        >
+                                          -
+                                        </button>
+                                        <span className="w-6 text-center text-sm font-semibold">{current}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            updateServiceDraft(leg, index, serviceId, current + 1)
+                                          }}
+                                          className="rounded-lg bg-[#1E40AF] px-3 py-1 text-sm font-semibold text-white hover:bg-blue-800"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        ))}
                     </div>
                   )}
                 </div>
@@ -1611,9 +3097,39 @@ function App() {
           })}
         </div>
 
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <Label>Chọn mã giảm giá</Label>
+          <Select
+            value={selectedPromotionId}
+            onChange={(e) => setSelectedPromotionId(e.target.value)}
+          >
+            <option value="">Không dùng mã</option>
+            {availablePromotions.map((promo) => (
+              <option key={String(getPromotionId(promo))} value={String(getPromotionId(promo))}>
+                {getPromotionDisplayText(promo)}
+              </option>
+            ))}
+          </Select>
+          {isLoadingPromotion && (
+            <p className="mt-2 text-xs text-slate-500">Đang tải mã giảm giá...</p>
+          )}
+          {!isLoadingPromotion && availablePromotions.length === 0 && (
+            <p className="mt-2 text-xs text-slate-500">Không có mã giảm giá khả dụng.</p>
+          )}
+          {appliedPromotion && (
+            <p className="mt-2 text-xs text-emerald-700">
+              Đang áp dụng: {getPromotionDisplayText(appliedPromotion)}
+            </p>
+          )}
+        </div>
+
         <button
           type="button"
           onClick={async () => {
+            if (tripType === 'roundtrip' && !returnFlight) {
+              setApiError('Vui lòng chọn chuyến về trước khi tiếp tục')
+              return
+            }
             if (!passengerForms.length) {
               setApiError('Vui lòng điền đầy đủ thông tin hành khách')
               return
@@ -1623,7 +3139,7 @@ function App() {
               if (!passenger.fullName) return true
               if (!passenger.dob || !passenger.gender) return true
               if (passenger.type === 'adult') {
-                return !passenger.dob || !passenger.document
+                return !passenger.dob || !passenger.document || !passenger.email || !passenger.phone
               }
               const ageValue = getAgeFromDob(passenger.dob)
               if (!Number.isFinite(ageValue)) return true
@@ -1649,10 +3165,20 @@ function App() {
                 const [firstName, ...rest] = passenger.fullName.trim().split(' ')
                 const lastName = rest.join(' ')
                 const dateOfBirth = new Date(passenger.dob).toISOString()
-                const draftSelections = selectedServicesByPassengerDraft[idx] || {}
+                const outboundSelections = selectedServicesByPassengerDraft?.outbound?.[idx] || {}
+                const returnSelections =
+                  tripType === 'roundtrip' ? selectedServicesByPassengerDraft?.return?.[idx] || {} : {}
                 const optionalServices = passenger.type === 'infant'
                   ? []
-                  : Object.entries(draftSelections)
+                  : Object.entries(outboundSelections)
+                    .map(([serviceId, quantity]) => ({
+                      additionalServiceId: Number(serviceId),
+                      quantity: Number(quantity || 0),
+                    }))
+                    .filter((item) => Number.isFinite(item.additionalServiceId) && item.quantity > 0)
+                const returnOptionalServices = passenger.type === 'infant'
+                  ? []
+                  : Object.entries(returnSelections)
                     .map(([serviceId, quantity]) => ({
                       additionalServiceId: Number(serviceId),
                       quantity: Number(quantity || 0),
@@ -1661,27 +3187,32 @@ function App() {
                 return {
                   firstName: firstName || passenger.fullName,
                   lastName,
-                  email: idx === 0 ? authUser.email : '',
-                  phone: idx === 0 ? '0900000000' : '',
+                  email: passenger.type === 'adult' ? passenger.email : '',
+                  phone: passenger.type === 'adult' ? passenger.phone : '',
                   dateOfBirth,
                   nationality: 'VN',
                   passportNumber: passenger.type === 'adult' ? passenger.document : '',
                   optionalServices,
+                  returnOptionalServices: tripType === 'roundtrip' ? returnOptionalServices : [],
                 }
               })
+
+              const contactEmail =
+                passengerForms.find((passenger) => passenger.type === 'adult' && passenger.email)
+                  ?.email || authUser.email
 
               const booking = await createBooking({
                 outboundFlightId: getFlightId(selectedFlight),
                 outboundFlightNumber: selectedFlight.flightNumber,
                 outboundDepartureDate: selectedFlight.departureTime,
-                returnFlightId: null,
-                returnFlightNumber: null,
-                returnDepartureDate: null,
+                returnFlightId: tripType === 'roundtrip' ? getFlightId(returnFlight) : null,
+                returnFlightNumber: tripType === 'roundtrip' ? returnFlight?.flightNumber || null : null,
+                returnDepartureDate: tripType === 'roundtrip' ? returnFlight?.departureTime || null : null,
                 passengerCount: parseInt(searchData.passengers, 10),
                 seatClassId,
                 passengers: passengersPayload,
-                promotionId: bestPromotion?.promotionId || null,
-                contactEmail: authUser.email,
+                promotionId: appliedPromotion ? getPromotionId(appliedPromotion) : null,
+                contactEmail,
               })
               setBookingId(booking.bookingId)
               setBookingAmount(booking.finalAmount ?? booking.totalAmount ?? null)
@@ -1720,6 +3251,18 @@ function App() {
             </p>
           </>
         )}
+        {tripType === 'roundtrip' && returnFlight && (
+          <>
+            <p className="mt-3 text-sm font-semibold text-slate-900">Chuyến về</p>
+            <p className="text-sm text-slate-600">
+              {formatTime(returnFlight.departureTime)} - {formatTime(returnFlight.arrivalTime)} (
+              {formatDuration(returnFlight.durationMinutes)})
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              ID chuyến bay: {getFlightId(returnFlight)} · Số hiệu: {getFlightLabel(returnFlight)}
+            </p>
+          </>
+        )}
         
         <div className="mt-3 border-t border-slate-100 pt-3">
           <div className="flex justify-between text-sm text-slate-600">
@@ -1727,18 +3270,14 @@ function App() {
             <span>{formatCurrency(totalPrice)}</span>
           </div>
           
-          {isLoadingPromotion && (
-            <div className="mt-2 text-xs text-slate-500">
-              🔍 Đang tìm mã giảm giá tốt nhất...
-            </div>
-          )}
-          
-          {bestPromotion && (
+          {appliedPromotion && (
             <div className="mt-2 rounded-lg bg-green-50 p-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-green-700">🎁 {bestPromotion.promoCode}</p>
-                  <p className="text-xs text-green-600">{bestPromotion.description}</p>
+                  <p className="text-xs font-semibold text-green-700">🎁 {getPromotionCode(appliedPromotion)}</p>
+                  {appliedPromotion.description && (
+                    <p className="text-xs text-green-600">{appliedPromotion.description}</p>
+                  )}
                 </div>
                 <p className="text-sm font-bold text-green-700">-{formatCurrency(discountAmount)}</p>
               </div>
@@ -1765,7 +3304,7 @@ function App() {
         <p className="mb-5 text-sm text-slate-500">Phương thức thanh toán: VNPAY</p>
         {paymentData && (
           <div className="mb-4 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800">
-            <p>Trạng thái: {paymentData.status}</p>
+            <p>Trạng thái: {getBookingStatusLabel(paymentData.status)}</p>
             <p>Số tiền: {paymentSummaryAmount !== null ? formatCurrency(paymentSummaryAmount) : '--'}</p>
           </div>
         )}
@@ -1850,6 +3389,12 @@ function App() {
           <p>Số hiệu chuyến bay: {getFlightLabel(selectedFlight)}</p>
           <p>Ngày cất cánh: {formatDateTime(selectedFlight?.departureTime)}</p>
           <p>Hãng bay: {selectedFlight?.airlineCode}</p>
+          {tripType === 'roundtrip' && returnFlight && (
+            <>
+              <p>Chuyến về: {getFlightLabel(returnFlight)}</p>
+              <p>Ngày về: {formatDateTime(returnFlight?.departureTime)}</p>
+            </>
+          )}
           <p>Hành khách: {passengerForms[0]?.fullName || 'Chưa nhập'}</p>
           <p>Số lượng: {searchData.passengers}</p>
           {paymentData && (
@@ -1863,9 +3408,9 @@ function App() {
             <span>{formatCurrency(totalPrice)}</span>
           </div>
           
-          {bestPromotion && (
+          {appliedPromotion && (
             <div className="flex justify-between text-sm text-green-600">
-              <span>🎁 Giảm giá ({bestPromotion.promoCode}):</span>
+              <span>🎁 Giảm giá ({getPromotionDisplayText(appliedPromotion)}):</span>
               <span>-{formatCurrency(discountAmount)}</span>
             </div>
           )}
@@ -1879,6 +3424,221 @@ function App() {
     </div>
   )
   }
+
+  const renderSavedPassengers = () => (
+    <div className="grid gap-5 lg:grid-cols-[1fr_360px]">
+      <section className="rounded-2xl bg-white p-5 shadow-lg shadow-slate-200 md:p-7">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Danh bạ</p>
+            <h2 className="title-font mt-1 text-2xl font-bold text-slate-900">Hành khách đã lưu</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Lưu thông tin hành khách để đặt vé nhanh hơn.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={loadSavedPassengers}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Làm mới
+            </button>
+            <button
+              type="button"
+              onClick={startCreateSavedPassenger}
+              className="rounded-xl bg-[#1E40AF] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            >
+              + Thêm mới
+            </button>
+          </div>
+        </div>
+
+        {isLoadingSavedPassengers && (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+            Đang tải hành khách đã lưu...
+          </div>
+        )}
+
+        {savedPassengerError && (
+          <div className="mb-4 rounded-2xl bg-red-50 p-4 text-sm text-red-700">
+            {savedPassengerError}
+          </div>
+        )}
+
+        {savedPassengerNotice && (
+          <div className="mb-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-700">
+            {savedPassengerNotice}
+          </div>
+        )}
+
+        {!isLoadingSavedPassengers && savedPassengers.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
+            Chưa có hành khách nào được lưu.
+          </div>
+        )}
+
+        {!isLoadingSavedPassengers && savedPassengers.length > 0 && (
+          <div className="space-y-4">
+            {savedPassengers.map((passenger) => {
+              const fullName = [passenger?.lastName, passenger?.firstName]
+                .filter(Boolean)
+                .join(' ')
+              const dobLabel = toDateInputValueFromApi(passenger?.dateOfBirth) || '---'
+              return (
+                <article
+                  key={passenger.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-[#1E40AF]">
+                        {fullName || '---'}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        Ngày sinh: {dobLabel} · Giới tính: {passenger?.gender || '---'}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        Quốc tịch: {passenger?.nationality || '---'} · Giấy tờ: {passenger?.documentNumber || '---'}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Email: {passenger?.email || '---'} · SĐT: {passenger?.phone || '---'}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEditSavedPassenger(passenger)}
+                        className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Sửa
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSavedPassenger(passenger)}
+                        className="rounded-xl bg-red-500 px-3 py-2 text-xs font-semibold text-white hover:bg-red-600"
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <aside className="h-fit rounded-2xl bg-white p-5 shadow-lg shadow-slate-200">
+        <h3 className="title-font mb-4 text-lg font-bold text-slate-900">
+          {editingSavedPassengerId ? 'Cập nhật hành khách' : 'Thêm hành khách mới'}
+        </h3>
+        <form onSubmit={handleSavedPassengerSubmit} className="space-y-3">
+          <div>
+            <Label>Họ</Label>
+            <Input
+              value={savedPassengerForm.lastName}
+              onChange={(event) =>
+                setSavedPassengerForm((prev) => ({ ...prev, lastName: event.target.value }))
+              }
+              placeholder="Nguyễn"
+            />
+          </div>
+          <div>
+            <Label>Tên</Label>
+            <Input
+              value={savedPassengerForm.firstName}
+              onChange={(event) =>
+                setSavedPassengerForm((prev) => ({ ...prev, firstName: event.target.value }))
+              }
+              placeholder="An"
+            />
+          </div>
+          <div>
+            <Label>Ngày sinh</Label>
+            <Input
+              type="date"
+              value={savedPassengerForm.dateOfBirth}
+              onChange={(event) =>
+                setSavedPassengerForm((prev) => ({ ...prev, dateOfBirth: event.target.value }))
+              }
+            />
+          </div>
+          <div>
+            <Label>Giới tính</Label>
+            <Select
+              value={savedPassengerForm.gender}
+              onChange={(event) =>
+                setSavedPassengerForm((prev) => ({ ...prev, gender: event.target.value }))
+              }
+            >
+              <option value="">-- Chọn --</option>
+              <option value="Nam">Nam</option>
+              <option value="Nữ">Nữ</option>
+              <option value="Khác">Khác</option>
+            </Select>
+          </div>
+          <div>
+            <Label>Quốc tịch</Label>
+            <Input
+              value={savedPassengerForm.nationality}
+              onChange={(event) =>
+                setSavedPassengerForm((prev) => ({ ...prev, nationality: event.target.value }))
+              }
+              placeholder="Việt Nam"
+            />
+          </div>
+          <div>
+            <Label>Số giấy tờ</Label>
+            <Input
+              value={savedPassengerForm.documentNumber}
+              onChange={(event) =>
+                setSavedPassengerForm((prev) => ({ ...prev, documentNumber: event.target.value }))
+              }
+              placeholder="0123456789"
+            />
+          </div>
+          <div>
+            <Label>Email</Label>
+            <Input
+              type="email"
+              value={savedPassengerForm.email}
+              onChange={(event) =>
+                setSavedPassengerForm((prev) => ({ ...prev, email: event.target.value }))
+              }
+              placeholder="email@example.com"
+            />
+          </div>
+          <div>
+            <Label>Số điện thoại</Label>
+            <Input
+              value={savedPassengerForm.phone}
+              onChange={(event) =>
+                setSavedPassengerForm((prev) => ({ ...prev, phone: event.target.value }))
+              }
+              placeholder="0901234567"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              {editingSavedPassengerId ? 'Lưu cập nhật' : 'Thêm hành khách'}
+            </button>
+            <button
+              type="button"
+              onClick={startCreateSavedPassenger}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Reset
+            </button>
+          </div>
+        </form>
+      </aside>
+    </div>
+  )
 
   const renderHistory = () => (
     <div className="rounded-2xl bg-white p-5 shadow-lg shadow-slate-200 md:p-7">
@@ -1932,11 +3692,21 @@ function App() {
 
       {!isLoadingHistory && bookingHistory.length > 0 && (
         <div className="space-y-4">
-          {bookingHistory.map((item) => (
-            <article
-              key={`${item.bookingId}-${item.transactionRef}`}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-            >
+          {bookingHistory.map((item) => {
+            const disruptionOptions = Array.isArray(disruptionOptionsMap[item.bookingId])
+              ? disruptionOptionsMap[item.bookingId]
+              : []
+            const isDisruptionLoading = Boolean(disruptionLoadingMap[item.bookingId])
+            const disruptionError = disruptionErrorMap[item.bookingId]
+            const disruptionNotice = disruptionNoticeMap[item.bookingId]
+            const selectedDecisionId = selectedDisruptionDecisionMap[item.bookingId] || ''
+            const selectedAction = selectedDisruptionActionMap[item.bookingId] || 'refund'
+
+            return (
+              <article
+                key={`${item.bookingId}-${item.transactionRef}`}
+                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+              >
               <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-[#1E40AF]">
@@ -1958,15 +3728,9 @@ function App() {
                 </div>
                 <div className="text-right">
                   <p
-                    className={`text-sm font-semibold ${
-                      isBookingCancelled(item.status) 
-                        ? 'text-red-600' 
-                        : item.status?.toLowerCase().includes('pending') || item.status?.toLowerCase().includes('chờ')
-                        ? 'text-yellow-600'
-                        : 'text-emerald-600'
-                    }`}
+                    className={`text-sm font-semibold ${getBookingStatusClassName(item.status)}`}
                   >
-                    {item.status}
+                    {getBookingStatusLabel(item.status)}
                   </p>
                   <p className="text-sm text-slate-500">{formatDateTime(item.createdAt)}</p>
                   <p className="mt-2 text-lg font-bold text-slate-900">
@@ -1975,12 +3739,57 @@ function App() {
                   <p className="text-xs text-slate-500">
                     Hành khách: {item.passengerName || '---'} · {item.passengerCount} vé
                   </p>
+                  {Array.isArray(item.passengers) &&
+                    item.passengers.some(
+                      (passenger) => Array.isArray(passenger?.services) && passenger.services.length > 0
+                    ) && (
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                        <p className="font-semibold text-slate-700">Dịch vụ đã chọn</p>
+                        <div className="mt-2 space-y-2">
+                          {item.passengers.map((passenger, passengerIndex) => {
+                            const services = Array.isArray(passenger?.services) ? passenger.services : []
+                            if (services.length === 0) return null
+                            const passengerLabel =
+                              [passenger?.lastName, passenger?.firstName].filter(Boolean).join(' ') ||
+                              `Hành khách ${passengerIndex + 1}`
+
+                            return (
+                              <div key={passenger?.passengerId || passengerIndex}>
+                                <p className="font-semibold text-slate-600">{passengerLabel}</p>
+                                <ul className="mt-1 space-y-1">
+                                  {services.map((service, serviceIndex) => (
+                                    <li
+                                      key={`${service?.additionalServiceId || serviceIndex}-${serviceIndex}`}
+                                      className="flex items-center justify-between text-slate-600"
+                                    >
+                                      <span>
+                                        {service?.serviceName || `Dịch vụ #${service?.additionalServiceId || '-'}`}
+                                        {service?.quantity > 1 ? ` x${service.quantity}` : ''}
+                                      </span>
+                                      <span>
+                                        {Number.isFinite(Number(service?.price))
+                                          ? formatCurrency(service.price)
+                                          : ''}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                   <div className="mt-3 flex flex-wrap gap-2 justify-end">
+                    <button
+                      type="button"
+                      onClick={() => loadTicketsForBooking(item.bookingId)}
+                      className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Xem vé
+                    </button>
                     {/* Nút thanh toán cho booking chưa thanh toán */}
-                    {!isBookingCancelled(item.status) && 
-                     (item.status?.toLowerCase().includes('pending') || 
-                      item.status?.toLowerCase().includes('chờ') ||
-                      item.status?.toLowerCase().includes('unpaid')) && (
+                    {!isBookingCancelled(item.status) && isBookingPendingPayment(item.status) && (
                       <button
                         type="button"
                         onClick={async () => {
@@ -2037,7 +3846,7 @@ function App() {
                       </button>
                     )}
                     {/* Nút hủy vé */}
-                    {!isBookingCancelled(item.status) && (
+                    {!isBookingCancelled(item.status) && !isPendingDisruptionDecision(item.status) && (
                       <button
                         type="button"
                         onClick={() => cancelBookingFromHistory(item)}
@@ -2047,11 +3856,236 @@ function App() {
                         {isCancellingBookingId === item.bookingId ? 'Đang hủy...' : 'Hủy vé'}
                       </button>
                     )}
+                    {(isBookingCancelled(item.status) || isPendingDisruptionDecision(item.status)) && (
+                      <button
+                        type="button"
+                        onClick={() => loadDisruptionOptionsForBooking(item.bookingId)}
+                        className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-600"
+                      >
+                        Tải lựa chọn xử lý
+                      </button>
+                    )}
                   </div>
+                  {isDisruptionLoading && (
+                    <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-500">
+                      Đang tải lựa chọn xử lý hủy chuyến...
+                    </div>
+                  )}
+                  {disruptionError && (
+                    <div className="mt-3 rounded-xl bg-red-50 p-3 text-xs text-red-700">
+                      {disruptionError}
+                    </div>
+                  )}
+                  {disruptionNotice && (
+                    <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-700">
+                      {disruptionNotice}
+                    </div>
+                  )}
+                  {disruptionOptions.length > 0 && (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-slate-700">
+                      <p className="font-semibold text-amber-700">Phương án xử lý khi chuyến bị hủy</p>
+                      <div className="mt-2 grid gap-3 md:grid-cols-[1.2fr_1fr]">
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold text-slate-600">
+                            Chuyến bị ảnh hưởng
+                          </label>
+                          <select
+                            value={selectedDecisionId}
+                            onChange={(event) =>
+                              setSelectedDisruptionDecisionMap((prev) => ({
+                                ...prev,
+                                [item.bookingId]: event.target.value,
+                              }))
+                            }
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
+                          >
+                            {disruptionOptions.map((option, optionIndex) => (
+                              <option
+                                key={`${option?.decisionId || optionIndex}-${optionIndex}`}
+                                value={option?.decisionId ?? ''}
+                              >
+                                {getDisruptionLegLabel(option?.legType)} · Quyết định #{option?.decisionId}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold text-slate-600">
+                            Chọn phương án
+                          </label>
+                          <div className="flex flex-wrap gap-3">
+                            <label className="flex items-center gap-2 text-xs text-slate-700">
+                              <input
+                                type="radio"
+                                name={`disruption-action-${item.bookingId}`}
+                                value="refund"
+                                checked={selectedAction === 'refund'}
+                                onChange={() =>
+                                  setSelectedDisruptionActionMap((prev) => ({
+                                    ...prev,
+                                    [item.bookingId]: 'refund',
+                                  }))
+                                }
+                              />
+                              Hoàn tiền
+                            </label>
+                            <label className="flex items-center gap-2 text-xs text-slate-700">
+                              <input
+                                type="radio"
+                                name={`disruption-action-${item.bookingId}`}
+                                value="rebook"
+                                checked={selectedAction === 'rebook'}
+                                onChange={() =>
+                                  setSelectedDisruptionActionMap((prev) => ({
+                                    ...prev,
+                                    [item.bookingId]: 'rebook',
+                                  }))
+                                }
+                              />
+                              Đổi chuyến
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={!selectedDecisionId}
+                          onClick={() => {
+                            if (!selectedDecisionId) return
+                            if (selectedAction === 'refund') {
+                              handleDisruptionRefund(item.bookingId, selectedDecisionId)
+                              return
+                            }
+                            openRebookModal(item.bookingId, selectedDecisionId, item.departTime)
+                          }}
+                          className="rounded-xl bg-amber-600 px-4 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+                        >
+                          Xác nhận
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {loadingTicketsMap[item.bookingId] && (
+                    <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3 text-xs text-slate-500">
+                      Đang tải danh sách vé...
+                    </div>
+                  )}
+                  {ticketErrorMap[item.bookingId] && (
+                    <div className="mt-3 rounded-xl bg-red-50 p-3 text-xs text-red-700">
+                      {ticketErrorMap[item.bookingId]}
+                    </div>
+                  )}
+                  {Array.isArray(bookingTicketsMap[item.bookingId]) &&
+                    bookingTicketsMap[item.bookingId].length > 0 && (
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                        <p className="font-semibold text-slate-700">Danh sách vé</p>
+                        <div className="mt-2 space-y-2">
+                          {bookingTicketsMap[item.bookingId].map((ticket) => (
+                            <div
+                              key={ticket.ticketId}
+                              className="rounded-lg border border-slate-200 bg-white p-3"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p className="text-sm font-semibold text-slate-900">
+                                      {ticket.ticketNumber || `Vé #${ticket.ticketId}`}
+                                    </p>
+                                    {ticket.status !== undefined && ticket.status !== null && (
+                                      (() => {
+                                        const code = resolveTicketStatusCode(ticket.status)
+                                        let bg = '#FEF9C3' // Default yellow
+                                        let textCol = '#92400E' // Default brown/orange
+                                        let icon = '•'
+                                        
+                                        if (code === 0) {
+                                          bg = '#E8F5E9' // light green
+                                          textCol = '#2E7D32' // green
+                                          icon = '✓'
+                                        } else if (code === 1) {
+                                          bg = '#F5F5F5' // light gray
+                                          textCol = '#616161' // dark gray
+                                          icon = '🛄'
+                                        } else if (code === 2) {
+                                          bg = '#E3F2FD' // light blue
+                                          textCol = '#1565C0' // blue
+                                          icon = '↺'
+                                        } else if (code === 3 || code === 4 || code === 5) {
+                                          bg = '#FEE2E2' // light red
+                                          textCol = '#DC2626' // red
+                                          icon = '✕'
+                                        }
+                                        
+                                        const label = getTicketStatusLabel(ticket.status)
+                                        return (
+                                          <span
+                                            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold"
+                                            style={{ background: bg, color: textCol }}
+                                          >
+                                            <span>{icon}</span>
+                                            <span>{label}</span>
+                                          </span>
+                                        )
+                                      })()
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-slate-500">
+                                    {ticket.passengerName || '---'} · {ticket.flightNumber || '---'}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    {ticket.departureAirport || '---'} → {ticket.arrivalAirport || '---'}
+                                  </p>
+                                  <p className="text-xs text-slate-500">
+                                    Giờ bay: {formatDateTime(ticket.departureTime)}
+                                  </p>
+                                </div>
+                                {isTicketActionable(ticket.status) && (
+                                  <button
+                                    type="button"
+                                    disabled={isCancellingTicketId === ticket.ticketId}
+                                    onClick={() => cancelTicketFromHistory(item.bookingId, ticket)}
+                                    className="rounded-xl bg-red-500 px-3 py-2 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-60"
+                                  >
+                                    {isCancellingTicketId === ticket.ticketId ? 'Đang hủy...' : 'Hủy vé'}
+                                  </button>
+                                )}
+                              </div>
+                              {Array.isArray(ticket.services) && ticket.services.length > 0 && (
+                                <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 p-2">
+                                  <p className="text-xs font-semibold text-slate-600">Dịch vụ</p>
+                                  <ul className="mt-1 space-y-1">
+                                    {ticket.services.map((service, serviceIndex) => (
+                                      <li
+                                        key={`${service?.additionalServiceId || serviceIndex}-${serviceIndex}`}
+                                        className="flex items-center justify-between text-xs text-slate-600"
+                                      >
+                                        <span>
+                                          {service?.serviceName || `Dịch vụ #${service?.additionalServiceId || '-'}`}
+                                          {service?.quantity > 1 ? ` x${service.quantity}` : ''}
+                                        </span>
+                                        <span>
+                                          {Number.isFinite(Number(service?.totalPrice))
+                                            ? formatCurrency(service.totalPrice)
+                                            : Number.isFinite(Number(service?.unitPrice))
+                                            ? formatCurrency(service.unitPrice)
+                                            : ''}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                 </div>
               </div>
-            </article>
-          ))}
+              </article>
+            )
+          })}
         </div>
       )}
 
@@ -2284,6 +4318,690 @@ function App() {
           </div>
         </div>
       )}
+
+      {rebookModalState.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Đổi chuyến bay</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Chọn ngày và chuyến bay phù hợp để đổi.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeRebookModal}
+                className="rounded-full p-2 text-slate-400 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            {(() => {
+              const decision = getDisruptionDecisionOptions(
+                rebookModalState.bookingId,
+                rebookModalState.decisionId,
+              )
+              const allOptions = Array.isArray(decision?.flightOptions)
+                ? decision.flightOptions
+                : []
+              const filteredOptions = filterDisruptionFlightsByDate(
+                allOptions,
+                rebookModalState.date,
+              )
+
+              return (
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <label className="mb-2 block text-xs font-semibold text-slate-600">
+                      Chọn ngày bay
+                    </label>
+                    <input
+                      type="date"
+                      value={rebookModalState.date}
+                      onChange={async (event) => {
+                        const nextDate = event.target.value
+                        const bookingId = Number(rebookModalState.bookingId)
+                        const decisionId = Number(rebookModalState.decisionId)
+
+                        setRebookModalState((prev) => ({
+                          ...prev,
+                          date: nextDate,
+                          selectedFlightId: '',
+                        }))
+
+                        if (!nextDate || !Number.isFinite(bookingId)) {
+                          return
+                        }
+
+                        setDisruptionLoadingMap((prev) => ({ ...prev, [bookingId]: true }))
+                        setDisruptionErrorMap((prev) => ({ ...prev, [bookingId]: '' }))
+
+                        try {
+                          const options = await getDisruptionOptions(bookingId, nextDate)
+                          setDisruptionOptionsMap((prev) => ({ ...prev, [bookingId]: options }))
+
+                          const selectedDecision = Array.isArray(options)
+                            ? options.find((option) => Number(option?.decisionId) === decisionId)
+                            : null
+                          const selectedOptions = Array.isArray(selectedDecision?.flightOptions)
+                            ? selectedDecision.flightOptions
+                            : []
+                          const firstMatch = selectedOptions[0]
+
+                          setRebookModalState((prev) => ({
+                            ...prev,
+                            selectedFlightId: firstMatch?.flightId ? String(firstMatch.flightId) : '',
+                          }))
+                        } catch (error) {
+                          setDisruptionErrorMap((prev) => ({
+                            ...prev,
+                            [bookingId]: error.message || 'Không thể tải chuyến bay theo ngày đã chọn.',
+                          }))
+                        } finally {
+                          setDisruptionLoadingMap((prev) => ({ ...prev, [bookingId]: false }))
+                        }
+                      }}
+                      className="w-full max-w-xs rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    {filteredOptions.map((flight) => {
+                      const isSelected = String(flight.flightId) === rebookModalState.selectedFlightId
+
+                      return (
+                        <article
+                          key={flight.flightId}
+                          className={`rounded-2xl border bg-white p-4 shadow-sm transition ${
+                            isSelected
+                              ? 'border-[#1E40AF] shadow-blue-100'
+                              : 'border-slate-200 hover:border-[#1E40AF]'
+                          }`}
+                        >
+                          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                            <div>
+                              <p className="text-sm font-semibold text-[#1E40AF]">
+                                {flight.flightNumber || `Chuyến #${flight.flightId}`}
+                              </p>
+                              <p className="mt-1 text-lg font-bold text-slate-900">
+                                {formatTime(flight.departureTime)} - {formatTime(flight.arrivalTime)}
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                Ngày bay: {formatDateTime(flight.departureTime)}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                Ghế trống: {Number.isFinite(Number(flight.availableSeats))
+                                  ? flight.availableSeats
+                                  : '---'}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRebookModalState((prev) => ({
+                                    ...prev,
+                                    selectedFlightId: String(flight.flightId),
+                                  }))
+                                }
+                                className={`rounded-xl px-4 py-2 text-xs font-semibold transition ${
+                                  isSelected
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-[#1E40AF] text-white hover:bg-blue-800'
+                                }`}
+                              >
+                                {isSelected ? 'Đã chọn' : 'Chọn chuyến'}
+                              </button>
+                            </div>
+                          </div>
+                        </article>
+                      )
+                    })}
+                    {filteredOptions.length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">
+                        Không có chuyến bay phù hợp với ngày đã chọn.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={closeRebookModal}
+                      className="rounded-xl border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!rebookModalState.selectedFlightId}
+                      onClick={async () => {
+                        await handleDisruptionRebook(
+                          rebookModalState.bookingId,
+                          rebookModalState.decisionId,
+                          rebookModalState.selectedFlightId,
+                        )
+                        closeRebookModal()
+                      }}
+                      className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      Xác nhận đổi chuyến
+                    </button>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const renderPromotionManagement = () => (
+    <div className="grid gap-5 lg:grid-cols-[1.1fr_360px]">
+      <section className="rounded-2xl bg-white p-5 shadow-lg shadow-slate-200 md:p-7">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Admin</p>
+            <h2 className="title-font mt-1 text-2xl font-bold text-slate-900">Quản lý khuyến mãi</h2>
+            <p className="mt-1 text-sm text-slate-500">Tạo, cập nhật, vô hiệu và xóa mã khuyến mãi.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={loadAdminPromotions}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Làm mới
+            </button>
+            <button
+              type="button"
+              onClick={startCreatePromotion}
+              className="rounded-xl bg-[#1E40AF] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            >
+              + Tạo mã
+            </button>
+          </div>
+        </div>
+
+        {promotionAdminError && (
+          <div className="mb-4 rounded-2xl bg-red-50 p-4 text-sm text-red-700">
+            {promotionAdminError}
+          </div>
+        )}
+
+        {promotionAdminNotice && (
+          <div className="mb-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-700">
+            {promotionAdminNotice}
+          </div>
+        )}
+
+        {isLoadingPromotionsAdmin && (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+            Đang tải danh sách khuyến mãi...
+          </div>
+        )}
+
+        {!isLoadingPromotionsAdmin && adminPromotions.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+            Chưa có mã khuyến mãi nào.
+          </div>
+        )}
+
+        {!isLoadingPromotionsAdmin && adminPromotions.length > 0 && (
+          <div className="space-y-4">
+            {adminPromotions.map((promo) => (
+              <article
+                key={promo.promotionId}
+                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+              >
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-lg font-bold text-slate-900">{promo.code || '---'}</p>
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                          promo.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {promo.isActive ? 'Hoạt động' : 'Tạm dừng'}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500">{promo.description || 'Không có mô tả'}</p>
+                    <p className="mt-2 text-sm text-slate-600">
+                      {getPromotionTypeLabel(promo.discountType)} · Giá trị: {formatCurrency(promo.discountValue)}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Tối đa: {promo.maxDiscountAmount ? formatCurrency(promo.maxDiscountAmount) : 'Không giới hạn'} ·
+                      Tối thiểu: {formatCurrency(promo.minimumAmount || 0)}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      Hiệu lực: {formatDateTime(promo.validFrom)} → {formatDateTime(promo.validTo)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-semibold text-slate-900">{promo.usageCount} lượt dùng</p>
+                    <p className="text-xs text-slate-500">
+                      Giới hạn: {promo.usageLimit ?? 'Không giới hạn'}
+                    </p>
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => startEditPromotion(promo)}
+                        className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Sửa
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePromotion(promo)}
+                        className="rounded-xl bg-red-500 px-3 py-2 text-xs font-semibold text-white hover:bg-red-600"
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <aside className="h-fit rounded-2xl bg-white p-5 shadow-lg shadow-slate-200 md:p-7">
+        <h3 className="title-font mb-4 text-lg font-bold text-slate-900">
+          {editingPromotionId ? 'Cập nhật khuyến mãi' : 'Tạo khuyến mãi mới'}
+        </h3>
+        <form onSubmit={handlePromotionSubmit} className="space-y-4">
+          <div>
+            <Label>Mã khuyến mãi</Label>
+            <Input
+              value={promotionFormData.code}
+              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, code: e.target.value }))}
+              placeholder="VD: SUMMER2026"
+              disabled={!!editingPromotionId}
+            />
+          </div>
+          <div>
+            <Label>Mô tả</Label>
+            <Input
+              value={promotionFormData.description}
+              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, description: e.target.value }))}
+              placeholder="VD: Giảm giá mùa hè"
+            />
+          </div>
+          <div>
+            <Label>Loại giảm</Label>
+            <Select
+              value={promotionFormData.discountType}
+              onChange={(e) =>
+                setPromotionFormData((prev) => ({ ...prev, discountType: Number(e.target.value) }))
+              }
+              disabled={!!editingPromotionId}
+            >
+              <option value={0}>Giảm theo %</option>
+              <option value={1}>Giảm tiền</option>
+            </Select>
+          </div>
+          <div>
+            <Label>Giá trị giảm</Label>
+            <Input
+              type="number"
+              value={promotionFormData.discountValue}
+              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, discountValue: e.target.value }))}
+              placeholder="VD: 10 hoặc 100000"
+            />
+          </div>
+          <div>
+            <Label>Giảm tối đa</Label>
+            <Input
+              type="number"
+              value={promotionFormData.maxDiscountAmount}
+              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, maxDiscountAmount: e.target.value }))}
+              placeholder="VD: 500000"
+            />
+          </div>
+          <div>
+            <Label>Giá trị tối thiểu</Label>
+            <Input
+              type="number"
+              value={promotionFormData.minimumAmount}
+              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, minimumAmount: e.target.value }))}
+              placeholder="VD: 1000000"
+              disabled={!!editingPromotionId}
+            />
+          </div>
+          <div>
+            <Label>Giới hạn lượt dùng</Label>
+            <Input
+              type="number"
+              value={promotionFormData.usageLimit}
+              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, usageLimit: e.target.value }))}
+              placeholder="VD: 100"
+            />
+          </div>
+          <div>
+            <Label>Hiệu lực từ</Label>
+            <Input
+              type="date"
+              value={promotionFormData.validFrom}
+              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, validFrom: e.target.value }))}
+              disabled={!!editingPromotionId}
+            />
+          </div>
+          <div>
+            <Label>Hiệu lực đến</Label>
+            <Input
+              type="date"
+              value={promotionFormData.validTo}
+              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, validTo: e.target.value }))}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={promotionFormData.isActive}
+              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
+              className="h-4 w-4 rounded border-slate-300 text-[#1E40AF] focus:ring-2 focus:ring-blue-100"
+            />
+            Kích hoạt khuyến mãi
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              {editingPromotionId ? 'Lưu cập nhật' : 'Tạo khuyến mãi'}
+            </button>
+            {editingPromotionId && (
+              <button
+                type="button"
+                onClick={startCreatePromotion}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Hủy sửa
+              </button>
+            )}
+          </div>
+        </form>
+      </aside>
+    </div>
+  )
+
+  const renderFlightManagement = () => (
+    <div className="grid gap-5 lg:grid-cols-[1.1fr_360px]">
+      <section className="rounded-2xl bg-white p-5 shadow-lg shadow-slate-200 md:p-7">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-400">Admin</p>
+            <h2 className="title-font mt-1 text-2xl font-bold text-slate-900">Quản lý chuyến bay</h2>
+            <p className="mt-1 text-sm text-slate-500">CRUD chuyến bay cụ thể (giờ bay, máy bay).</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="date"
+              value={adminFlightFilters.date}
+              onChange={(e) =>
+                setAdminFlightFilters((prev) => ({ ...prev, date: e.target.value }))
+              }
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none md:w-40"
+            />
+            <input
+              type="text"
+              value={adminFlightFilters.from}
+              onChange={(e) =>
+                setAdminFlightFilters((prev) => ({ ...prev, from: e.target.value }))
+              }
+              placeholder="Sân bay đi"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none md:w-40"
+            />
+            <input
+              type="text"
+              value={adminFlightFilters.to}
+              onChange={(e) =>
+                setAdminFlightFilters((prev) => ({ ...prev, to: e.target.value }))
+              }
+              placeholder="Sân bay đến"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none md:w-40"
+            />
+            <input
+              type="text"
+              value={adminFlightFilters.code}
+              onChange={(e) =>
+                setAdminFlightFilters((prev) => ({ ...prev, code: e.target.value }))
+              }
+              placeholder="Mã chuyến bay"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none md:w-40"
+            />
+            <button
+              type="button"
+              onClick={() =>
+                setAdminFlightFilters({
+                  date: '',
+                  from: '',
+                  to: '',
+                  code: '',
+                })
+              }
+              className="rounded-xl border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Xóa lọc
+            </button>
+            <button
+              type="button"
+              onClick={loadAdminFlights}
+              className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Làm mới
+            </button>
+            <button
+              type="button"
+              onClick={startCreateFlight}
+              className="rounded-xl bg-[#1E40AF] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            >
+              + Tạo chuyến bay
+            </button>
+          </div>
+        </div>
+
+        {flightAdminError && (
+          <div className="mb-4 rounded-2xl bg-red-50 p-4 text-sm text-red-700">
+            {flightAdminError}
+          </div>
+        )}
+
+        {flightAdminNotice && (
+          <div className="mb-4 rounded-2xl bg-emerald-50 p-4 text-sm text-emerald-700">
+            {flightAdminNotice}
+          </div>
+        )}
+
+        {isLoadingFlightsAdmin && (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+            Đang tải danh sách chuyến bay...
+          </div>
+        )}
+
+        {!isLoadingFlightsAdmin && adminFlights.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+            Chưa có chuyến bay nào.
+          </div>
+        )}
+
+        {!isLoadingFlightsAdmin && adminFlights.length > 0 && filteredAdminFlights.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">
+            Không tìm thấy chuyến bay phù hợp.
+          </div>
+        )}
+
+        {!isLoadingFlightsAdmin && filteredAdminFlights.length > 0 && (
+          <div className="space-y-4">
+            {filteredAdminFlights.map((flight) => {
+              const seatSummary = getSeatInventorySummary(flight.seatInventory)
+              return (
+                <article
+                  key={flight.flightId}
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="text-lg font-bold text-slate-900">{flight.flightNumber || '---'}</p>
+                        <span
+                          className={`rounded-full px-2 py-1 text-xs font-semibold ${
+                            flight.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {flight.isActive ? 'Hoạt động' : 'Tạm dừng'}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {flight.routeCode || '---'} · {flight.aircraftModel || 'Chưa rõ máy bay'}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Cất cánh: {formatDateTime(flight.departureTime)}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Hạ cánh: {formatDateTime(flight.arrivalTime)}
+                      </p>
+                      {seatSummary.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {seatSummary.map((seat, idx) => (
+                            <span
+                              key={`${flight.flightId}-${idx}`}
+                              className="rounded-full bg-blue-50 px-2 py-1 text-xs text-blue-700"
+                            >
+                              {seat.label}: {Number.isFinite(Number(seat.price)) ? formatCurrency(seat.price) : '--'}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <div className="mt-3 flex flex-wrap justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEditFlight(flight)}
+                          className="rounded-xl border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          Sửa
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleCancelAdminFlight(flight)}
+                          disabled={isCancellingAdminFlightId === flight.flightId}
+                          className="rounded-xl border border-amber-300 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-60"
+                        >
+                          {isCancellingAdminFlightId === flight.flightId ? 'Đang hủy...' : 'Hủy chuyến'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteFlight(flight)}
+                          className="rounded-xl bg-red-500 px-3 py-2 text-xs font-semibold text-white hover:bg-red-600"
+                        >
+                          Xóa
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      <aside className="h-fit rounded-2xl bg-white p-5 shadow-lg shadow-slate-200 md:p-7">
+        <h3 className="title-font mb-4 text-lg font-bold text-slate-900">
+          {editingFlightId ? 'Cập nhật chuyến bay' : 'Tạo chuyến bay mới'}
+        </h3>
+        <form onSubmit={handleFlightSubmit} className="space-y-4">
+          <div>
+            <Label>Số hiệu chuyến bay</Label>
+            <Input
+              value={flightFormData.flightNumber}
+              onChange={(e) => setFlightFormData((prev) => ({ ...prev, flightNumber: e.target.value }))}
+              placeholder="VD: VN211"
+            />
+          </div>
+          <div>
+            <Label>Tuyến bay</Label>
+            <Select
+              value={flightFormData.routeId}
+              onChange={(e) => setFlightFormData((prev) => ({ ...prev, routeId: e.target.value }))}
+              disabled={!!editingFlightId}
+            >
+              <option value="">Chọn tuyến bay</option>
+              {adminRoutes.map((route) => (
+                <option key={route.routeId} value={route.routeId}>
+                  {route.departureAirport} → {route.arrivalAirport}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>Máy bay</Label>
+            <Select
+              value={flightFormData.aircraftId}
+              onChange={(e) => setFlightFormData((prev) => ({ ...prev, aircraftId: e.target.value }))}
+            >
+              <option value="">Chọn máy bay</option>
+              {aircrafts.map((aircraft) => (
+                <option key={aircraft.aircraftId} value={aircraft.aircraftId}>
+                  {aircraft.model} · {aircraft.registrationNumber}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label>Giờ cất cánh</Label>
+            <Input
+              type="datetime-local"
+              value={flightFormData.departureTime}
+              onChange={(e) => setFlightFormData((prev) => ({ ...prev, departureTime: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label>Giờ hạ cánh</Label>
+            <Input
+              type="datetime-local"
+              value={flightFormData.arrivalTime}
+              onChange={(e) => setFlightFormData((prev) => ({ ...prev, arrivalTime: e.target.value }))}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={flightFormData.isActive}
+              onChange={(e) => setFlightFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
+              className="h-4 w-4 rounded border-slate-300 text-[#1E40AF] focus:ring-2 focus:ring-blue-100"
+            />
+            Kích hoạt chuyến bay
+          </label>
+          <p className="text-xs text-slate-500">
+            Giá vé hiển thị theo hạng ghế từ hệ thống; backend hiện chưa có endpoint chỉnh giá theo chuyến bay.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="submit"
+              className="flex-1 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            >
+              {editingFlightId ? 'Lưu cập nhật' : 'Tạo chuyến bay'}
+            </button>
+            {editingFlightId && (
+              <button
+                type="button"
+                onClick={startCreateFlight}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Hủy sửa
+              </button>
+            )}
+          </div>
+        </form>
+      </aside>
     </div>
   )
 
@@ -2977,16 +5695,45 @@ function App() {
           >
             Vé của tôi
           </button>
+          <button
+            type="button"
+            onClick={() => setScreen('saved-passengers')}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${
+              screen === 'saved-passengers' ? 'bg-[#1E40AF] text-white' : 'bg-slate-200 text-slate-500'
+            }`}
+          >
+            Hành khách đã lưu
+          </button>
           {isAdmin && (
-            <button
-              type="button"
-              onClick={() => setScreen('templates')}
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                screen === 'templates' ? 'bg-[#1E40AF] text-white' : 'bg-slate-200 text-slate-500'
-              }`}
-            >
-              📋 Quản lý Templates
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setScreen('flights')}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  screen === 'flights' ? 'bg-[#1E40AF] text-white' : 'bg-slate-200 text-slate-500'
+                }`}
+              >
+                ✈️ Quản lý Chuyến bay
+              </button>
+              <button
+                type="button"
+                onClick={() => setScreen('templates')}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  screen === 'templates' ? 'bg-[#1E40AF] text-white' : 'bg-slate-200 text-slate-500'
+                }`}
+              >
+                📋 Quản lý Templates
+              </button>
+              <button
+                type="button"
+                onClick={() => setScreen('promotions')}
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  screen === 'promotions' ? 'bg-[#1E40AF] text-white' : 'bg-slate-200 text-slate-500'
+                }`}
+              >
+                🎁 Quản lý Khuyến mãi
+              </button>
+            </>
           )}
         </div>
       )}
@@ -3024,7 +5771,10 @@ function App() {
       {screen === 'passenger' && selectedFlight && renderPassenger()}
       {screen === 'payment' && selectedFlight && renderPayment()}
       {screen === 'history' && renderHistory()}
+      {screen === 'saved-passengers' && renderSavedPassengers()}
+      {screen === 'flights' && isAdmin && renderFlightManagement()}
       {screen === 'templates' && isAdmin && renderTemplateManagement()}
+      {screen === 'promotions' && isAdmin && renderPromotionManagement()}
     </main>
   )
 }

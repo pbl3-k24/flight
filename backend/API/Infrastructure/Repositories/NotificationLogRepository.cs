@@ -46,6 +46,21 @@ public class NotificationLogRepository : INotificationLogRepository
         }
     }
 
+    public async Task<int> GetUnreadCountByUserIdAsync(int userId)
+    {
+        try
+        {
+            return await _context.NotificationLogs
+                .Where(n => n.UserId == userId && !n.IsRead)
+                .CountAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error counting unread notification logs for user: {UserId}", userId);
+            throw;
+        }
+    }
+
     public async Task<IEnumerable<NotificationLog>> GetByStatusAsync(int status)
     {
         try

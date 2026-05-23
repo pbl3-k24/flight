@@ -20,6 +20,16 @@ public class NotificationLog
 
     public DateTime CreatedAt { get; set; }
 
+    public bool IsRead { get; set; } = false;
+
+    public DateTime? ReadAt { get; set; }
+
+    public string Category { get; set; } = "GENERAL";
+
+    public string? RelatedEntityType { get; set; }
+
+    public int? RelatedEntityId { get; set; }
+
     // Navigation properties
     public virtual User User { get; set; } = null!;
 
@@ -33,6 +43,17 @@ public class NotificationLog
     public void MarkAsFailed()
     {
         Status = 2; // Failed
+    }
+
+    public void MarkAsRead()
+    {
+        if (IsRead)
+        {
+            return;
+        }
+
+        IsRead = true;
+        ReadAt = DateTime.UtcNow;
     }
 
     public bool IsPending() => Status == 0;

@@ -8,6 +8,7 @@ using API.Domain.Entities;
 using API.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 public class TicketService : ITicketService
 {
@@ -19,6 +20,8 @@ public class TicketService : ITicketService
     private readonly FlightBookingDbContext _dbContext;
     private readonly IEmailService _emailService;
     private readonly ILogger<TicketService> _logger;
+    private readonly INotificationService? _notificationService;
+    private const decimal ChildFareRate = 0.7m;
 
     public TicketService(
         ITicketRepository ticketRepository,
@@ -28,7 +31,8 @@ public class TicketService : ITicketService
         IFlightSeatInventoryRepository seatInventoryRepository,
         FlightBookingDbContext dbContext,
         IEmailService emailService,
-        ILogger<TicketService> logger)
+        ILogger<TicketService> logger,
+        INotificationService? notificationService = null)
     {
         _ticketRepository = ticketRepository;
         _bookingRepository = bookingRepository;
@@ -38,6 +42,7 @@ public class TicketService : ITicketService
         _dbContext = dbContext;
         _emailService = emailService;
         _logger = logger;
+        _notificationService = notificationService;
     }
 
     public async Task<List<TicketResponse>> CreateTicketsAsync(int bookingId)
@@ -50,20 +55,97 @@ public class TicketService : ITicketService
                 throw new NotFoundException("Booking not found");
             }
 
-            var flight = await _flightRepository.GetByIdAsync(booking.OutboundFlightId);
-            if (flight == null)
-            {
-                throw new NotFoundException("Flight not found");
-            }
             var passengers = await _passengerRepository.GetByBookingIdAsync(bookingId);
+            var passengerById = passengers.ToDictionary(p => p.Id);
+            var bookingLegPassengers = await _dbContext.BookingLegPassengers
+                .Include(lp => lp.BookingLeg)
+                .Include(lp => lp.BookingPassenger)
+                .Where(lp => !lp.IsDeleted && lp.BookingLeg.BookingId == bookingId && !lp.BookingLeg.IsDeleted)
+                .OrderBy(lp => lp.BookingLeg.LegType)
+                .ThenBy(lp => lp.BookingPassengerId)
+                .ToListAsync();
+
+            if (bookingLegPassengers.Count == 0)
+            {
+                throw new ValidationException("No booking legs found for ticket issuance");
+            }
+
             var passengerServiceMap = await BuildPassengerServiceMapAsync(passengers.Select(p => p.Id).ToList());
             var tickets = new List<TicketResponse>();
+            var existingTicketKeys = await _dbContext.Tickets
+                .Where(t => t.BookingId == bookingId && !t.IsDeleted)
+                .Select(t => new { t.BookingPassengerId, t.FlightId })
+                .ToListAsync();
+            var issuedKeys = existingTicketKeys
+                .Select(k => $"{k.BookingPassengerId}:{k.FlightId}")
+                .ToHashSet(StringComparer.Ordinal);
+
+            var legPassengerIds = bookingLegPassengers.Select(lp => lp.Id).ToList();
+            var serviceTotalsByLegPassenger = await _dbContext.BookingServices
+                .Where(bs => !bs.IsDeleted
+                    && bs.BookingLegPassengerId.HasValue
+                    && legPassengerIds.Contains(bs.BookingLegPassengerId.Value))
+                .GroupBy(bs => bs.BookingLegPassengerId!.Value)
+                .Select(g => new { BookingLegPassengerId = g.Key, Total = g.Sum(x => x.Price * x.Quantity) })
+                .ToDictionaryAsync(x => x.BookingLegPassengerId, x => x.Total);
+
+            var ticketGrossByKey = new Dictionary<string, decimal>(StringComparer.Ordinal);
+            decimal totalGross = 0m;
+            foreach (var lp in bookingLegPassengers)
+            {
+                var fare = ResolveLegFare(lp, lp.BookingPassenger);
+                var servicesTotal = serviceTotalsByLegPassenger.GetValueOrDefault(lp.Id, 0m);
+                var gross = fare + servicesTotal;
+                var key = $"{lp.BookingPassengerId}:{lp.BookingLeg.FlightId}";
+                ticketGrossByKey[key] = gross;
+                totalGross += gross;
+            }
+
+            var discountPool = booking.DiscountAmount > 0 ? booking.DiscountAmount : 0m;
+            var allocatedDiscount = 0m;
+            var issuedCount = 0;
+            var expectedToIssue = bookingLegPassengers
+                .Count(lp => !issuedKeys.Contains($"{lp.BookingPassengerId}:{lp.BookingLeg.FlightId}"));
 
             int sequenceNumber = 1;
-            foreach (var passenger in passengers)
+            foreach (var legPassenger in bookingLegPassengers)
             {
-                var seatInventory = await _seatInventoryRepository.GetByIdAsync(passenger.FlightSeatInventoryId);
+                if (!passengerById.TryGetValue(legPassenger.BookingPassengerId, out var passenger))
+                {
+                    continue;
+                }
+
+                var flight = await _flightRepository.GetByIdAsync(legPassenger.BookingLeg.FlightId);
+                if (flight == null)
+                {
+                    throw new NotFoundException("Flight not found");
+                }
+
+                var ticketKey = $"{passenger.Id}:{flight.Id}";
+                if (issuedKeys.Contains(ticketKey))
+                {
+                    continue;
+                }
+
+                var seatInventory = await _seatInventoryRepository.GetByIdAsync(legPassenger.FlightSeatInventoryId);
                 var ticketNumber = GenerateTicketNumber(booking.BookingCode, sequenceNumber++);
+                var key = $"{passenger.Id}:{flight.Id}";
+                var gross = ticketGrossByKey.GetValueOrDefault(key, seatInventory?.CurrentPrice ?? 0m);
+                var discountShare = 0m;
+                if (discountPool > 0m && totalGross > 0m && expectedToIssue > 0)
+                {
+                    issuedCount++;
+                    if (issuedCount == expectedToIssue)
+                    {
+                        discountShare = discountPool - allocatedDiscount;
+                    }
+                    else
+                    {
+                        discountShare = Math.Round(discountPool * (gross / totalGross), 0, MidpointRounding.AwayFromZero);
+                        allocatedDiscount += discountShare;
+                    }
+                }
+
                 var ticket = new Ticket
                 {
                     BookingPassengerId = passenger.Id,
@@ -75,12 +157,13 @@ public class TicketService : ITicketService
                     PassengerId = passenger.Id,
                     FlightId = flight.Id,
                     SeatClassId = seatInventory?.SeatClassId ?? 1,
-                    Price = seatInventory?.CurrentPrice ?? 0,
+                    Price = Math.Max(0m, gross - discountShare),
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
 
                 var createdTicket = await _ticketRepository.CreateAsync(ticket);
+                issuedKeys.Add(ticketKey);
                 tickets.Add(new TicketResponse
                 {
                     TicketId = createdTicket.Id,
@@ -121,8 +204,20 @@ public class TicketService : ITicketService
             }
 
             var passenger = await _passengerRepository.GetByIdAsync(ticket.BookingPassengerId);
+            if (passenger == null)
+            {
+                throw new NotFoundException("Passenger not found");
+            }
             var booking = await _bookingRepository.GetByIdAsync(passenger!.BookingId);
-            var flight = await _flightRepository.GetByIdAsync(booking!.OutboundFlightId);
+            if (booking == null)
+            {
+                throw new NotFoundException("Booking not found");
+            }
+            var flight = await _flightRepository.GetByIdAsync(ticket.FlightId);
+            if (flight == null)
+            {
+                throw new NotFoundException("Flight not found");
+            }
             var passengerServiceMap = await BuildPassengerServiceMapAsync(new List<int> { passenger.Id });
 
             var statusString = ticket.Status switch
@@ -131,6 +226,8 @@ public class TicketService : ITicketService
                 1 => "Used",
                 2 => "Refunded",
                 3 => "Cancelled",
+                4 => "CancelledByUser",
+                5 => "CancelledByAdmin",
                 _ => "Unknown"
             };
 
@@ -141,7 +238,7 @@ public class TicketService : ITicketService
                 BookingId = booking.Id,
                 PassengerId = passenger.Id,
                 PassengerName = passenger.FullName,
-                FlightId = flight!.Id,
+                FlightId = flight.Id,
                 FlightNumber = flight.FlightNumber,
                 SeatNumber = "TBD",
                 Status = statusString,
@@ -180,6 +277,23 @@ public class TicketService : ITicketService
             await _ticketRepository.UpdateAsync(ticket);
 
             _logger.LogInformation("Ticket changed: {TicketNumber}", ticketNumber);
+            if (_notificationService != null)
+            {
+                var booking = await _bookingRepository.GetByIdAsync(ticket.BookingId);
+                if (booking != null)
+                {
+                    await _notificationService.SendNotificationAsync(
+                        booking.UserId,
+                        "Ticket changed",
+                        $"Ticket {ticket.TicketNumber} for booking {booking.BookingCode} has been changed.",
+                        type: "IN_APP",
+                        category: "TICKET",
+                        relatedEntityType: "Ticket",
+                        relatedEntityId: ticket.Id,
+                        sendEmail: true);
+                }
+            }
+
             return true;
         }
         catch (Exception ex)
@@ -205,16 +319,22 @@ public class TicketService : ITicketService
 
             foreach (var passenger in passengers)
             {
-                var ticket = await _ticketRepository.GetByPassengerIdAsync(passenger.Id);
-                if (ticket != null)
+                var passengerTickets = await _ticketRepository.GetByBookingPassengerIdAsync(passenger.Id);
+                foreach (var ticket in passengerTickets)
                 {
-                    var flight = await _flightRepository.GetByIdAsync(booking.OutboundFlightId);
+                    var flight = await _flightRepository.GetByIdAsync(ticket.FlightId);
+                    if (flight == null)
+                    {
+                        continue;
+                    }
                     var statusString = ticket.Status switch
                     {
                         0 => "Issued",
                         1 => "Used",
                         2 => "Refunded",
                         3 => "Cancelled",
+                        4 => "CancelledByUser",
+                        5 => "CancelledByAdmin",
                         _ => "Unknown"
                     };
 
@@ -225,16 +345,16 @@ public class TicketService : ITicketService
                         BookingId = bookingId,
                         PassengerId = passenger.Id,
                         PassengerName = passenger.FullName,
-                        FlightId = flight!.Id,
+                        FlightId = flight.Id,
                         FlightNumber = flight.FlightNumber,
                         SeatNumber = "TBD",
                         Status = statusString,
-                            IssuedAt = VietnamTime.ToVietnamTime(ticket.IssuedAt),
-                            DepartureTime = VietnamTime.ToVietnamTime(flight.DepartureTime),
-                            DepartureAirport = flight.Route.DepartureAirport.Code,
-                            ArrivalAirport = flight.Route.ArrivalAirport.Code,
-                            Services = passengerServiceMap.GetValueOrDefault(passenger.Id, new List<TicketPassengerServiceDto>())
-                        });
+                        IssuedAt = VietnamTime.ToVietnamTime(ticket.IssuedAt),
+                        DepartureTime = VietnamTime.ToVietnamTime(flight.DepartureTime),
+                        DepartureAirport = flight.Route.DepartureAirport.Code,
+                        ArrivalAirport = flight.Route.ArrivalAirport.Code,
+                        Services = passengerServiceMap.GetValueOrDefault(passenger.Id, new List<TicketPassengerServiceDto>())
+                    });
                 }
             }
 
@@ -265,6 +385,60 @@ public class TicketService : ITicketService
     private string GenerateTicketNumber(string bookingCode, int passengerSequence)
     {
         return $"FL-{bookingCode}-{passengerSequence:D3}";
+    }
+
+    private static decimal ResolveLegFare(BookingLegPassenger legPassenger, BookingPassenger passenger)
+    {
+        var snapshotFare = TryReadFareFromSnapshot(passenger.FareSnapshot, legPassenger.BookingLeg.FlightId);
+        if (snapshotFare.HasValue)
+        {
+            return snapshotFare.Value;
+        }
+
+        var seatPrice = legPassenger.FlightSeatInventory?.CurrentPrice ?? 0m;
+        var passengerType = (PassengerType)passenger.PassengerType;
+        return passengerType switch
+        {
+            PassengerType.Infant => 0m,
+            PassengerType.Child => seatPrice * ChildFareRate,
+            _ => seatPrice
+        };
+    }
+
+    private static decimal? TryReadFareFromSnapshot(string? fareSnapshot, int flightId)
+    {
+        if (string.IsNullOrWhiteSpace(fareSnapshot))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(fareSnapshot);
+            if (!doc.RootElement.TryGetProperty("legs", out var legs) || legs.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var leg in legs.EnumerateArray())
+            {
+                if (!leg.TryGetProperty("flightId", out var fId) || fId.GetInt32() != flightId)
+                {
+                    continue;
+                }
+
+                if (leg.TryGetProperty("fare", out var fare) && fare.TryGetDecimal(out var amount))
+                {
+                    return amount;
+                }
+            }
+        }
+        catch
+        {
+            return null;
+        }
+
+        return null;
     }
 
     private async Task<Dictionary<int, List<TicketPassengerServiceDto>>> BuildPassengerServiceMapAsync(List<int> passengerIds)

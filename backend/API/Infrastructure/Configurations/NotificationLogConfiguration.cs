@@ -27,7 +27,20 @@ public class NotificationLogConfiguration : IEntityTypeConfiguration<Notificatio
         builder.Property(n => n.Status)
             .HasDefaultValue(0);
 
+        builder.Property(n => n.IsRead)
+            .HasDefaultValue(false);
+
+        builder.Property(n => n.Category)
+            .HasMaxLength(50)
+            .HasDefaultValue("GENERAL")
+            .IsRequired();
+
+        builder.Property(n => n.RelatedEntityType)
+            .HasMaxLength(100);
+
         builder.HasIndex(n => n.Status);
+        builder.HasIndex(n => new { n.UserId, n.IsRead });
+        builder.HasIndex(n => n.Category);
 
         builder.HasOne(n => n.User)
             .WithMany(u => u.NotificationLogs)

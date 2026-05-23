@@ -21,6 +21,9 @@ public interface IBookingService
     /// <param name="reason">Cancellation reason</param>
     /// <returns>Success indicator</returns>
     Task<bool> CancelBookingAsync(int bookingId, int userId, string reason);
+    Task<bool> CancelTicketAsync(int bookingId, int ticketId, int userId, string reason);
+    Task<bool> CancelTicketByAdminAsync(int bookingId, int ticketId, int? adminUserId, string reason);
+    Task<bool> CheckInTicketByAdminAsync(int bookingId, int ticketId, int? adminUserId);
 
     /// <summary>
     /// Updates passenger information in a booking.
@@ -64,4 +67,13 @@ public interface IBookingService
         UpdatePassengerServiceDto dto);
 
     Task<bool> RemovePassengerServiceAsync(int bookingId, int passengerId, int bookingServiceId, int userId);
+
+    Task<List<FlightDisruptionOptionResponse>> GetFlightDisruptionOptionsAsync(int bookingId, int userId, DateOnly? departureDate = null);
+    Task<bool> ChooseDisruptionCancelAsync(int bookingId, int decisionId, int userId);
+    Task<bool> ChooseDisruptionRebookAsync(int bookingId, int userId, RebookDisruptionDecisionDto dto);
+    Task<ChangeFlightOptionResponse> GetChangeFlightOptionsAsync(int bookingId, int userId, int legType, DateOnly? departureDate = null);
+    Task<ChangeFlightQuoteResponseDto> GetChangeFlightQuoteAsync(int bookingId, int userId, ChangeFlightQuoteRequestDto dto);
+    Task<ConfirmChangeFlightResponseDto> ConfirmChangeFlightAsync(int bookingId, int userId, ConfirmChangeFlightRequestDto dto);
+    Task<bool> IsChangeFlightPaymentAsync(int paymentId);
+    Task<bool> ProcessChangeFlightPaymentAsync(int paymentId, string paymentStatus);
 }

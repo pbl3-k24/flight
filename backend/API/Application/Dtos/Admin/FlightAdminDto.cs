@@ -2,15 +2,9 @@ namespace API.Application.Dtos.Admin;
 
 public class CreateFlightDto
 {
-    public string FlightNumber { get; set; } = null!;
-
-    public int RouteId { get; set; }
-
-    public int AircraftId { get; set; }
-
-    public DateTime DepartureTime { get; set; }
-
-    public DateTime ArrivalTime { get; set; }
+    public int FlightDefinitionId { get; set; }
+    public DateOnly DepartureDate { get; set; }
+    public TimeOnly DepartureTime { get; set; }
 
     public bool IsActive { get; set; } = true;
 }
@@ -55,15 +49,23 @@ public class CreateWeeklyScheduleDto
 
 public class UpdateFlightDto
 {
-    public string? FlightNumber { get; set; }
-
-    public int? AircraftId { get; set; }
-
-    public DateTime? DepartureTime { get; set; }
-
-    public DateTime? ArrivalTime { get; set; }
+    public DateOnly? DepartureDate { get; set; }
+    public TimeOnly? DepartureTime { get; set; }
+    public int? ActualAircraftId { get; set; }
 
     public bool? IsActive { get; set; }
+}
+
+public class UpdateFlightPriceItemDto
+{
+    public int SeatClassId { get; set; }
+    public decimal NewPrice { get; set; }
+}
+
+public class UpdateFlightPricesDto
+{
+    public string Reason { get; set; } = null!;
+    public List<UpdateFlightPriceItemDto> Items { get; set; } = [];
 }
 
 public class FlightManagementResponse

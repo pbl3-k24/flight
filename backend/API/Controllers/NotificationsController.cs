@@ -29,7 +29,10 @@ public class NotificationsController : ControllerBase
     /// </summary>
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<NotificationResponse>>> GetNotificationsAsync()
+    public async Task<ActionResult<List<NotificationResponse>>> GetNotificationsAsync(
+        [FromQuery] bool unreadOnly = false,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20)
     {
         try
         {
@@ -40,7 +43,7 @@ public class NotificationsController : ControllerBase
             }
 
             _logger.LogInformation("Fetching notifications for user {UserId}", userId);
-            var notifications = await _notificationService.GetUserNotificationsAsync(userId);
+            var notifications = await _notificationService.GetUserNotificationsAsync(userId, unreadOnly, page, pageSize);
             return Ok(notifications);
         }
         catch (Exception ex)
@@ -48,6 +51,58 @@ public class NotificationsController : ControllerBase
             _logger.LogError(ex, "Error getting notifications");
             return StatusCode(500, new { message = "Error fetching notifications" });
         }
+    }
+
+    /// <summary>
+    /// Gets user's unread notification count.
+    /// </summary>
+    [HttpGet("unread-count")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<object>> GetUnreadCountAsync()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var count = await _notificationService.GetUnreadCountAsync(userId);
+        return Ok(new { unreadCount = count });
+    }
+
+    /// <summary>
+    /// Marks one notification as read.
+    /// </summary>
+    [HttpPut("{notificationId}/read")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> MarkAsReadAsync(int notificationId)
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var success = await _notificationService.MarkAsReadAsync(userId, notificationId);
+        return success ? Ok(new { message = "Notification marked as read" }) : NotFound();
+    }
+
+    /// <summary>
+    /// Marks all notifications as read.
+    /// </summary>
+    [HttpPut("read-all")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<object>> MarkAllAsReadAsync()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var markedCount = await _notificationService.MarkAllAsReadAsync(userId);
+        return Ok(new { markedCount });
     }
 
     /// <summary>

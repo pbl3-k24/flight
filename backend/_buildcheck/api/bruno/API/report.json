@@ -1,0 +1,2730 @@
+[
+  {
+    "iterationIndex": 0,
+    "results": [
+      {
+        "test": {
+          "filename": "API\\get -health.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/health",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0719557,
+        "name": "get /health",
+        "path": "API\\get -health.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Bookings\\post -api-v1-Bookings.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Bookings",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"outboundFlightId\": 0,\n  \"returnFlightId\": 0,\n  \"passengerCount\": 0,\n  \"seatClassId\": 0,\n  \"passengers\": [\n    {\n      \"firstName\": \"\",\n      \"lastName\": \"\",\n      \"email\": \"\",\n      \"phone\": \"\",\n      \"dateOfBirth\": \"\",\n      \"nationality\": \"\",\n      \"passportNumber\": \"\"\n    }\n  ],\n  \"promotionId\": 0\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0071782,
+        "name": "post /api/v1/Bookings",
+        "path": "Bookings\\post -api-v1-Bookings.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Bookings\\get -api-v1-Bookings.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Bookings",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0044746,
+        "name": "get /api/v1/Bookings",
+        "path": "Bookings\\get -api-v1-Bookings.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Bookings\\get -api-v1-Bookings--id.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Bookings/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0040609,
+        "name": "get /api/v1/Bookings/:id",
+        "path": "Bookings\\get -api-v1-Bookings--id.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Bookings\\put -api-v1-Bookings--id.yml"
+        },
+        "request": {
+          "method": "PUT",
+          "url": "http://localhost:5042/api/v1/Bookings/",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"passengers\": [\n    {\n      \"passengerId\": 0,\n      \"firstName\": \"\",\n      \"lastName\": \"\",\n      \"email\": \"\",\n      \"phone\": \"\",\n      \"passportNumber\": \"\"\n    }\n  ]\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0045659,
+        "name": "put /api/v1/Bookings/:id",
+        "path": "Bookings\\put -api-v1-Bookings--id.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Bookings\\delete -api-v1-Bookings--id.yml"
+        },
+        "request": {
+          "method": "DELETE",
+          "url": "http://localhost:5042/api/v1/Bookings/",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"reason\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.004546,
+        "name": "delete /api/v1/Bookings/:id",
+        "path": "Bookings\\delete -api-v1-Bookings--id.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "BookingsAdmin\\post -api-v1-admin-BookingsAdmin-search.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/admin/BookingsAdmin/search",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"bookingCode\": \"\",\n  \"userEmail\": \"\",\n  \"status\": 0,\n  \"fromDate\": \"\",\n  \"toDate\": \"\",\n  \"page\": 0,\n  \"pageSize\": 0\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0043674,
+        "name": "post /api/v1/admin/BookingsAdmin/search",
+        "path": "BookingsAdmin\\post -api-v1-admin-BookingsAdmin-search.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "BookingsAdmin\\get -api-v1-admin-BookingsAdmin--bookingId.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/BookingsAdmin/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0032964,
+        "name": "get /api/v1/admin/BookingsAdmin/:bookingId",
+        "path": "BookingsAdmin\\get -api-v1-admin-BookingsAdmin--bookingId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "BookingsAdmin\\delete -api-v1-admin-BookingsAdmin--bookingId.yml"
+        },
+        "request": {
+          "method": "DELETE",
+          "url": "http://localhost:5042/api/v1/admin/BookingsAdmin/",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"reason\": \"\",\n  \"fullRefund\": false\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0039673,
+        "name": "delete /api/v1/admin/BookingsAdmin/:bookingId",
+        "path": "BookingsAdmin\\delete -api-v1-admin-BookingsAdmin--bookingId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "BookingsAdmin\\get -api-v1-admin-BookingsAdmin-refunds-pending.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/BookingsAdmin/refunds/pending",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0036324,
+        "name": "get /api/v1/admin/BookingsAdmin/refunds/pending",
+        "path": "BookingsAdmin\\get -api-v1-admin-BookingsAdmin-refunds-pending.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "BookingsAdmin\\get -api-v1-admin-BookingsAdmin-refunds--refundId.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/BookingsAdmin/refunds/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0059909,
+        "name": "get /api/v1/admin/BookingsAdmin/refunds/:refundId",
+        "path": "BookingsAdmin\\get -api-v1-admin-BookingsAdmin-refunds--refundId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "BookingsAdmin\\post -api-v1-admin-BookingsAdmin-refunds--refundId-approve.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/admin/BookingsAdmin/refunds//approve",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"approved\": false,\n  \"reason\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0058082,
+        "name": "post /api/v1/admin/BookingsAdmin/refunds/:refundId/approve",
+        "path": "BookingsAdmin\\post -api-v1-admin-BookingsAdmin-refunds--refundId-approve.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Dashboard\\get -api-v1-admin-Dashboard-metrics.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/Dashboard/metrics",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0064087,
+        "name": "get /api/v1/admin/Dashboard/metrics",
+        "path": "Dashboard\\get -api-v1-admin-Dashboard-metrics.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Dashboard\\get -api-v1-admin-Dashboard-health.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/Dashboard/health",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0026529,
+        "name": "get /api/v1/admin/Dashboard/health",
+        "path": "Dashboard\\get -api-v1-admin-Dashboard-health.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Dashboard\\get -api-v1-admin-Dashboard-revenue.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/Dashboard/revenue",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0031261,
+        "name": "get /api/v1/admin/Dashboard/revenue",
+        "path": "Dashboard\\get -api-v1-admin-Dashboard-revenue.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Dashboard\\get -api-v1-admin-Dashboard-bookings.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/Dashboard/bookings",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0025219,
+        "name": "get /api/v1/admin/Dashboard/bookings",
+        "path": "Dashboard\\get -api-v1-admin-Dashboard-bookings.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Dashboard\\post -api-v1-admin-Dashboard-audit-logs.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/admin/Dashboard/audit-logs",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"userId\": 0,\n  \"entity\": \"\",\n  \"action\": \"\",\n  \"fromDate\": \"\",\n  \"toDate\": \"\",\n  \"page\": 0,\n  \"pageSize\": 0\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0036254,
+        "name": "post /api/v1/admin/Dashboard/audit-logs",
+        "path": "Dashboard\\post -api-v1-admin-Dashboard-audit-logs.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Dashboard\\get -api-v1-admin-Dashboard-activity.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/Dashboard/activity",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0027857,
+        "name": "get /api/v1/admin/Dashboard/activity",
+        "path": "Dashboard\\get -api-v1-admin-Dashboard-activity.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Dashboard\\get -api-v1-admin-Dashboard-jobs.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/Dashboard/jobs",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0026324,
+        "name": "get /api/v1/admin/Dashboard/jobs",
+        "path": "Dashboard\\get -api-v1-admin-Dashboard-jobs.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Flights\\post -api-v1-Flights-search.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Flights/search",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"departureAirportId\": 0,\n  \"arrivalAirportId\": 0,\n  \"departureDate\": \"\",\n  \"returnDate\": \"\",\n  \"passengerCount\": 0,\n  \"seatPreference\": 0\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0039362,
+        "name": "post /api/v1/Flights/search",
+        "path": "Flights\\post -api-v1-Flights-search.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Flights\\get -api-v1-Flights--id.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Flights/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0024973,
+        "name": "get /api/v1/Flights/:id",
+        "path": "Flights\\get -api-v1-Flights--id.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Flights\\get -api-v1-Flights--flightId-seats--seatClassId.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Flights//seats/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0036204,
+        "name": "get /api/v1/Flights/:flightId/seats/:seatClassId",
+        "path": "Flights\\get -api-v1-Flights--flightId-seats--seatClassId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "FlightsAdmin\\post -api-v1-admin-FlightsAdmin.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/admin/FlightsAdmin",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"flightNumber\": \"\",\n  \"routeId\": 0,\n  \"aircraftId\": 0,\n  \"departureTime\": \"\",\n  \"arrivalTime\": \"\",\n  \"isActive\": false\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0030252,
+        "name": "post /api/v1/admin/FlightsAdmin",
+        "path": "FlightsAdmin\\post -api-v1-admin-FlightsAdmin.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "FlightsAdmin\\get -api-v1-admin-FlightsAdmin.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/FlightsAdmin?page=1&pageSize=20&JWT%20token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxIiwiZW1haWwiOiJhZG1pbkBmbGlnaHRib29raW5nLnZuIiwidW5pcXVlX25hbWUiOiJRdeG6o24gdHLhu4sgdmnDqm4iLCJyb2xlIjoiQWRtaW4iLCJuYmYiOjE3NzY4MjUwODIsImV4cCI6MTc3NjkxMTQ4MiwiaWF0IjoxNzc2ODI1MDgyLCJpc3MiOiJmbGlnaHQtYm9va2luZy1hcGkiLCJhdWQiOiJmbGlnaHQtYm9va2luZy1hcHAifQ.kCppcpM04oe180oFlW9zpKg5c38dpBE8YvGwUNiaaIE",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0034638,
+        "name": "get /api/v1/admin/FlightsAdmin",
+        "path": "FlightsAdmin\\get -api-v1-admin-FlightsAdmin.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "FlightsAdmin\\put -api-v1-admin-FlightsAdmin--flightId.yml"
+        },
+        "request": {
+          "method": "PUT",
+          "url": "http://localhost:5042/api/v1/admin/FlightsAdmin/",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"flightNumber\": \"\",\n  \"aircraftId\": 0,\n  \"departureTime\": \"\",\n  \"arrivalTime\": \"\",\n  \"isActive\": false\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0027908,
+        "name": "put /api/v1/admin/FlightsAdmin/:flightId",
+        "path": "FlightsAdmin\\put -api-v1-admin-FlightsAdmin--flightId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "FlightsAdmin\\delete -api-v1-admin-FlightsAdmin--flightId.yml"
+        },
+        "request": {
+          "method": "DELETE",
+          "url": "http://localhost:5042/api/v1/admin/FlightsAdmin/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002331,
+        "name": "delete /api/v1/admin/FlightsAdmin/:flightId",
+        "path": "FlightsAdmin\\delete -api-v1-admin-FlightsAdmin--flightId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "FlightsAdmin\\post -api-v1-admin-FlightsAdmin-routes.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/admin/FlightsAdmin/routes",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"departureAirportId\": 0,\n  \"arrivalAirportId\": 0,\n  \"distanceKm\": 0,\n  \"estimatedDurationMinutes\": 0\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0050053,
+        "name": "post /api/v1/admin/FlightsAdmin/routes",
+        "path": "FlightsAdmin\\post -api-v1-admin-FlightsAdmin-routes.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "FlightsAdmin\\get -api-v1-admin-FlightsAdmin-routes.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/FlightsAdmin/routes",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0025101,
+        "name": "get /api/v1/admin/FlightsAdmin/routes",
+        "path": "FlightsAdmin\\get -api-v1-admin-FlightsAdmin-routes.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "FlightsAdmin\\put -api-v1-admin-FlightsAdmin-routes--routeId.yml"
+        },
+        "request": {
+          "method": "PUT",
+          "url": "http://localhost:5042/api/v1/admin/FlightsAdmin/routes/",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"departureAirportId\": 0,\n  \"arrivalAirportId\": 0,\n  \"distanceKm\": 0,\n  \"estimatedDurationMinutes\": 0\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0030454,
+        "name": "put /api/v1/admin/FlightsAdmin/routes/:routeId",
+        "path": "FlightsAdmin\\put -api-v1-admin-FlightsAdmin-routes--routeId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Notifications\\get -api-v1-Notifications.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Notifications",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022032,
+        "name": "get /api/v1/Notifications",
+        "path": "Notifications\\get -api-v1-Notifications.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Notifications\\get -api-v1-Notifications-settings.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Notifications/settings",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002414,
+        "name": "get /api/v1/Notifications/settings",
+        "path": "Notifications\\get -api-v1-Notifications-settings.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Notifications\\put -api-v1-Notifications-settings.yml"
+        },
+        "request": {
+          "method": "PUT",
+          "url": "http://localhost:5042/api/v1/Notifications/settings",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"emailNotifications\": false,\n  \"smsNotifications\": false,\n  \"pushNotifications\": false,\n  \"bookingConfirmation\": false,\n  \"paymentReminder\": false,\n  \"refundNotification\": false,\n  \"promoNotifications\": false\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0049785,
+        "name": "put /api/v1/Notifications/settings",
+        "path": "Notifications\\put -api-v1-Notifications-settings.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Payments\\post -api-v1-Payments.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Payments",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"bookingId\": 0,\n  \"paymentMethod\": \"\",\n  \"promoCode\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0026441,
+        "name": "post /api/v1/Payments",
+        "path": "Payments\\post -api-v1-Payments.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Payments\\get -api-v1-Payments--paymentId.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Payments/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0037309,
+        "name": "get /api/v1/Payments/:paymentId",
+        "path": "Payments\\get -api-v1-Payments--paymentId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Payments\\get -api-v1-Payments-booking--bookingId.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Payments/booking/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021007,
+        "name": "get /api/v1/Payments/booking/:bookingId",
+        "path": "Payments\\get -api-v1-Payments-booking--bookingId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Payments\\post -api-v1-Payments--paymentId-callback.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Payments//callback",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"transactionId\": \"\",\n  \"status\": \"\",\n  \"amount\": 0,\n  \"signature\": \"\",\n  \"additionalData\": {}\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023505,
+        "name": "post /api/v1/Payments/:paymentId/callback",
+        "path": "Payments\\post -api-v1-Payments--paymentId-callback.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "PromotionsAdmin\\post -api-v1-admin-PromotionsAdmin.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/admin/PromotionsAdmin",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"code\": \"\",\n  \"description\": \"\",\n  \"discountType\": 0,\n  \"discountValue\": 0,\n  \"minimumAmount\": 0,\n  \"usageLimit\": 0,\n  \"validFrom\": \"\",\n  \"validTo\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0025874,
+        "name": "post /api/v1/admin/PromotionsAdmin",
+        "path": "PromotionsAdmin\\post -api-v1-admin-PromotionsAdmin.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "PromotionsAdmin\\get -api-v1-admin-PromotionsAdmin.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/PromotionsAdmin",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023261,
+        "name": "get /api/v1/admin/PromotionsAdmin",
+        "path": "PromotionsAdmin\\get -api-v1-admin-PromotionsAdmin.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "PromotionsAdmin\\put -api-v1-admin-PromotionsAdmin--promotionId.yml"
+        },
+        "request": {
+          "method": "PUT",
+          "url": "http://localhost:5042/api/v1/admin/PromotionsAdmin/",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"description\": \"\",\n  \"discountValue\": 0,\n  \"usageLimit\": 0,\n  \"validTo\": \"\",\n  \"isActive\": false\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002326,
+        "name": "put /api/v1/admin/PromotionsAdmin/:promotionId",
+        "path": "PromotionsAdmin\\put -api-v1-admin-PromotionsAdmin--promotionId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "PromotionsAdmin\\delete -api-v1-admin-PromotionsAdmin--promotionId.yml"
+        },
+        "request": {
+          "method": "DELETE",
+          "url": "http://localhost:5042/api/v1/admin/PromotionsAdmin/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021767,
+        "name": "delete /api/v1/admin/PromotionsAdmin/:promotionId",
+        "path": "PromotionsAdmin\\delete -api-v1-admin-PromotionsAdmin--promotionId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "PromotionsAdmin\\get -api-v1-admin-PromotionsAdmin-active.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/PromotionsAdmin/active",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020588,
+        "name": "get /api/v1/admin/PromotionsAdmin/active",
+        "path": "PromotionsAdmin\\get -api-v1-admin-PromotionsAdmin-active.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "PromotionsAdmin\\get -api-v1-admin-PromotionsAdmin--promotionId-usage.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/PromotionsAdmin//usage",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020457,
+        "name": "get /api/v1/admin/PromotionsAdmin/:promotionId/usage",
+        "path": "PromotionsAdmin\\get -api-v1-admin-PromotionsAdmin--promotionId-usage.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-metrics.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/RealtimeDashboard/metrics",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0036232,
+        "name": "get /api/v1/admin/RealtimeDashboard/metrics",
+        "path": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-metrics.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-alerts.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/RealtimeDashboard/alerts",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0024984,
+        "name": "get /api/v1/admin/RealtimeDashboard/alerts",
+        "path": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-alerts.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "RealtimeDashboard\\post -api-v1-admin-RealtimeDashboard-alerts--alertId-acknowledge.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/admin/RealtimeDashboard/alerts//acknowledge",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021806,
+        "name": "post /api/v1/admin/RealtimeDashboard/alerts/:alertId/acknowledge",
+        "path": "RealtimeDashboard\\post -api-v1-admin-RealtimeDashboard-alerts--alertId-acknowledge.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-performance.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/RealtimeDashboard/performance",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0047203,
+        "name": "get /api/v1/admin/RealtimeDashboard/performance",
+        "path": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-performance.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-database.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/RealtimeDashboard/database",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0024533,
+        "name": "get /api/v1/admin/RealtimeDashboard/database",
+        "path": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-database.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-api-analytics.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/RealtimeDashboard/api-analytics",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0060228,
+        "name": "get /api/v1/admin/RealtimeDashboard/api-analytics",
+        "path": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-api-analytics.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-slowest-endpoints.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/RealtimeDashboard/slowest-endpoints",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023321,
+        "name": "get /api/v1/admin/RealtimeDashboard/slowest-endpoints",
+        "path": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-slowest-endpoints.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-error-rates.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/RealtimeDashboard/error-rates",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021525,
+        "name": "get /api/v1/admin/RealtimeDashboard/error-rates",
+        "path": "RealtimeDashboard\\get -api-v1-admin-RealtimeDashboard-error-rates.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Refunds\\post -api-v1-Refunds.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Refunds",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"bookingId\": 0,\n  \"reason\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0026177,
+        "name": "post /api/v1/Refunds",
+        "path": "Refunds\\post -api-v1-Refunds.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Refunds\\get -api-v1-Refunds--refundId.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Refunds/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021156,
+        "name": "get /api/v1/Refunds/:refundId",
+        "path": "Refunds\\get -api-v1-Refunds--refundId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Refunds\\get -api-v1-Refunds-booking--bookingId.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Refunds/booking/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002424,
+        "name": "get /api/v1/Refunds/booking/:bookingId",
+        "path": "Refunds\\get -api-v1-Refunds-booking--bookingId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Reports\\post -api-v1-Reports.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Reports",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"reportType\": \"\",\n  \"startDate\": \"\",\n  \"endDate\": \"\",\n  \"format\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0024428,
+        "name": "post /api/v1/Reports",
+        "path": "Reports\\post -api-v1-Reports.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Reports\\get -api-v1-Reports--reportId.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Reports/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020413,
+        "name": "get /api/v1/Reports/:reportId",
+        "path": "Reports\\get -api-v1-Reports--reportId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Reports\\get -api-v1-Reports--reportId-download.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Reports//download",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002359,
+        "name": "get /api/v1/Reports/:reportId/download",
+        "path": "Reports\\get -api-v1-Reports--reportId-download.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Reports\\get -api-v1-Reports-booking-report.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Reports/booking-report",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0027022,
+        "name": "get /api/v1/Reports/booking-report",
+        "path": "Reports\\get -api-v1-Reports-booking-report.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Reports\\get -api-v1-Reports-revenue-report.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Reports/revenue-report",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021009,
+        "name": "get /api/v1/Reports/revenue-report",
+        "path": "Reports\\get -api-v1-Reports-revenue-report.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Reports\\get -api-v1-Reports-user-report.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Reports/user-report",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0024794,
+        "name": "get /api/v1/Reports/user-report",
+        "path": "Reports\\get -api-v1-Reports-user-report.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Search\\post -api-v1-Search-flights.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Search/flights",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"searchTerm\": \"\",\n  \"sortBy\": \"\",\n  \"sortOrder\": \"\",\n  \"page\": 0,\n  \"pageSize\": 0,\n  \"departureDateFrom\": \"\",\n  \"departureDateTo\": \"\",\n  \"departureAirport\": \"\",\n  \"arrivalAirport\": \"\",\n  \"minPrice\": 0,\n  \"maxPrice\": 0,\n  \"minSeatsAvailable\": 0,\n  \"bookingStatus\": 0,\n  \"passengerName\": \"\",\n  \"passengerEmail\": \"\",\n  \"userStatus\": 0,\n  \"userRole\": \"\",\n  \"registrationDateFrom\": \"\",\n  \"registrationDateTo\": \"\",\n  \"refundStatus\": 0,\n  \"minRefundAmount\": 0,\n  \"maxRefundAmount\": 0\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.00236,
+        "name": "post /api/v1/Search/flights",
+        "path": "Search\\post -api-v1-Search-flights.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Search\\post -api-v1-Search-bookings.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Search/bookings",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"searchTerm\": \"\",\n  \"sortBy\": \"\",\n  \"sortOrder\": \"\",\n  \"page\": 0,\n  \"pageSize\": 0,\n  \"departureDateFrom\": \"\",\n  \"departureDateTo\": \"\",\n  \"departureAirport\": \"\",\n  \"arrivalAirport\": \"\",\n  \"minPrice\": 0,\n  \"maxPrice\": 0,\n  \"minSeatsAvailable\": 0,\n  \"bookingStatus\": 0,\n  \"passengerName\": \"\",\n  \"passengerEmail\": \"\",\n  \"userStatus\": 0,\n  \"userRole\": \"\",\n  \"registrationDateFrom\": \"\",\n  \"registrationDateTo\": \"\",\n  \"refundStatus\": 0,\n  \"minRefundAmount\": 0,\n  \"maxRefundAmount\": 0\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0027139,
+        "name": "post /api/v1/Search/bookings",
+        "path": "Search\\post -api-v1-Search-bookings.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Search\\post -api-v1-Search-users.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Search/users",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"searchTerm\": \"\",\n  \"sortBy\": \"\",\n  \"sortOrder\": \"\",\n  \"page\": 0,\n  \"pageSize\": 0,\n  \"departureDateFrom\": \"\",\n  \"departureDateTo\": \"\",\n  \"departureAirport\": \"\",\n  \"arrivalAirport\": \"\",\n  \"minPrice\": 0,\n  \"maxPrice\": 0,\n  \"minSeatsAvailable\": 0,\n  \"bookingStatus\": 0,\n  \"passengerName\": \"\",\n  \"passengerEmail\": \"\",\n  \"userStatus\": 0,\n  \"userRole\": \"\",\n  \"registrationDateFrom\": \"\",\n  \"registrationDateTo\": \"\",\n  \"refundStatus\": 0,\n  \"minRefundAmount\": 0,\n  \"maxRefundAmount\": 0\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023182,
+        "name": "post /api/v1/Search/users",
+        "path": "Search\\post -api-v1-Search-users.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Search\\get -api-v1-Search-global.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Search/global",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002113,
+        "name": "get /api/v1/Search/global",
+        "path": "Search\\get -api-v1-Search-global.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Tickets\\get -api-v1-Tickets--ticketNumber.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Tickets/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0020579,
+        "name": "get /api/v1/Tickets/:ticketNumber",
+        "path": "Tickets\\get -api-v1-Tickets--ticketNumber.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Tickets\\get -api-v1-Tickets-booking--bookingId.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Tickets/booking/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002639,
+        "name": "get /api/v1/Tickets/booking/:bookingId",
+        "path": "Tickets\\get -api-v1-Tickets-booking--bookingId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Tickets\\put -api-v1-Tickets--ticketNumber-change.yml"
+        },
+        "request": {
+          "method": "PUT",
+          "url": "http://localhost:5042/api/v1/Tickets//change",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"newFlightId\": 0,\n  \"newSeatNumber\": \"\",\n  \"reason\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0027602,
+        "name": "put /api/v1/Tickets/:ticketNumber/change",
+        "path": "Tickets\\put -api-v1-Tickets--ticketNumber-change.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Tickets\\get -api-v1-Tickets--ticketNumber-download.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/Tickets//download",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002503,
+        "name": "get /api/v1/Tickets/:ticketNumber/download",
+        "path": "Tickets\\get -api-v1-Tickets--ticketNumber-download.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Users\\post -api-v1-Users-register.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Users/register",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"email\": \"\",\n  \"password\": \"\",\n  \"fullName\": \"\",\n  \"phone\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0025057,
+        "name": "post /api/v1/Users/register",
+        "path": "Users\\post -api-v1-Users-register.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Users\\post -api-v1-Users-login.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Users/login",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"email\": \"admin@flightbooking.vn\",\n  \"password\": \"Admin@123456\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002226,
+        "name": "post /api/v1/Users/login",
+        "path": "Users\\post -api-v1-Users-login.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Users\\post -api-v1-Users-verify-email.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Users/verify-email",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019618,
+        "name": "post /api/v1/Users/verify-email",
+        "path": "Users\\post -api-v1-Users-verify-email.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Users\\post -api-v1-Users-change-password.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Users/change-password",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"oldPassword\": \"\",\n  \"newPassword\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0023061,
+        "name": "post /api/v1/Users/change-password",
+        "path": "Users\\post -api-v1-Users-change-password.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Users\\post -api-v1-Users-forgot-password.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Users/forgot-password",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"email\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.002353,
+        "name": "post /api/v1/Users/forgot-password",
+        "path": "Users\\post -api-v1-Users-forgot-password.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Users\\post -api-v1-Users-reset-password.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Users/reset-password",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"code\": \"\",\n  \"newPassword\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0024587,
+        "name": "post /api/v1/Users/reset-password",
+        "path": "Users\\post -api-v1-Users-reset-password.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Users\\post -api-v1-Users-change-password-request-otp.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Users/change-password/request-otp",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019142,
+        "name": "post /api/v1/Users/change-password/request-otp",
+        "path": "Users\\post -api-v1-Users-change-password-request-otp.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "Users\\post -api-v1-Users-change-password-confirm.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/Users/change-password/confirm",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"code\": \"\",\n  \"newPassword\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0034329,
+        "name": "post /api/v1/Users/change-password/confirm",
+        "path": "Users\\post -api-v1-Users-change-password-confirm.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "UsersAdmin\\get -api-v1-admin-UsersAdmin.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/UsersAdmin",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0021339,
+        "name": "get /api/v1/admin/UsersAdmin",
+        "path": "UsersAdmin\\get -api-v1-admin-UsersAdmin.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "UsersAdmin\\get -api-v1-admin-UsersAdmin--userId.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/UsersAdmin/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0029334,
+        "name": "get /api/v1/admin/UsersAdmin/:userId",
+        "path": "UsersAdmin\\get -api-v1-admin-UsersAdmin--userId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "UsersAdmin\\put -api-v1-admin-UsersAdmin--userId-status.yml"
+        },
+        "request": {
+          "method": "PUT",
+          "url": "http://localhost:5042/api/v1/admin/UsersAdmin//status",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"status\": 0,\n  \"reason\": \"\"\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0044748,
+        "name": "put /api/v1/admin/UsersAdmin/:userId/status",
+        "path": "UsersAdmin\\put -api-v1-admin-UsersAdmin--userId-status.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "UsersAdmin\\post -api-v1-admin-UsersAdmin--userId-roles.yml"
+        },
+        "request": {
+          "method": "POST",
+          "url": "http://localhost:5042/api/v1/admin/UsersAdmin//roles",
+          "headers": {
+            "content-type": "application/json"
+          },
+          "data": "{\n  \"roleId\": 0\n}"
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0036607,
+        "name": "post /api/v1/admin/UsersAdmin/:userId/roles",
+        "path": "UsersAdmin\\post -api-v1-admin-UsersAdmin--userId-roles.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "UsersAdmin\\delete -api-v1-admin-UsersAdmin--userId-roles--roleId.yml"
+        },
+        "request": {
+          "method": "DELETE",
+          "url": "http://localhost:5042/api/v1/admin/UsersAdmin//roles/",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0022149,
+        "name": "delete /api/v1/admin/UsersAdmin/:userId/roles/:roleId",
+        "path": "UsersAdmin\\delete -api-v1-admin-UsersAdmin--userId-roles--roleId.yml",
+        "iterationIndex": 0
+      },
+      {
+        "test": {
+          "filename": "UsersAdmin\\get -api-v1-admin-UsersAdmin--userId-bookings.yml"
+        },
+        "request": {
+          "method": "GET",
+          "url": "http://localhost:5042/api/v1/admin/UsersAdmin//bookings",
+          "headers": {
+            "content-type": null
+          }
+        },
+        "response": {
+          "status": "error",
+          "statusText": null,
+          "headers": null,
+          "data": null,
+          "url": null,
+          "responseTime": 0,
+          "duration": 0,
+          "size": 0
+        },
+        "error": "ECONNREFUSED",
+        "status": "error",
+        "assertionResults": [],
+        "testResults": [],
+        "preRequestTestResults": [],
+        "postResponseTestResults": [],
+        "shouldStopRunnerExecution": false,
+        "runDuration": 0.0019042,
+        "name": "get /api/v1/admin/UsersAdmin/:userId/bookings",
+        "path": "UsersAdmin\\get -api-v1-admin-UsersAdmin--userId-bookings.yml",
+        "iterationIndex": 0
+      }
+    ],
+    "summary": {
+      "totalRequests": 81,
+      "passedRequests": 0,
+      "failedRequests": 0,
+      "errorRequests": 81,
+      "skippedRequests": 0,
+      "totalAssertions": 0,
+      "passedAssertions": 0,
+      "failedAssertions": 0,
+      "totalTests": 0,
+      "passedTests": 0,
+      "failedTests": 0,
+      "totalPreRequestTests": 0,
+      "passedPreRequestTests": 0,
+      "failedPreRequestTests": 0,
+      "totalPostResponseTests": 0,
+      "passedPostResponseTests": 0,
+      "failedPostResponseTests": 0
+    }
+  }
+]

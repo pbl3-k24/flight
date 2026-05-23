@@ -1,5 +1,7 @@
 namespace API.Application.Interfaces;
 
+using API.Application.Dtos.Promotion;
+
 public interface IPromotionService
 {
     /// <summary>
@@ -26,4 +28,9 @@ public interface IPromotionService
     /// <param name="discountAmount">Discount amount applied</param>
     /// <returns>True if recorded successfully</returns>
     Task<bool> RecordPromotionUsageAsync(int promotionId, int bookingId, int userId, decimal discountAmount);
+
+    /// <summary>
+    /// Gets currently available promotions for end users.
+    /// </summary>
+    Task<List<AvailablePromotionResponse>> GetAvailablePromotionsAsync();
 }

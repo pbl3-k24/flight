@@ -1,0 +1,416 @@
+{
+  "info": {
+    "_postman_id": "flight-booking-tests",
+    "name": "Flight Booking System - Sample Data Tests",
+    "description": "Collection for testing Flight Booking API with sample data",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5042",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login as Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@flightbooking.vn\",\n  \"password\": \"Admin@123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/Users/login",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "Users", "login"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Flights Search",
+      "item": [
+        {
+          "name": "Search - HCM to Hanoi",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/flights/search?departureId=1&arrivalId=2&date=2025-01-22",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "flights", "search"],
+              "query": [
+                {
+                  "key": "departureId",
+                  "value": "1"
+                },
+                {
+                  "key": "arrivalId",
+                  "value": "2"
+                },
+                {
+                  "key": "date",
+                  "value": "2025-01-22"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search - HCM to Da Nang",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/flights/search?departureId=1&arrivalId=3&date=2025-01-22",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "flights", "search"],
+              "query": [
+                {
+                  "key": "departureId",
+                  "value": "1"
+                },
+                {
+                  "key": "arrivalId",
+                  "value": "3"
+                },
+                {
+                  "key": "date",
+                  "value": "2025-01-22"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Search - No Results (Invalid Route)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/flights/search?departureId=999&arrivalId=1&date=2025-01-22",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "flights", "search"],
+              "query": [
+                {
+                  "key": "departureId",
+                  "value": "999"
+                },
+                {
+                  "key": "arrivalId",
+                  "value": "1"
+                },
+                {
+                  "key": "date",
+                  "value": "2025-01-22"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin - Flights",
+      "item": [
+        {
+          "name": "Get All Flights - Page 1",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/FlightsAdmin?page=1&pageSize=10",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "admin", "FlightsAdmin"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Flights - Page 2",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/FlightsAdmin?page=2&pageSize=10",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "admin", "FlightsAdmin"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "2"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Flights - Different Page Size",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/FlightsAdmin?page=1&pageSize=20",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "admin", "FlightsAdmin"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin - Promotions",
+      "item": [
+        {
+          "name": "Get All Promotions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/PromotionsAdmin?page=1&pageSize=10",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "admin", "PromotionsAdmin"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Active Promotions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/PromotionsAdmin/active",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "admin", "PromotionsAdmin", "active"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Promotions - Public",
+      "item": [
+        {
+          "name": "Validate - SUMMER20",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"SUMMER20\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/promotions/validate",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "promotions", "validate"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Validate - SAVE500K",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"SAVE500K\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/promotions/validate",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "promotions", "validate"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Validate - INVALID CODE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"INVALIDCODE999\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/promotions/validate",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "promotions", "validate"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Validate - EXPIRED CODE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"EXPIRED2024\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/promotions/validate",
+              "host": ["localhost"],
+              "port": "5042",
+              "path": ["api", "v1", "promotions", "validate"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

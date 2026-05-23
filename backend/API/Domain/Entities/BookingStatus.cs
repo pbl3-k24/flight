@@ -6,7 +6,9 @@ public enum BookingStatus
     Confirmed = 1,
     CheckedIn = 2,
     Cancelled = 3,
-    Refunded = 4
+    Refunded = 4,
+    PartiallyCancelled = 5,
+    PendingDisruptionDecision = 6
 }
 
 public enum PassengerType

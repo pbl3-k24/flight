@@ -73,6 +73,7 @@ public class User
     public virtual ICollection<NotificationLog> NotificationLogs { get; set; } = [];
 
     public virtual ICollection<AuditLog> AuditLogs { get; set; } = [];
+    public virtual ICollection<SavedPassenger> SavedPassengers { get; set; } = [];
 
     // Domain methods
     public bool IsActive() => Status == 0;

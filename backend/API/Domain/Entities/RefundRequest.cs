@@ -7,8 +7,10 @@ public class RefundRequest
     public int BookingId { get; set; }
 
     public int PaymentId { get; set; }
+    public int? TicketId { get; set; }
 
     public decimal RefundAmount { get; set; }
+    public decimal? SourceAmountSnapshot { get; set; }
 
     public string? Reason { get; set; }
 

@@ -41,8 +41,9 @@ public class BookingPassenger
     public virtual FlightSeatInventory FlightSeatInventory { get; set; } = null!;
 
     public virtual ICollection<BookingService> Services { get; set; } = [];
+    public virtual ICollection<BookingLegPassenger> LegPassengers { get; set; } = [];
 
-    public virtual Ticket? Ticket { get; set; }
+    public virtual ICollection<Ticket> Tickets { get; set; } = [];
 
     // Domain methods
     public bool IsAdult() => PassengerType == 0;

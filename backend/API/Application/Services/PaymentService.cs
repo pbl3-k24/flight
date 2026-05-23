@@ -21,6 +21,10 @@ public class PaymentService : IPaymentService
     private readonly ITicketService _ticketService;
     private readonly ILogger<PaymentService> _logger;
     private readonly VnpayPaymentProvider _vnpayProvider;
+    private readonly INotificationService? _notificationService;
+    private readonly IPromotionService? _promotionService;
+    private readonly ITicketUpgradeService? _ticketUpgradeService;
+    private readonly IBookingService? _bookingService;
 
     public PaymentService(
         IUnitOfWork unitOfWork,
@@ -31,7 +35,11 @@ public class PaymentService : IPaymentService
         IEmailService emailService,
         ITicketService ticketService,
         ILogger<PaymentService> logger,
-        VnpayPaymentProvider vnpayProvider)
+        VnpayPaymentProvider vnpayProvider,
+        INotificationService? notificationService = null,
+        IPromotionService? promotionService = null,
+        ITicketUpgradeService? ticketUpgradeService = null,
+        IBookingService? bookingService = null)
     {
         _unitOfWork = unitOfWork;
         _paymentRepository = paymentRepository;
@@ -42,9 +50,13 @@ public class PaymentService : IPaymentService
         _ticketService = ticketService;
         _logger = logger;
         _vnpayProvider = vnpayProvider;
+        _notificationService = notificationService;
+        _promotionService = promotionService;
+        _ticketUpgradeService = ticketUpgradeService;
+        _bookingService = bookingService;
     }
 
-    public async Task<PaymentResponse> InitiatePaymentAsync(int bookingId, InitiatePaymentDto dto)
+    public async Task<PaymentResponse> InitiatePaymentAsync(int bookingId, InitiatePaymentDto dto, int userId, bool isAdmin = false)
     {
         try
         {
@@ -54,10 +66,28 @@ public class PaymentService : IPaymentService
                 throw new NotFoundException("Booking not found");
             }
 
+            if (!isAdmin && booking.UserId != userId)
+            {
+                _logger.LogWarning(
+                    "IDOR attempt: User {UserId} tried to initiate payment for booking {BookingId}",
+                    userId,
+                    bookingId);
+                throw new UnauthorizedException("You cannot initiate payment for this booking");
+            }
+
             if (booking.Status != (int)BookingStatus.Pending)
             {
                 throw new ValidationException("Only pending bookings can be paid");
             }
+
+            _logger.LogInformation(
+                "InitiatePayment amount snapshot: BookingId={BookingId}, BookingCode={BookingCode}, TotalAmount={TotalAmount}, DiscountAmount={DiscountAmount}, FinalAmount={FinalAmount}, Currency={Currency}",
+                booking.Id,
+                booking.BookingCode,
+                booking.TotalAmount,
+                booking.DiscountAmount,
+                booking.FinalAmount,
+                booking.Currency);
 
             var paymentMethod = NormalizePaymentMethod(dto.PaymentMethod);
             var providerResponse = await GeneratePaymentProviderResponseAsync(paymentMethod, booking);
@@ -137,7 +167,8 @@ public class PaymentService : IPaymentService
     {
         try
         {
-            return await _unitOfWork.ExecuteInTransactionAsync(async () =>
+            int? confirmedBookingId = null;
+            var processed = await _unitOfWork.ExecuteInTransactionAsync(async () =>
             {
                 var payment = await _paymentRepository.GetByIdAsync(paymentId);
                 if (payment == null)
@@ -166,11 +197,27 @@ public class PaymentService : IPaymentService
 
                 payment.RawCallbackData = ResolveRawCallbackData(callback);
 
-                if (!string.Equals(callback.Status, "success", StringComparison.OrdinalIgnoreCase))
+                if (!IsSuccessfulPaymentStatus(callback.Status))
                 {
                     payment.Status = (int)PaymentStatus.Failed;
                     payment.UpdatedAt = DateTime.UtcNow;
                     await _paymentRepository.UpdateAsync(payment);
+
+                    if (_ticketUpgradeService != null
+                        && await _ticketUpgradeService.IsUpgradePaymentAsync(payment.Id))
+                    {
+                        await _ticketUpgradeService.ProcessUpgradePaymentAsync(payment.Id, callback.Status);
+                        _logger.LogInformation("Processed failed upgrade payment {PaymentId}", payment.Id);
+                        return false;
+                    }
+
+                    if (_bookingService != null
+                        && await _bookingService.IsChangeFlightPaymentAsync(payment.Id))
+                    {
+                        await _bookingService.ProcessChangeFlightPaymentAsync(payment.Id, callback.Status);
+                        _logger.LogInformation("Processed failed change-flight payment {PaymentId}", payment.Id);
+                        return false;
+                    }
 
                     await CancelPendingBookingAndReleaseHeldSeatsAsync(payment.BookingId);
 
@@ -183,7 +230,38 @@ public class PaymentService : IPaymentService
                 payment.UpdatedAt = DateTime.UtcNow;
                 await _paymentRepository.UpdateAsync(payment);
 
-                await ConfirmBookingAndConvertSeatsAsync(payment.BookingId);
+                if (_ticketUpgradeService != null
+                    && await _ticketUpgradeService.IsUpgradePaymentAsync(payment.Id))
+                {
+                    var upgradeProcessed = await _ticketUpgradeService.ProcessUpgradePaymentAsync(payment.Id, callback.Status);
+                    if (!upgradeProcessed)
+                    {
+                        payment.Status = (int)PaymentStatus.Failed;
+                        payment.UpdatedAt = DateTime.UtcNow;
+                        await _paymentRepository.UpdateAsync(payment);
+                    }
+                    _logger.LogInformation("Upgrade payment processed: {PaymentId}, Success={Success}", payment.Id, upgradeProcessed);
+                    return upgradeProcessed;
+                }
+
+                if (_bookingService != null
+                    && await _bookingService.IsChangeFlightPaymentAsync(payment.Id))
+                {
+                    var changeProcessed = await _bookingService.ProcessChangeFlightPaymentAsync(payment.Id, callback.Status);
+                    if (!changeProcessed)
+                    {
+                        payment.Status = (int)PaymentStatus.Failed;
+                        payment.UpdatedAt = DateTime.UtcNow;
+                        await _paymentRepository.UpdateAsync(payment);
+                    }
+                    _logger.LogInformation("Change-flight payment processed: {PaymentId}, Success={Success}", payment.Id, changeProcessed);
+                    return changeProcessed;
+                }
+
+                if (await ConfirmBookingAndConvertSeatsAsync(payment.BookingId))
+                {
+                    confirmedBookingId = payment.BookingId;
+                }
 
                 _logger.LogInformation(
                     "Payment processed successfully with Vnpay: {PaymentId} for booking {BookingId}",
@@ -192,6 +270,13 @@ public class PaymentService : IPaymentService
 
                 return true;
             });
+
+            if (processed && confirmedBookingId.HasValue)
+            {
+                await NotifyPaymentSuccessAsync(paymentId, confirmedBookingId.Value);
+            }
+
+            return processed;
         }
         catch (Exception ex)
         {
@@ -219,7 +304,8 @@ public class PaymentService : IPaymentService
             return false;
         }
 
-                if (!AmountsMatch(payment.Amount, callback.Amount, payment.Provider))
+        var amountMatched = AmountsMatch(payment.Amount, callback.Amount, payment.Provider);
+        if (!amountMatched)
         {
             _logger.LogWarning(
                 "Callback amount mismatch for payment {PaymentId}. Expected: {Expected}, Received: {Received}",
@@ -244,6 +330,14 @@ public class PaymentService : IPaymentService
 
         var provider = ResolvePaymentProvider(payment.Provider);
         var signatureValid = await provider.VerifyCallbackSignatureAsync(callback.Signature, rawData);
+        _logger.LogInformation(
+            "Callback validation diagnostic. PaymentId={PaymentId}, TxnRef={TxnRef}, AmountExpected={AmountExpected}, AmountActual={AmountActual}, SignatureValid={SignatureValid}",
+            payment.Id,
+            payment.TransactionRef,
+            payment.Amount,
+            callback.Amount,
+            signatureValid);
+
         if (!signatureValid)
         {
             _logger.LogWarning("Invalid callback signature for payment {PaymentId}", payment.Id);
@@ -266,14 +360,20 @@ public class PaymentService : IPaymentService
     {
         if (!string.IsNullOrWhiteSpace(callback.RawData))
         {
-            return callback.RawData;
+            return callback.RawData.Trim();
         }
 
         if (callback.AdditionalData is { Count: > 0 })
         {
-            return string.Join("&", callback.AdditionalData
+            var filtered = callback.AdditionalData
+                .Where(kv =>
+                    !string.IsNullOrWhiteSpace(kv.Key)
+                    && !string.IsNullOrWhiteSpace(kv.Value)
+                    && !string.Equals(kv.Key, "vnp_SecureHash", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(kv.Key, "vnp_SecureHashType", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                .Select(kv => $"{kv.Key}={kv.Value}"));
+                .Select(kv => $"{System.Net.WebUtility.UrlEncode(kv.Key)}={System.Net.WebUtility.UrlEncode(kv.Value)}");
+            return string.Join("&", filtered);
         }
 
         return null;
@@ -338,17 +438,17 @@ public class PaymentService : IPaymentService
             bookingId);
     }
 
-    private async Task ConfirmBookingAndConvertSeatsAsync(int bookingId)
+    private async Task<bool> ConfirmBookingAndConvertSeatsAsync(int bookingId)
     {
         var booking = await _bookingRepository.GetByIdAsync(bookingId);
         if (booking == null)
         {
-            return;
+            return false;
         }
 
         if (booking.Status == (int)BookingStatus.Confirmed)
         {
-            return;
+            return false;
         }
 
         if (booking.Status != (int)BookingStatus.Pending)
@@ -357,13 +457,13 @@ public class PaymentService : IPaymentService
                 "Skipping seat confirmation because booking {BookingId} is not pending. Current status: {Status}",
                 bookingId,
                 booking.Status);
-            return;
+            return false;
         }
 
         var passengers = await _passengerRepository.GetByBookingIdAsync(bookingId);
         if (passengers.Count == 0)
         {
-            return;
+            return false;
         }
 
         var seatInventoryId = passengers.First().FlightSeatInventoryId;
@@ -396,6 +496,30 @@ public class PaymentService : IPaymentService
             "Confirmed {PassengerCount} held seats as sold for booking {BookingId}",
             seatsToConfirm,
             bookingId);
+        return true;
+    }
+
+    private async Task NotifyPaymentSuccessAsync(int paymentId, int bookingId)
+    {
+        if (_notificationService == null)
+        {
+            return;
+        }
+
+        var booking = await _bookingRepository.GetByIdAsync(bookingId);
+        if (booking == null)
+        {
+            return;
+        }
+
+        await _notificationService.SendNotificationAsync(
+            booking.UserId,
+            "Payment successful",
+            $"Payment for booking {booking.BookingCode} has been completed.",
+            type: "IN_APP",
+            category: "PAYMENT",
+            relatedEntityType: "Payment",
+            relatedEntityId: paymentId);
     }
 
     public async Task<PaymentResponse> GetPaymentStatusAsync(int paymentId, int userId, bool isAdmin = false)
@@ -428,6 +552,9 @@ public class PaymentService : IPaymentService
                 1 => "Completed",
                 2 => "Failed",
                 3 => "Refunded",
+                4 => "RefundFailed",
+                5 => "PendingRefund",
+                6 => "PartialRefunded",
                 _ => "Unknown"
             };
 
@@ -479,6 +606,9 @@ public class PaymentService : IPaymentService
                     1 => "Completed",
                     2 => "Failed",
                     3 => "Refunded",
+                    4 => "RefundFailed",
+                    5 => "PendingRefund",
+                    6 => "PartialRefunded",
                     _ => "Unknown"
                 };
 
@@ -508,7 +638,13 @@ public class PaymentService : IPaymentService
         {
             // Tìm payment bằng TransactionRef
             var payments = await _paymentRepository.GetAllAsync();
-            var payment = payments.FirstOrDefault(p => p.TransactionRef == callback.TransactionId);
+            var callbackTransactionId = callback.TransactionId?.Trim();
+            var payment = payments.FirstOrDefault(p =>
+                !string.IsNullOrWhiteSpace(p.TransactionRef)
+                && string.Equals(
+                    p.TransactionRef.Trim(),
+                    callbackTransactionId,
+                    StringComparison.OrdinalIgnoreCase));
 
             if (payment == null)
             {
@@ -524,6 +660,20 @@ public class PaymentService : IPaymentService
             return false;
         }
     }
+
+    private static bool IsSuccessfulPaymentStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return false;
+        }
+
+        var normalized = status.Trim();
+        return normalized.Equals("success", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("completed", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("paid", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("00", StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public enum PaymentStatus
@@ -531,5 +681,8 @@ public enum PaymentStatus
     Pending = 0,
     Completed = 1,
     Failed = 2,
-    Refunded = 3
+    Refunded = 3,
+    RefundFailed = 4,
+    PendingRefund = 5,
+    PartialRefunded = 6
 }

@@ -5,6 +5,7 @@ public class BookingService
     public int Id { get; set; }
 
     public int BookingPassengerId { get; set; }
+    public int? BookingLegPassengerId { get; set; }
 
     public int AdditionalServiceId { get; set; }
 
@@ -18,6 +19,7 @@ public class BookingService
 
     // Navigation properties
     public virtual BookingPassenger BookingPassenger { get; set; } = null!;
+    public virtual BookingLegPassenger? BookingLegPassenger { get; set; }
 
     public virtual AdditionalService AdditionalService { get; set; } = null!;
 

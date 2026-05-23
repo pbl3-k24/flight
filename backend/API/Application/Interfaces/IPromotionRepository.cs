@@ -15,6 +15,8 @@ public interface IPromotionRepository
     Task<Promotion> CreateAsync(Promotion promotion);
 
     Task UpdateAsync(Promotion promotion);
+    Task<bool> TryReserveUsageAsync(int promotionId);
+    Task<bool> ReleaseUsageAsync(int promotionId);
 
     Task DeleteAsync(int id);
 }

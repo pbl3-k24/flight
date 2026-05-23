@@ -18,7 +18,9 @@ export const clearAuthToken = () => {
   authToken = null
   try {
     localStorage.removeItem('authToken')
-  } catch (e) {}
+  } catch {
+    // ignore storage cleanup errors
+  }
 }
 
 const toLocalDateTimeString = (dateValue) => {
@@ -54,12 +56,16 @@ const makeRequestWithBase = async (baseUrl, endpoint, options = {}) => {
     const error = await response.json().catch(() => ({}))
     try {
       console.error('❌ API request failed', { url, status: response.status, body: error })
-    } catch (e) {}
+    } catch {
+      // ignore console serialization errors
+    }
     // auto-clear token on unauthorized to force re-login
     if (response.status === 401) {
       try {
         clearAuthToken()
-      } catch (e) {}
+      } catch {
+        // ignore token cleanup errors
+      }
     }
     const apiError = new Error(error.detail || error.message || `API Error: ${response.statusText}`)
     apiError.status = response.status
@@ -203,6 +209,61 @@ export const cancelBooking = (bookingId, reason = '') => {
   })
 }
 
+export const getTicketsByBooking = (bookingId) =>
+  makeRequest(`/Tickets/booking/${bookingId}`).then((data) => normalizeArrayResponse(data))
+
+export const cancelTicket = (bookingId, ticketId, reason = '') =>
+  makeRequest(`/Bookings/${bookingId}/tickets/${ticketId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason || null }),
+  })
+
+export const getDisruptionOptions = (bookingId, departureDate) => {
+  const query = departureDate ? `?departureDate=${encodeURIComponent(departureDate)}` : ''
+  return makeRequest(`/Bookings/${bookingId}/disruption-options${query}`).then((data) =>
+    normalizeArrayResponse(data),
+  )
+}
+
+export const cancelDisruptionDecision = (bookingId, decisionId) =>
+  makeRequest(`/Bookings/${bookingId}/disruption-decisions/cancel?decisionId=${decisionId}`, {
+    method: 'POST',
+  })
+
+export const rebookDisruptionDecision = (bookingId, decisionId, newFlightId) =>
+  makeRequest(`/Bookings/${bookingId}/disruption-decisions/rebook`, {
+    method: 'POST',
+    body: JSON.stringify({ decisionId, newFlightId }),
+  })
+
+const normalizeArrayResponse = (data) => {
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.items)) return data.items
+  if (Array.isArray(data?.data)) return data.data
+  if (Array.isArray(data?.$values)) return data.$values
+  return []
+}
+
+export const getSavedPassengers = () =>
+  makeRequest('/saved-passengers').then((data) => normalizeArrayResponse(data))
+
+export const createSavedPassenger = (payload) =>
+  makeRequest('/saved-passengers', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const updateSavedPassenger = (id, payload) =>
+  makeRequest(`/saved-passengers/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+
+export const deleteSavedPassenger = (id) =>
+  makeRequest(`/saved-passengers/${id}`, {
+    method: 'DELETE',
+  })
+
 export const getPaymentStatus = (paymentId) => {
   return makeRequest(`/Payments/${paymentId}`)
 }
@@ -275,8 +336,37 @@ export const generateFlightsFromTemplate = (generateData) => {
 }
 
 export const getActivePromotions = () => {
-  return makeRequest('/admin/PromotionsAdmin/active')
+  return makeRequest('/Promotions/available')
 }
+
+export const getAdminFlights = (page = 1, pageSize = 50) =>
+  makeRequest(`/admin/FlightsAdmin?page=${page}&pageSize=${pageSize}`)
+
+export const createAdminFlight = (payload) =>
+  makeRequest('/admin/FlightsAdmin', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const updateAdminFlight = (flightId, payload) =>
+  makeRequest(`/admin/FlightsAdmin/${flightId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+
+export const deleteAdminFlight = (flightId) =>
+  makeRequest(`/admin/FlightsAdmin/${flightId}`, {
+    method: 'DELETE',
+  })
+
+export const cancelAdminFlight = (flightId, reason) =>
+  makeRequest(`/admin/FlightsAdmin/${flightId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+
+export const getAdminRoutes = (page = 1, pageSize = 100) =>
+  makeRequest(`/admin/FlightsAdmin/routes?page=${page}&pageSize=${pageSize}`)
 
 export const getBestPromotion = async (bookingAmount) => {
   try {
@@ -328,3 +418,111 @@ export const getBestPromotion = async (bookingAmount) => {
     return null
   }
 }
+
+export const getPromotions = (page = 1, pageSize = 50) =>
+  makeRequest(`/admin/PromotionsAdmin?page=${page}&pageSize=${pageSize}`)
+
+export const getAdminPromotions = getPromotions
+
+export const getActiveAdminPromotions = () =>
+  makeRequest('/admin/PromotionsAdmin/active')
+
+export const createPromotion = (payload) =>
+  makeRequest('/admin/PromotionsAdmin', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+export const getNotifications = ({ unreadOnly = false, page = 1, pageSize = 20 } = {}) =>
+  makeRequest(`/Notifications?unreadOnly=${unreadOnly}&page=${page}&pageSize=${pageSize}`)
+
+export const getNotificationsUnreadCount = () =>
+  makeRequest('/Notifications/unread-count')
+
+export const markNotificationRead = (notificationId) =>
+  makeRequest(`/Notifications/${notificationId}/read`, {
+    method: 'PUT',
+  })
+
+export const markAllNotificationsRead = () =>
+  makeRequest('/Notifications/read-all', {
+    method: 'PUT',
+  })
+
+export const updatePromotion = (promotionId, payload) =>
+  makeRequest(`/admin/PromotionsAdmin/${promotionId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+
+export const deactivatePromotion = (promotionId) =>
+  makeRequest(`/admin/PromotionsAdmin/${promotionId}`, {
+    method: 'DELETE',
+  })
+
+export const deletePromotion = deactivatePromotion
+
+// ===== Ticket Upgrade APIs =====
+
+/**
+ * Lấy báo giá nâng hạng ghế
+ * POST /api/v1/bookings/{bookingId}/tickets/{ticketId}/upgrade/quote
+ */
+export const getUpgradeQuote = (bookingId, ticketId, toSeatClassId) =>
+  makeRequest(`/bookings/${bookingId}/tickets/${ticketId}/upgrade/quote`, {
+    method: 'POST',
+    body: JSON.stringify({ toSeatClassId }),
+  })
+
+/**
+ * Tạo yêu cầu nâng hạng ghế
+ * POST /api/v1/bookings/{bookingId}/tickets/{ticketId}/upgrade-requests
+ */
+export const createUpgradeRequest = (bookingId, ticketId, toSeatClassId) =>
+  makeRequest(`/bookings/${bookingId}/tickets/${ticketId}/upgrade-requests`, {
+    method: 'POST',
+    body: JSON.stringify({ toSeatClassId }),
+  })
+
+/**
+ * Khởi tạo thanh toán cho yêu cầu nâng hạng
+ * POST /api/v1/ticket-upgrades/{requestId}/payments
+ */
+export const initiateUpgradePayment = (requestId, paymentMethod = 'VNPAY') => {
+  makeRequest(`/ticket-upgrades/${requestId}/payments`, {
+    method: 'POST',
+    body: JSON.stringify({ paymentMethod }),
+  })
+}
+
+// ===== Flight Change APIs =====
+
+/**
+ * Lấy danh sách chuyến bay có thể đổi
+ * GET /api/v1/bookings/{bookingId}/change-options?legType={0|1}&departureDate={yyyy-MM-dd}
+ */
+export const getChangeFlightOptions = (bookingId, legType, departureDate) =>
+  makeRequest(`/bookings/${bookingId}/change-options?legType=${legType}&departureDate=${departureDate}`).then((data) => {
+    const candidatesData = data?.candidates !== undefined ? data.candidates : data
+    return normalizeArrayResponse(candidatesData)
+  })
+
+/**
+ * Lấy báo giá đổi chuyến bay
+ * POST /api/v1/bookings/{bookingId}/change-quote
+ */
+export const getChangeFlightQuote = (bookingId, payload) =>
+  makeRequest(`/bookings/${bookingId}/change-quote`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+
+/**
+ * Xác nhận đổi chuyến bay
+ * POST /api/v1/bookings/{bookingId}/change-confirm
+ */
+export const confirmChangeFlight = (bookingId, payload) =>
+  makeRequest(`/bookings/${bookingId}/change-confirm`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })

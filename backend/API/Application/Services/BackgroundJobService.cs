@@ -3,12 +3,15 @@ namespace API.Application.Services;
 using API.Application.Interfaces;
 using API.Application.Common;
 using API.Domain.Entities;
+using API.Infrastructure.Data;
 using API.Infrastructure.ExternalServices;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
 
 public class BackgroundJobService : IBackgroundJobService
 {
+    private const int ChangeFlightPaymentHoldMinutes = 5;
     private const int MaxRefundRetryAttempts = 5;
     private static readonly ConcurrentQueue<VnpayRefundJob> RefundQueue = new();
 
@@ -19,7 +22,9 @@ public class BackgroundJobService : IBackgroundJobService
     private readonly IFlightSeatInventoryRepository _seatInventoryRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IPaymentRepository _paymentRepository;
+    private readonly ITicketUpgradeService _ticketUpgradeService;
     private readonly VnpayPaymentProvider _vnpayPaymentProvider;
+    private readonly FlightBookingDbContext _dbContext;
 
     public BackgroundJobService(
         ILogger<BackgroundJobService> logger,
@@ -29,7 +34,9 @@ public class BackgroundJobService : IBackgroundJobService
         IFlightSeatInventoryRepository seatInventoryRepository,
         IUnitOfWork unitOfWork,
         IPaymentRepository paymentRepository,
-        VnpayPaymentProvider vnpayPaymentProvider)
+        ITicketUpgradeService ticketUpgradeService,
+        VnpayPaymentProvider vnpayPaymentProvider,
+        FlightBookingDbContext dbContext)
     {
         _logger = logger;
         _pricingService = pricingService;
@@ -38,7 +45,9 @@ public class BackgroundJobService : IBackgroundJobService
         _seatInventoryRepository = seatInventoryRepository;
         _unitOfWork = unitOfWork;
         _paymentRepository = paymentRepository;
+        _ticketUpgradeService = ticketUpgradeService;
         _vnpayPaymentProvider = vnpayPaymentProvider;
+        _dbContext = dbContext;
     }
 
     public async Task ReleaseSeatHoldsAsync()
@@ -83,6 +92,11 @@ public class BackgroundJobService : IBackgroundJobService
                             booking.Status = (int)BookingStatus.Cancelled;
                             booking.UpdatedAt = DateTime.UtcNow;
                             await _bookingRepository.UpdateAsync(booking);
+
+                            if (booking.PromotionId.HasValue && booking.DiscountAmount > 0)
+                            {
+                                await _unitOfWork.Promotions.ReleaseUsageAsync(booking.PromotionId.Value);
+                            }
                         });
 
                         _logger.LogInformation("Released seats for expired booking {BookingId}", booking.Id);
@@ -145,6 +159,11 @@ public class BackgroundJobService : IBackgroundJobService
                         booking.Status = (int)BookingStatus.Cancelled;
                         booking.UpdatedAt = DateTime.UtcNow;
                         await _bookingRepository.UpdateAsync(booking);
+
+                        if (booking.PromotionId.HasValue && booking.DiscountAmount > 0)
+                        {
+                            await _unitOfWork.Promotions.ReleaseUsageAsync(booking.PromotionId.Value);
+                        }
                     });
 
                     _logger.LogInformation("Expired booking {BookingId}", booking.Id);
@@ -170,6 +189,14 @@ public class BackgroundJobService : IBackgroundJobService
             var now = DateTime.UtcNow;
             var nowVn = VietnamTime.UtcNowInVietnam();
             _logger.LogInformation("Processing expired bookings at {TimeVn} (VN, UTC+7)", nowVn);
+
+            await ProcessExpiredChangeFlightAwaitingPaymentsAsync(now);
+
+            var expiredUpgradeRequests = await _ticketUpgradeService.ExpirePendingRequestsAsync();
+            if (expiredUpgradeRequests > 0)
+            {
+                _logger.LogInformation("Expired {Count} pending ticket upgrade requests", expiredUpgradeRequests);
+            }
 
             var allBookings = await _bookingRepository.GetAllAsync();
             var pendingBookings = allBookings
@@ -213,6 +240,11 @@ public class BackgroundJobService : IBackgroundJobService
                         booking.Status = (int)BookingStatus.Cancelled;
                         booking.UpdatedAt = DateTime.UtcNow;
                         await _bookingRepository.UpdateAsync(booking);
+
+                        if (booking.PromotionId.HasValue && booking.DiscountAmount > 0)
+                        {
+                            await _unitOfWork.Promotions.ReleaseUsageAsync(booking.PromotionId.Value);
+                        }
                     });
 
                     expiredCount++;
@@ -228,6 +260,134 @@ public class BackgroundJobService : IBackgroundJobService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error processing expired bookings");
+        }
+    }
+
+    private async Task ProcessExpiredChangeFlightAwaitingPaymentsAsync(DateTime nowUtc)
+    {
+        var cutoff = nowUtc.AddMinutes(-ChangeFlightPaymentHoldMinutes);
+        var expiredChangeRequests = await _dbContext.BookingChangeRequests
+            .Where(r => !r.IsDeleted && r.Status == 1 && r.CreatedAt < cutoff)
+            .ToListAsync();
+
+        if (expiredChangeRequests.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var request in expiredChangeRequests)
+        {
+            try
+            {
+                var leg = await _dbContext.BookingLegs
+                    .FirstOrDefaultAsync(l => !l.IsDeleted
+                        && l.BookingId == request.BookingId
+                        && l.LegType == request.LegType);
+                if (leg == null)
+                {
+                    request.Status = 3;
+                    request.UpdatedAt = nowUtc;
+                    continue;
+                }
+
+                var issuedTickets = await _dbContext.Tickets
+                    .Where(t => !t.IsDeleted
+                        && t.BookingId == request.BookingId
+                        && t.FlightId == request.OldFlightId
+                        && t.Status == 0)
+                    .ToListAsync();
+                var passengerIds = issuedTickets.Select(t => t.BookingPassengerId).Distinct().ToList();
+                var passengerTypeById = await _dbContext.BookingPassengers
+                    .Where(p => passengerIds.Contains(p.Id))
+                    .ToDictionaryAsync(p => p.Id, p => p.PassengerType);
+                var seatCount = issuedTickets.Count(t =>
+                    passengerTypeById.TryGetValue(t.BookingPassengerId, out var passengerType)
+                    && passengerType != (int)PassengerType.Infant);
+
+                if (seatCount > 0)
+                {
+                    var newInventory = await _seatInventoryRepository
+                        .GetByFlightAndSeatClassAsync(request.NewFlightId, leg.SeatClassId);
+                    if (newInventory != null)
+                    {
+                        await _seatInventoryRepository.TryReleaseHeldSeatsAtomicAsync(newInventory.Id, seatCount);
+                    }
+                }
+
+                request.Status = 3;
+                request.UpdatedAt = nowUtc;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error expiring change-flight awaiting payment request {RequestId}", request.Id);
+            }
+        }
+
+        await _dbContext.SaveChangesAsync();
+        _logger.LogInformation(
+            "Expired {Count} change-flight awaiting payment requests older than {Minutes} minutes",
+            expiredChangeRequests.Count,
+            ChangeFlightPaymentHoldMinutes);
+    }
+
+    public async Task ProcessFlightDisruptionTimeoutsAsync()
+    {
+        var now = DateTime.UtcNow;
+        var expired = await _dbContext.FlightDisruptionDecisions
+            .Where(d => !d.IsDeleted && d.Status == 0 && d.DecisionDeadline < now)
+            .ToListAsync();
+
+        foreach (var decision in expired)
+        {
+            try
+            {
+                var booking = await _bookingRepository.GetByIdAsync(decision.BookingId);
+                if (booking == null || booking.IsDeleted)
+                {
+                    decision.Status = 2;
+                    decision.DecisionType = 3;
+                    decision.DecidedAt = now;
+                    decision.UpdatedAt = now;
+                    continue;
+                }
+
+                var tickets = await _dbContext.Tickets
+                    .Where(t => !t.IsDeleted && t.BookingId == booking.Id)
+                    .ToListAsync();
+
+                foreach (var ticket in tickets.Where(t => t.Status == 0))
+                {
+                    ticket.Status = 4;
+                    ticket.UpdatedAt = now;
+                }
+
+                var payment = (await _paymentRepository.GetByBookingIdAsync(booking.Id))
+                    .Where(p => !p.IsDeleted && p.Status == (int)PaymentStatus.Completed)
+                    .OrderByDescending(p => p.CreatedAt)
+                    .FirstOrDefault();
+                if (payment != null)
+                {
+                    EnqueueVnpayRefund(booking.Id, "Auto refund after disruption decision timeout");
+                }
+
+                booking.Status = (int)BookingStatus.Cancelled;
+                booking.UpdatedAt = now;
+                await _bookingRepository.UpdateAsync(booking);
+
+                decision.Status = 2;
+                decision.DecisionType = 3;
+                decision.DecidedAt = now;
+                decision.UpdatedAt = now;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing disruption timeout {DecisionId}", decision.Id);
+            }
+        }
+
+        if (expired.Count > 0)
+        {
+            await _dbContext.SaveChangesAsync();
         }
     }
 
@@ -373,6 +533,7 @@ public class BackgroundJobService : IBackgroundJobService
                 while (true)
                 {
                     await ProcessVnpayRefundQueueAsync();
+                    await ProcessFlightDisruptionTimeoutsAsync();
                     await Task.Delay(TimeSpan.FromSeconds(10));
                 }
             });
@@ -480,7 +641,7 @@ public class BackgroundJobService : IBackgroundJobService
                 return;
             }
 
-            payment.Status = 4;
+            payment.Status = (int)PaymentStatus.RefundFailed;
             payment.UpdatedAt = DateTime.UtcNow;
             await _paymentRepository.UpdateAsync(payment);
         }

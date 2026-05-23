@@ -35,11 +35,18 @@ public class PaymentsController : ControllerBase
     {
         try
         {
+            var userId = User.GetUserIdOrThrow();
+            var isAdmin = User.IsInRole("Admin");
+
             _logger.LogInformation("Payment initiated for booking {BookingId} via {Provider}",
                 dto.BookingId, dto.PaymentMethod);
 
-            var response = await _paymentService.InitiatePaymentAsync(dto.BookingId, dto);
+            var response = await _paymentService.InitiatePaymentAsync(dto.BookingId, dto, userId, isAdmin);
             return Ok(response);
+        }
+        catch (UnauthorizedException ex)
+        {
+            return Unauthorized(new { message = ex.Message });
         }
         catch (NotFoundException ex)
         {

@@ -365,12 +365,216 @@ namespace API.Migrations
 
                             t.HasCheckConstraint("CK_Booking_FinalAmount_Positive", "\"FinalAmount\" > 0");
 
-                            t.HasCheckConstraint("CK_Booking_Status_Valid", "\"Status\" IN (0, 1, 2, 3, 4)");
+                            t.HasCheckConstraint("CK_Booking_Status_Valid", "\"Status\" IN (0, 1, 2, 3, 4, 5, 6)");
 
                             t.HasCheckConstraint("CK_Booking_TotalAmount_Positive", "\"TotalAmount\" > 0");
 
                             t.HasCheckConstraint("CK_Booking_TripType_Valid", "\"TripType\" IN (0, 1)");
                         });
+                });
+
+            modelBuilder.Entity("API.Domain.Entities.BookingChangeRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BookingId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("ChangeFee")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("CreditAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<int>("LegType")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("NetAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("NewAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<int>("NewFlightId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("OldAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<int>("OldFlightId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PaymentId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookingId");
+
+                    b.HasIndex("NewFlightId");
+
+                    b.HasIndex("OldFlightId");
+
+                    b.HasIndex("PaymentId");
+
+                    b.HasIndex("BookingId", "LegType", "Status");
+
+                    b.ToTable("BookingChangeRequests", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BookingChangeRequest_Status_Valid", "\"Status\" IN (0, 1, 2, 3, 4)");
+                        });
+                });
+
+            modelBuilder.Entity("API.Domain.Entities.BookingLeg", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BookingId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FlightId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<int>("LegType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("SeatClassId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookingId");
+
+                    b.HasIndex("FlightId");
+
+                    b.HasIndex("SeatClassId");
+
+                    b.HasIndex("BookingId", "LegType")
+                        .IsUnique();
+
+                    b.ToTable("BookingLegs", (string)null);
+                });
+
+            modelBuilder.Entity("API.Domain.Entities.BookingLegPassenger", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BookingLegId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BookingPassengerId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DocumentCheckStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<int>("FlightSeatInventoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookingLegId");
+
+                    b.HasIndex("BookingPassengerId");
+
+                    b.HasIndex("FlightSeatInventoryId");
+
+                    b.HasIndex("BookingLegId", "BookingPassengerId")
+                        .IsUnique();
+
+                    b.ToTable("BookingLegPassengers", (string)null);
                 });
 
             modelBuilder.Entity("API.Domain.Entities.BookingPassenger", b =>
@@ -386,6 +590,11 @@ namespace API.Migrations
 
                     b.Property<DateTime?>("DateOfBirth")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DocumentCheckStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -453,6 +662,9 @@ namespace API.Migrations
                     b.Property<int>("AdditionalServiceId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("BookingLegPassengerId")
+                        .HasColumnType("integer");
+
                     b.Property<int>("BookingPassengerId")
                         .HasColumnType("integer");
 
@@ -477,7 +689,11 @@ namespace API.Migrations
 
                     b.HasIndex("AdditionalServiceId");
 
+                    b.HasIndex("BookingLegPassengerId");
+
                     b.HasIndex("BookingPassengerId");
+
+                    b.HasIndex("BookingPassengerId", "AdditionalServiceId");
 
                     b.ToTable("BookingServices", (string)null);
                 });
@@ -552,6 +768,14 @@ namespace API.Migrations
                     b.Property<int?>("ActualAircraftId")
                         .HasColumnType("integer");
 
+                    b.Property<int>("AircraftId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ArrivalOffsetDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<DateTime>("ArrivalTime")
                         .HasColumnType("timestamp with time zone");
 
@@ -570,10 +794,18 @@ namespace API.Migrations
                     b.Property<int>("FlightDefinitionId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("FlightNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<int>("RouteId")
+                        .HasColumnType("integer");
 
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
@@ -596,16 +828,25 @@ namespace API.Migrations
 
                     b.HasIndex("ActualAircraftId");
 
+                    b.HasIndex("AircraftId");
+
                     b.HasIndex("DepartureTime");
 
                     b.HasIndex("FlightDefinitionId");
 
+                    b.HasIndex("FlightNumber");
+
+                    b.HasIndex("RouteId");
+
                     b.HasIndex("Status");
 
-                    b.HasIndex("FlightDefinitionId", "DepartureTime");
+                    b.HasIndex("FlightDefinitionId", "DepartureTime")
+                        .IsUnique();
 
                     b.ToTable("Flights", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Flight_ArrivalOffsetDays_NonNegative", "\"ArrivalOffsetDays\" >= 0");
+
                             t.HasCheckConstraint("CK_Flight_Status_Valid", "\"Status\" IN (0, 1, 2, 3, 4)");
                         });
                 });
@@ -645,11 +886,6 @@ namespace API.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
-                    b.Property<int>("OperatingDays")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(127);
-
                     b.Property<int>("RouteId")
                         .HasColumnType("integer");
 
@@ -670,6 +906,87 @@ namespace API.Migrations
                     b.ToTable("FlightDefinitions", (string)null);
                 });
 
+            modelBuilder.Entity("API.Domain.Entities.FlightDisruptionDecision", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AffectedFlightId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BookingId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("DecisionDeadline")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DecisionType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<int>("LegType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int?>("NewFlightId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AffectedFlightId");
+
+                    b.HasIndex("DecisionDeadline");
+
+                    b.HasIndex("NewFlightId");
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.HasIndex("BookingId", "AffectedFlightId", "LegType")
+                        .IsUnique();
+
+                    b.ToTable("FlightDisruptionDecisions", (string)null);
+                });
+
             modelBuilder.Entity("API.Domain.Entities.FlightScheduleTemplate", b =>
                 {
                     b.Property<int>("Id")
@@ -678,12 +995,23 @@ namespace API.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Description")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<DateOnly?>("EffectiveFrom")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("EffectiveTo")
+                        .HasColumnType("date");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
@@ -700,11 +1028,17 @@ namespace API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Code")
+                        .IsUnique();
+
                     b.HasIndex("IsActive");
 
                     b.HasIndex("Name");
 
-                    b.ToTable("FlightScheduleTemplates", (string)null);
+                    b.ToTable("FlightScheduleTemplates", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_FlightScheduleTemplate_EffectiveRange", "\"EffectiveFrom\" IS NULL OR \"EffectiveTo\" IS NULL OR \"EffectiveFrom\" <= \"EffectiveTo\"");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.FlightSeatInventory", b =>
@@ -798,10 +1132,13 @@ namespace API.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("AircraftId")
+                    b.Property<int?>("AircraftOverrideId")
                         .HasColumnType("integer");
 
-                    b.Property<TimeOnly>("ArrivalTime")
+                    b.Property<int?>("ArrivalOffsetDaysOverride")
+                        .HasColumnType("integer");
+
+                    b.Property<TimeOnly?>("ArrivalTimeOverride")
                         .HasColumnType("time without time zone");
 
                     b.Property<DateTime>("CreatedAt")
@@ -810,37 +1147,37 @@ namespace API.Migrations
                     b.Property<int>("DayOfWeek")
                         .HasColumnType("integer");
 
-                    b.Property<TimeOnly>("DepartureTime")
+                    b.Property<TimeOnly?>("DepartureTimeOverride")
                         .HasColumnType("time without time zone");
 
-                    b.Property<string>("FlightNumberPrefix")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<string>("FlightNumberSuffix")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)");
-
-                    b.Property<int>("RouteId")
+                    b.Property<int>("FlightDefinitionId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<int>("TemplateId")
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AircraftId");
+                    b.HasIndex("AircraftOverrideId");
 
                     b.HasIndex("DayOfWeek");
 
-                    b.HasIndex("RouteId");
+                    b.HasIndex("FlightDefinitionId");
 
                     b.HasIndex("TemplateId");
 
+                    b.HasIndex("TemplateId", "FlightDefinitionId", "DayOfWeek")
+                        .IsUnique();
+
                     b.ToTable("FlightTemplateDetails", null, t =>
                         {
+                            t.HasCheckConstraint("CK_FlightTemplateDetail_ArrivalOffsetDaysOverride", "\"ArrivalOffsetDaysOverride\" IS NULL OR \"ArrivalOffsetDaysOverride\" >= 0");
+
                             t.HasCheckConstraint("CK_FlightTemplateDetail_DayOfWeek", "\"DayOfWeek\" >= 0 AND \"DayOfWeek\" <= 6");
                         });
                 });
@@ -853,6 +1190,13 @@ namespace API.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("GENERAL");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasColumnType("text");
@@ -863,6 +1207,21 @@ namespace API.Migrations
                     b.Property<string>("Email")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
+
+                    b.Property<bool>("IsRead")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("RelatedEntityId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RelatedEntityType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<DateTime?>("SentAt")
                         .HasColumnType("timestamp with time zone");
@@ -887,9 +1246,11 @@ namespace API.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Category");
+
                     b.HasIndex("Status");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("UserId", "IsRead");
 
                     b.ToTable("NotificationLogs", null, t =>
                         {
@@ -1017,7 +1378,7 @@ namespace API.Migrations
                         {
                             t.HasCheckConstraint("CK_Payment_Amount_Positive", "\"Amount\" > 0");
 
-                            t.HasCheckConstraint("CK_Payment_Status_Valid", "\"Status\" IN (0, 1, 2, 3, 4)");
+                            t.HasCheckConstraint("CK_Payment_Status_Valid", "\"Status\" IN (0, 1, 2, 3, 4, 5, 6)");
                         });
                 });
 
@@ -1043,6 +1404,10 @@ namespace API.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
                     b.Property<int>("DiscountType")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -1061,6 +1426,19 @@ namespace API.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
+
+                    b.Property<decimal?>("MaxDiscountAmount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("MinimumAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<int?>("UpdatedBy")
                         .HasColumnType("integer");
@@ -1094,9 +1472,17 @@ namespace API.Migrations
 
                     b.ToTable("Promotions", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Promotion_DiscountType_Valid", "\"DiscountType\" IN (0, 1)");
+
                             t.HasCheckConstraint("CK_Promotion_DiscountValue_Positive", "\"DiscountValue\" > 0");
 
+                            t.HasCheckConstraint("CK_Promotion_MinimumAmount_NonNegative", "\"MinimumAmount\" >= 0");
+
+                            t.HasCheckConstraint("CK_Promotion_Percentage_Max100", "\"DiscountType\" <> 0 OR \"DiscountValue\" <= 100");
+
                             t.HasCheckConstraint("CK_Promotion_UsedCount_NonNegative", "\"UsedCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_Promotion_ValidDateRange", "\"ValidFrom\" < \"ValidTo\"");
                         });
                 });
 
@@ -1121,11 +1507,19 @@ namespace API.Migrations
                     b.Property<DateTime>("UsedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("BookingId");
+                    b.HasIndex("BookingId")
+                        .IsUnique();
 
-                    b.HasIndex("PromotionId", "BookingId")
+                    b.HasIndex("PromotionId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("PromotionId", "UserId")
                         .IsUnique();
 
                     b.ToTable("PromotionUsages", (string)null);
@@ -1216,10 +1610,17 @@ namespace API.Migrations
                         .HasPrecision(10, 2)
                         .HasColumnType("numeric(10,2)");
 
+                    b.Property<decimal?>("SourceAmountSnapshot")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
+
+                    b.Property<int?>("TicketId")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("UpdatedBy")
                         .HasColumnType("integer");
@@ -1234,10 +1635,13 @@ namespace API.Migrations
 
                     b.HasIndex("BookingId");
 
-                    b.HasIndex("PaymentId")
-                        .IsUnique();
+                    b.HasIndex("PaymentId");
 
                     b.HasIndex("Status");
+
+                    b.HasIndex("TicketId")
+                        .IsUnique()
+                        .HasFilter("\"TicketId\" IS NOT NULL");
 
                     b.ToTable("RefundRequests", null, t =>
                         {
@@ -1293,6 +1697,11 @@ namespace API.Migrations
                     b.Property<int>("ArrivalAirportId")
                         .HasColumnType("integer");
 
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1319,6 +1728,9 @@ namespace API.Migrations
 
                     b.HasIndex("ArrivalAirportId");
 
+                    b.HasIndex("Code")
+                        .IsUnique();
+
                     b.HasIndex("DepartureAirportId");
 
                     b.ToTable("Routes", null, t =>
@@ -1329,6 +1741,87 @@ namespace API.Migrations
 
                             t.HasCheckConstraint("CK_Route_EstimatedDurationMinutes_Positive", "\"EstimatedDurationMinutes\" > 0");
                         });
+                });
+
+            modelBuilder.Entity("API.Domain.Entities.SavedPassenger", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DateOfBirth")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DocumentNumber")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Gender")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("IsDefaultOwner")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Nationality")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "IsDefaultOwner")
+                        .IsUnique()
+                        .HasFilter("\"IsDefaultOwner\" = true AND \"IsDeleted\" = false");
+
+                    b.ToTable("SavedPassengers", (string)null);
                 });
 
             modelBuilder.Entity("API.Domain.Entities.SeatClass", b =>
@@ -1449,8 +1942,7 @@ namespace API.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("BookingPassengerId")
-                        .IsUnique();
+                    b.HasIndex("BookingPassengerId");
 
                     b.HasIndex("ReplacedByTicketId");
 
@@ -1459,7 +1951,99 @@ namespace API.Migrations
                     b.HasIndex("TicketNumber")
                         .IsUnique();
 
-                    b.ToTable("Tickets", (string)null);
+                    b.ToTable("Tickets", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Ticket_Status_Valid", "\"Status\" IN (0, 1, 2, 3, 4, 5)");
+                        });
+                });
+
+            modelBuilder.Entity("API.Domain.Entities.TicketUpgradeRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("BookingId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("BookingPassengerId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FlightId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FromInventoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FromSeatClassId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("PaymentId")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("PriceDifference")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TicketId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ToInventoryId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ToSeatClassId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("UpdatedBy")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookingId");
+
+                    b.HasIndex("PaymentId")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "ExpiresAt");
+
+                    b.HasIndex("TicketId", "Status");
+
+                    b.ToTable("TicketUpgradeRequests", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TicketUpgradeRequest_PriceDifference_Positive", "\"PriceDifference\" > 0");
+
+                            t.HasCheckConstraint("CK_TicketUpgradeRequest_Status_Valid", "\"Status\" IN (0, 1, 2, 3, 4)");
+                        });
                 });
 
             modelBuilder.Entity("API.Domain.Entities.User", b =>
@@ -1633,6 +2217,77 @@ namespace API.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
+            modelBuilder.Entity("API.Domain.Entities.UserCreditLedger", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<decimal>("BalanceAfter")
+                        .HasPrecision(10, 2)
+                        .HasColumnType("numeric(10,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("CreatedBy")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("VND");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("ReferenceId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ReferenceType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserCreditLedgers", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_UserCreditLedger_Amount_NonNegative", "\"Amount\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("API.Domain.Entities.UserRole", b =>
                 {
                     b.Property<int>("UserId")
@@ -1725,6 +2380,94 @@ namespace API.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("API.Domain.Entities.BookingChangeRequest", b =>
+                {
+                    b.HasOne("API.Domain.Entities.Booking", "Booking")
+                        .WithMany()
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("API.Domain.Entities.Flight", "NewFlight")
+                        .WithMany()
+                        .HasForeignKey("NewFlightId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("API.Domain.Entities.Flight", "OldFlight")
+                        .WithMany()
+                        .HasForeignKey("OldFlightId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("API.Domain.Entities.Payment", "Payment")
+                        .WithMany()
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Booking");
+
+                    b.Navigation("NewFlight");
+
+                    b.Navigation("OldFlight");
+
+                    b.Navigation("Payment");
+                });
+
+            modelBuilder.Entity("API.Domain.Entities.BookingLeg", b =>
+                {
+                    b.HasOne("API.Domain.Entities.Booking", "Booking")
+                        .WithMany("Legs")
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("API.Domain.Entities.Flight", "Flight")
+                        .WithMany()
+                        .HasForeignKey("FlightId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("API.Domain.Entities.SeatClass", "SeatClass")
+                        .WithMany()
+                        .HasForeignKey("SeatClassId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Booking");
+
+                    b.Navigation("Flight");
+
+                    b.Navigation("SeatClass");
+                });
+
+            modelBuilder.Entity("API.Domain.Entities.BookingLegPassenger", b =>
+                {
+                    b.HasOne("API.Domain.Entities.BookingLeg", "BookingLeg")
+                        .WithMany("LegPassengers")
+                        .HasForeignKey("BookingLegId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("API.Domain.Entities.BookingPassenger", "BookingPassenger")
+                        .WithMany("LegPassengers")
+                        .HasForeignKey("BookingPassengerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("API.Domain.Entities.FlightSeatInventory", "FlightSeatInventory")
+                        .WithMany()
+                        .HasForeignKey("FlightSeatInventoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("BookingLeg");
+
+                    b.Navigation("BookingPassenger");
+
+                    b.Navigation("FlightSeatInventory");
+                });
+
             modelBuilder.Entity("API.Domain.Entities.BookingPassenger", b =>
                 {
                     b.HasOne("API.Domain.Entities.Booking", "Booking")
@@ -1752,6 +2495,11 @@ namespace API.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("API.Domain.Entities.BookingLegPassenger", "BookingLegPassenger")
+                        .WithMany("Services")
+                        .HasForeignKey("BookingLegPassengerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("API.Domain.Entities.BookingPassenger", "BookingPassenger")
                         .WithMany("Services")
                         .HasForeignKey("BookingPassengerId")
@@ -1759,6 +2507,8 @@ namespace API.Migrations
                         .IsRequired();
 
                     b.Navigation("AdditionalService");
+
+                    b.Navigation("BookingLegPassenger");
 
                     b.Navigation("BookingPassenger");
                 });
@@ -1800,15 +2550,31 @@ namespace API.Migrations
                         .HasForeignKey("ActualAircraftId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("API.Domain.Entities.Aircraft", "Aircraft")
+                        .WithMany()
+                        .HasForeignKey("AircraftId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("API.Domain.Entities.FlightDefinition", "FlightDefinition")
                         .WithMany("Flights")
                         .HasForeignKey("FlightDefinitionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("API.Domain.Entities.Route", "Route")
+                        .WithMany()
+                        .HasForeignKey("RouteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("ActualAircraft");
 
+                    b.Navigation("Aircraft");
+
                     b.Navigation("FlightDefinition");
+
+                    b.Navigation("Route");
                 });
 
             modelBuilder.Entity("API.Domain.Entities.FlightDefinition", b =>
@@ -1828,6 +2594,40 @@ namespace API.Migrations
                     b.Navigation("DefaultAircraft");
 
                     b.Navigation("Route");
+                });
+
+            modelBuilder.Entity("API.Domain.Entities.FlightDisruptionDecision", b =>
+                {
+                    b.HasOne("API.Domain.Entities.Flight", "AffectedFlight")
+                        .WithMany()
+                        .HasForeignKey("AffectedFlightId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("API.Domain.Entities.Booking", "Booking")
+                        .WithMany()
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("API.Domain.Entities.Flight", "NewFlight")
+                        .WithMany()
+                        .HasForeignKey("NewFlightId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("API.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("AffectedFlight");
+
+                    b.Navigation("Booking");
+
+                    b.Navigation("NewFlight");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("API.Domain.Entities.FlightSeatInventory", b =>
@@ -1851,15 +2651,14 @@ namespace API.Migrations
 
             modelBuilder.Entity("API.Domain.Entities.FlightTemplateDetail", b =>
                 {
-                    b.HasOne("API.Domain.Entities.Aircraft", "Aircraft")
+                    b.HasOne("API.Domain.Entities.Aircraft", "AircraftOverride")
                         .WithMany()
-                        .HasForeignKey("AircraftId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .HasForeignKey("AircraftOverrideId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("API.Domain.Entities.Route", "Route")
+                    b.HasOne("API.Domain.Entities.FlightDefinition", "FlightDefinition")
                         .WithMany()
-                        .HasForeignKey("RouteId")
+                        .HasForeignKey("FlightDefinitionId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -1869,9 +2668,9 @@ namespace API.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.Navigation("Aircraft");
+                    b.Navigation("AircraftOverride");
 
-                    b.Navigation("Route");
+                    b.Navigation("FlightDefinition");
 
                     b.Navigation("Template");
                 });
@@ -1923,6 +2722,12 @@ namespace API.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("API.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("Booking");
 
                     b.Navigation("Promotion");
@@ -1948,10 +2753,15 @@ namespace API.Migrations
                         .IsRequired();
 
                     b.HasOne("API.Domain.Entities.Payment", "Payment")
-                        .WithOne("RefundRequest")
-                        .HasForeignKey("API.Domain.Entities.RefundRequest", "PaymentId")
+                        .WithMany("RefundRequests")
+                        .HasForeignKey("PaymentId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("API.Domain.Entities.Ticket", null)
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Booking");
 
@@ -1977,11 +2787,22 @@ namespace API.Migrations
                     b.Navigation("DepartureAirport");
                 });
 
+            modelBuilder.Entity("API.Domain.Entities.SavedPassenger", b =>
+                {
+                    b.HasOne("API.Domain.Entities.User", "User")
+                        .WithMany("SavedPassengers")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("API.Domain.Entities.Ticket", b =>
                 {
                     b.HasOne("API.Domain.Entities.BookingPassenger", "BookingPassenger")
-                        .WithOne("Ticket")
-                        .HasForeignKey("API.Domain.Entities.Ticket", "BookingPassengerId")
+                        .WithMany("Tickets")
+                        .HasForeignKey("BookingPassengerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -1993,6 +2814,43 @@ namespace API.Migrations
                     b.Navigation("BookingPassenger");
 
                     b.Navigation("ReplacedByTicket");
+                });
+
+            modelBuilder.Entity("API.Domain.Entities.TicketUpgradeRequest", b =>
+                {
+                    b.HasOne("API.Domain.Entities.Booking", "Booking")
+                        .WithMany()
+                        .HasForeignKey("BookingId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("API.Domain.Entities.Payment", "Payment")
+                        .WithMany()
+                        .HasForeignKey("PaymentId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("API.Domain.Entities.Ticket", "Ticket")
+                        .WithMany()
+                        .HasForeignKey("TicketId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Booking");
+
+                    b.Navigation("Payment");
+
+                    b.Navigation("Ticket");
+                });
+
+            modelBuilder.Entity("API.Domain.Entities.UserCreditLedger", b =>
+                {
+                    b.HasOne("API.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("API.Domain.Entities.UserRole", b =>
@@ -2050,16 +2908,30 @@ namespace API.Migrations
 
             modelBuilder.Entity("API.Domain.Entities.Booking", b =>
                 {
+                    b.Navigation("Legs");
+
                     b.Navigation("Passengers");
 
                     b.Navigation("Payments");
                 });
 
-            modelBuilder.Entity("API.Domain.Entities.BookingPassenger", b =>
+            modelBuilder.Entity("API.Domain.Entities.BookingLeg", b =>
+                {
+                    b.Navigation("LegPassengers");
+                });
+
+            modelBuilder.Entity("API.Domain.Entities.BookingLegPassenger", b =>
                 {
                     b.Navigation("Services");
+                });
 
-                    b.Navigation("Ticket");
+            modelBuilder.Entity("API.Domain.Entities.BookingPassenger", b =>
+                {
+                    b.Navigation("LegPassengers");
+
+                    b.Navigation("Services");
+
+                    b.Navigation("Tickets");
                 });
 
             modelBuilder.Entity("API.Domain.Entities.Flight", b =>
@@ -2088,7 +2960,7 @@ namespace API.Migrations
 
             modelBuilder.Entity("API.Domain.Entities.Payment", b =>
                 {
-                    b.Navigation("RefundRequest");
+                    b.Navigation("RefundRequests");
                 });
 
             modelBuilder.Entity("API.Domain.Entities.Promotion", b =>
@@ -2121,6 +2993,8 @@ namespace API.Migrations
                     b.Navigation("NotificationLogs");
 
                     b.Navigation("PasswordResetTokens");
+
+                    b.Navigation("SavedPassengers");
 
                     b.Navigation("UserRoles");
                 });

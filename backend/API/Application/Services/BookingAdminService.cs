@@ -120,27 +120,31 @@ public class BookingAdminService : IBookingAdminService
                     throw new ValidationException("Only pending or confirmed bookings can be cancelled");
                 }
 
+                var previousStatus = booking.Status;
+
                 var passengers = await _unitOfWork.BookingPassengers.GetByBookingIdAsync(bookingId);
                 if (passengers.Count > 0)
                 {
-                    var seatInventory = await _unitOfWork.FlightSeatInventories.GetByIdAsync(
-                        passengers.First().FlightSeatInventoryId);
+                    var groupedSeatCounts = passengers
+                        .Where(p => p.PassengerType != (int)PassengerType.Infant)
+                        .GroupBy(p => p.FlightSeatInventoryId)
+                        .ToDictionary(g => g.Key, g => g.Count());
 
-                    if (seatInventory == null)
+                    foreach (var groupedSeat in groupedSeatCounts)
                     {
-                        throw new NotFoundException("Seat inventory not found for booking");
-                    }
+                        var seatInventory = await _unitOfWork.FlightSeatInventories.GetByIdAsync(groupedSeat.Key);
+                        if (seatInventory == null)
+                        {
+                            throw new NotFoundException($"Seat inventory {groupedSeat.Key} not found for booking");
+                        }
 
-                    var seatPassengerCount = passengers.Count(p => p.PassengerType != (int)PassengerType.Infant);
-                    if (seatPassengerCount > 0)
-                    {
                         if (booking.Status == (int)BookingStatus.Pending)
                         {
-                            seatInventory.ReleaseHeldSeats(seatPassengerCount);
+                            seatInventory.ReleaseHeldSeats(groupedSeat.Value);
                         }
                         else
                         {
-                            seatInventory.CancelSoldSeats(seatPassengerCount);
+                            seatInventory.CancelSoldSeats(groupedSeat.Value);
                         }
 
                         await _unitOfWork.FlightSeatInventories.UpdateAsync(seatInventory);
@@ -150,6 +154,13 @@ public class BookingAdminService : IBookingAdminService
                 booking.Status = (int)BookingStatus.Cancelled;
                 booking.UpdatedAt = DateTime.UtcNow;
                 await _bookingRepository.UpdateAsync(booking);
+
+                if (previousStatus == (int)BookingStatus.Pending
+                    && booking.PromotionId.HasValue
+                    && booking.DiscountAmount > 0)
+                {
+                    await _unitOfWork.Promotions.ReleaseUsageAsync(booking.PromotionId.Value);
+                }
 
                 if (dto.FullRefund)
                 {
@@ -252,6 +263,7 @@ public class BookingAdminService : IBookingAdminService
             2 => "CheckedIn",
             3 => "Cancelled",
             4 => "Refunded",
+            5 => "PartiallyCancelled",
             _ => "Unknown"
         };
 

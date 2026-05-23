@@ -29,10 +29,14 @@ public class BookingServiceConfiguration : IEntityTypeConfiguration<BookingServi
             .HasForeignKey(b => b.BookingPassengerId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        builder.HasOne(b => b.BookingLegPassenger)
+            .WithMany(blp => blp.Services)
+            .HasForeignKey(b => b.BookingLegPassengerId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasIndex(b => b.BookingPassengerId);
-        builder.HasIndex(b => new { b.BookingPassengerId, b.AdditionalServiceId })
-            .IsUnique()
-            .HasFilter("\"IsDeleted\" = false");
+        builder.HasIndex(b => b.BookingLegPassengerId);
+        builder.HasIndex(b => new { b.BookingPassengerId, b.AdditionalServiceId });
 
         builder.HasOne(b => b.AdditionalService)
             .WithMany(a => a.BookingServices)

@@ -31,8 +31,13 @@ public class FlightBookingDbContext : DbContext
     // Booking Management
     public DbSet<Booking> Bookings { get; set; } = null!;
     public DbSet<BookingPassenger> BookingPassengers { get; set; } = null!;
+    public DbSet<BookingLeg> BookingLegs { get; set; } = null!;
+    public DbSet<BookingLegPassenger> BookingLegPassengers { get; set; } = null!;
+    public DbSet<BookingChangeRequest> BookingChangeRequests { get; set; } = null!;
     public DbSet<BookingService> BookingServices { get; set; } = null!;
+    public DbSet<FlightDisruptionDecision> FlightDisruptionDecisions { get; set; } = null!;
     public DbSet<Ticket> Tickets { get; set; } = null!;
+    public DbSet<TicketUpgradeRequest> TicketUpgradeRequests { get; set; } = null!;
     public DbSet<AdditionalService> AdditionalServices { get; set; } = null!;
     public DbSet<ClassServiceConfig> ClassServiceConfigs { get; set; } = null!;
 
@@ -40,6 +45,8 @@ public class FlightBookingDbContext : DbContext
     public DbSet<Payment> Payments { get; set; } = null!;
     public DbSet<RefundPolicy> RefundPolicies { get; set; } = null!;
     public DbSet<RefundRequest> RefundRequests { get; set; } = null!;
+    public DbSet<UserCreditLedger> UserCreditLedgers { get; set; } = null!;
+    public DbSet<SavedPassenger> SavedPassengers { get; set; } = null!;
 
     // Promotion Management
     public DbSet<Promotion> Promotions { get; set; } = null!;

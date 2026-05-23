@@ -4,78 +4,93 @@ using API.Application.Dtos.Admin;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
+using API.Infrastructure.Data;
 using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 public class FlightAdminService : IFlightAdminService
 {
     private readonly ILogger<FlightAdminService> _logger;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IBackgroundJobService _backgroundJobService;
+    private readonly IAuditLogService _auditLogService;
     private readonly IEmailService _emailService;
+    private readonly INotificationService? _notificationService;
+    private readonly FlightBookingDbContext _dbContext;
 
     public FlightAdminService(
         ILogger<FlightAdminService> logger,
         IUnitOfWork unitOfWork,
         IBackgroundJobService backgroundJobService,
-        IEmailService emailService)
+        IAuditLogService auditLogService,
+        IEmailService emailService,
+        FlightBookingDbContext dbContext,
+        INotificationService? notificationService = null)
     {
         _logger = logger;
         _unitOfWork = unitOfWork;
         _backgroundJobService = backgroundJobService;
+        _auditLogService = auditLogService;
         _emailService = emailService;
+        _dbContext = dbContext;
+        _notificationService = notificationService;
     }
 
     public async Task<FlightManagementResponse> CreateFlightAsync(CreateFlightDto dto)
     {
-        if (dto.DepartureTime >= dto.ArrivalTime)
+        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
-            throw new ValidationException("Arrival time must be later than departure time.");
-        }
+            var definition = await _unitOfWork.FlightDefinitions.GetByIdAsync(dto.FlightDefinitionId);
+            if (definition == null || !definition.IsActive)
+            {
+                throw new NotFoundException($"Flight definition {dto.FlightDefinitionId} not found.");
+            }
 
-        var route = await _unitOfWork.Routes.GetByIdAsync(dto.RouteId);
-        if (route == null || route.IsDeleted)
-        {
-            throw new NotFoundException($"Route {dto.RouteId} not found.");
-        }
+            var route = await _unitOfWork.Routes.GetByIdAsync(definition.RouteId);
+            if (route == null || route.IsDeleted)
+            {
+                throw new NotFoundException($"Route {definition.RouteId} not found.");
+            }
 
-        var aircraft = await _unitOfWork.Aircraft.GetByIdAsync(dto.AircraftId);
-        if (aircraft == null)
-        {
-            throw new NotFoundException($"Aircraft {dto.AircraftId} not found.");
-        }
+            var aircraft = await _unitOfWork.Aircraft.GetByIdAsync(definition.DefaultAircraftId);
+            if (aircraft == null || aircraft.IsDeleted)
+            {
+                throw new NotFoundException($"Aircraft {definition.DefaultAircraftId} not found.");
+            }
 
-        var definition = await _unitOfWork.FlightDefinitions.FindOrCreateAsync(
-            dto.FlightNumber,
-            dto.RouteId,
-            dto.AircraftId,
-            TimeOnly.FromDateTime(dto.DepartureTime),
-            TimeOnly.FromDateTime(dto.ArrivalTime),
-            dto.ArrivalTime.Date > dto.DepartureTime.Date ? 1 : 0);
+            var departureTime = dto.DepartureDate.ToDateTime(dto.DepartureTime, DateTimeKind.Utc);
+            var arrivalTime = CalculateArrivalTime(departureTime, definition);
 
-        var existing = await _unitOfWork.Flights.ExistsAsync(dto.FlightNumber, dto.DepartureTime, dto.RouteId, dto.AircraftId);
-        if (existing)
-        {
-            throw new ValidationException("Flight already exists with the same number, route, aircraft and departure time.");
-        }
+            var existing = await _unitOfWork.Flights.ExistsAsync(
+                definition.FlightNumber,
+                departureTime,
+                definition.RouteId,
+                definition.DefaultAircraftId);
+            if (existing)
+            {
+                throw new ValidationException("Flight already exists for this definition and departure time.");
+            }
 
-        var flight = new Flight
-        {
-            FlightDefinitionId = definition.Id,
-            FlightNumber = dto.FlightNumber,
-            RouteId = dto.RouteId,
-            AircraftId = dto.AircraftId,
-            ArrivalOffsetDays = dto.ArrivalTime.Date > dto.DepartureTime.Date ? 1 : 0,
-            DepartureTime = dto.DepartureTime,
-            ArrivalTime = dto.ArrivalTime,
-            Status = dto.IsActive ? 0 : 1,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+            var flight = new Flight
+            {
+                FlightDefinitionId = definition.Id,
+                FlightNumber = definition.FlightNumber,
+                RouteId = definition.RouteId,
+                AircraftId = definition.DefaultAircraftId,
+                ArrivalOffsetDays = definition.ArrivalOffsetDays,
+                DepartureTime = departureTime,
+                ArrivalTime = arrivalTime,
+                Status = dto.IsActive ? 0 : 1,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
 
-        var created = await _unitOfWork.Flights.CreateAsync(flight);
-        await CreateSeatInventoryForFlightAsync(created, dto.AircraftId);
-        var createdWithDetails = await _unitOfWork.Flights.GetByIdWithDetailsAsync(created.Id) ?? created;
-        return await MapFlightResponseAsync(createdWithDetails);
+            var created = await _unitOfWork.Flights.CreateAsync(flight);
+            await CreateSeatInventoryForFlightAsync(created, definition.DefaultAircraftId);
+            var createdWithDetails = await _unitOfWork.Flights.GetByIdWithDetailsAsync(created.Id) ?? created;
+            return await MapFlightResponseAsync(createdWithDetails);
+        });
     }
 
     public async Task<List<FlightManagementResponse>> CreateWeeklyScheduleAsync(CreateWeeklyScheduleDto dto)
@@ -117,13 +132,19 @@ public class FlightAdminService : IFlightAdminService
                     continue;
                 }
 
+                var definition = await _unitOfWork.FlightDefinitions.FindOrCreateAsync(
+                    flightNumber,
+                    pattern.RouteId,
+                    pattern.AircraftId,
+                    pattern.DepartureTimeOfDay,
+                    pattern.ArrivalTimeOfDay,
+                    arrival.Date > departure.Date ? 1 : 0);
+
                 var response = await CreateFlightAsync(new CreateFlightDto
                 {
-                    FlightNumber = flightNumber,
-                    RouteId = pattern.RouteId,
-                    AircraftId = pattern.AircraftId,
-                    DepartureTime = departure,
-                    ArrivalTime = arrival,
+                    FlightDefinitionId = definition.Id,
+                    DepartureDate = DateOnly.FromDateTime(departure),
+                    DepartureTime = TimeOnly.FromDateTime(departure),
                     IsActive = pattern.IsActive
                 });
 
@@ -142,39 +163,108 @@ public class FlightAdminService : IFlightAdminService
             throw new NotFoundException($"Flight {flightId} not found.");
         }
 
-        if (dto.AircraftId.HasValue)
+        if (dto.ActualAircraftId.HasValue)
         {
-            var aircraft = await _unitOfWork.Aircraft.GetByIdAsync(dto.AircraftId.Value);
-            if (aircraft == null)
+            var aircraft = await _unitOfWork.Aircraft.GetByIdAsync(dto.ActualAircraftId.Value);
+            if (aircraft == null || aircraft.IsDeleted)
             {
-                throw new NotFoundException($"Aircraft {dto.AircraftId.Value} not found.");
+                throw new NotFoundException($"Aircraft {dto.ActualAircraftId.Value} not found.");
             }
 
-            flight.AircraftId = dto.AircraftId.Value;
+            flight.ActualAircraftId = dto.ActualAircraftId.Value;
         }
 
-        if (!string.IsNullOrWhiteSpace(dto.FlightNumber))
+        var definition = await _unitOfWork.FlightDefinitions.GetByIdAsync(flight.FlightDefinitionId);
+        if (definition == null)
         {
-            flight.FlightNumber = dto.FlightNumber;
+            throw new ValidationException("Flight definition not found for this flight");
         }
 
-        flight.DepartureTime = dto.DepartureTime ?? flight.DepartureTime;
-        flight.ArrivalTime = dto.ArrivalTime ?? flight.ArrivalTime;
-        if (flight.ArrivalTime <= flight.DepartureTime)
-        {
-            throw new ValidationException("Arrival time must be later than departure time.");
-        }
+        var currentDepartureDate = DateOnly.FromDateTime(flight.DepartureTime);
+        var currentDepartureClock = TimeOnly.FromDateTime(flight.DepartureTime);
+        var nextDepartureDate = dto.DepartureDate ?? currentDepartureDate;
+        var nextDepartureClock = dto.DepartureTime ?? currentDepartureClock;
+        var nextDeparture = nextDepartureDate.ToDateTime(nextDepartureClock, DateTimeKind.Utc);
+        var nextArrival = CalculateArrivalTime(nextDeparture, definition);
+        flight.DepartureTime = nextDeparture;
+        flight.ArrivalTime = nextArrival;
+        flight.ArrivalOffsetDays = definition.ArrivalOffsetDays;
 
         if (dto.IsActive.HasValue)
         {
             flight.Status = dto.IsActive.Value ? 0 : 1;
         }
 
-        flight.ArrivalOffsetDays = flight.ArrivalTime.Date > flight.DepartureTime.Date ? 1 : 0;
         flight.UpdatedAt = DateTime.UtcNow;
 
         await _unitOfWork.Flights.UpdateAsync(flight);
         return true;
+    }
+
+    public async Task<bool> UpdateFlightPricesAsync(int flightId, UpdateFlightPricesDto dto, int? adminUserId)
+    {
+        if (dto.Items == null || dto.Items.Count == 0)
+        {
+            throw new ValidationException("Price update items cannot be empty.");
+        }
+
+        if (string.IsNullOrWhiteSpace(dto.Reason))
+        {
+            throw new ValidationException("Reason is required for price updates.");
+        }
+
+        var flight = await _unitOfWork.Flights.GetByIdAsync(flightId);
+        if (flight == null || flight.IsDeleted)
+        {
+            throw new NotFoundException($"Flight {flightId} not found.");
+        }
+
+        return await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        {
+            foreach (var item in dto.Items)
+            {
+                if (item.NewPrice <= 0)
+                {
+                    throw new ValidationException("New price must be greater than zero.");
+                }
+
+                var inventory = await _unitOfWork.FlightSeatInventories.GetByFlightAndSeatClassAsync(flightId, item.SeatClassId);
+                if (inventory == null)
+                {
+                    throw new NotFoundException($"Seat inventory not found for seat class {item.SeatClassId}.");
+                }
+
+                var oldValues = JsonSerializer.Serialize(new
+                {
+                    flightId,
+                    seatClassId = item.SeatClassId,
+                    oldPrice = inventory.CurrentPrice
+                });
+
+                inventory.CurrentPrice = item.NewPrice;
+                inventory.UpdatedAt = DateTime.UtcNow;
+                await _unitOfWork.FlightSeatInventories.UpdateAsync(inventory);
+
+                var newValues = JsonSerializer.Serialize(new
+                {
+                    flightId,
+                    seatClassId = item.SeatClassId,
+                    newPrice = item.NewPrice,
+                    reason = dto.Reason.Trim()
+                });
+
+                await _auditLogService.LogActionAsync(
+                    adminUserId,
+                    "PRICE_UPDATE",
+                    "FlightSeatInventory",
+                    inventory.Id,
+                    oldValues,
+                    newValues,
+                    null);
+            }
+
+            return true;
+        });
     }
 
     public async Task<bool> DeleteFlightAsync(int flightId)
@@ -222,96 +312,114 @@ public class FlightAdminService : IFlightAdminService
                     || b.Status == (int)BookingStatus.CheckedIn))
             .ToList();
 
-        var cancelledBookings = 0;
-        var refundQueuedBookings = 0;
+        var affectedBookings = 0;
+        var pendingDecisionBookings = 0;
         var notificationSentBookings = 0;
-        var emailJobs = new List<Task>();
+        var cancellationNotifications = new List<(int UserId, string Email, int BookingId, string Title, string Content)>();
+        var decisionDeadline = DateTime.UtcNow.AddHours(24);
 
         await _unitOfWork.ExecuteInTransactionAsync(async () =>
         {
             foreach (var booking in allBookings)
             {
-                var passengers = await _unitOfWork.BookingPassengers.GetByBookingIdAsync(booking.Id);
-                var groupedSeatCounts = passengers
-                    .GroupBy(p => p.FlightSeatInventoryId)
-                    .ToDictionary(
-                        g => g.Key,
-                        g => g.Count(p => p.PassengerType != (int)PassengerType.Infant));
-
-                foreach (var groupedSeat in groupedSeatCounts)
+                var affectedLegTypes = new List<int>();
+                if (booking.OutboundFlightId == flightId)
                 {
-                    if (groupedSeat.Value <= 0)
-                    {
-                        continue;
-                    }
-
-                    var inventory = await _unitOfWork.FlightSeatInventories.GetByIdAsync(groupedSeat.Key);
-                    if (inventory == null)
-                    {
-                        continue;
-                    }
-
-                    if (booking.Status == (int)BookingStatus.Pending)
-                    {
-                        inventory.ReleaseHeldSeats(groupedSeat.Value);
-                    }
-                    else
-                    {
-                        inventory.CancelSoldSeats(groupedSeat.Value);
-                    }
-
-                    await _unitOfWork.FlightSeatInventories.UpdateAsync(inventory);
+                    affectedLegTypes.Add(0);
+                }
+                if (booking.ReturnFlightId == flightId)
+                {
+                    affectedLegTypes.Add(1);
                 }
 
-                var hasCompletedPayment = (await _unitOfWork.Payments.GetByBookingIdAsync(booking.Id))
-                    .Any(p => p.Status == 1 && !p.IsDeleted);
+                foreach (var legType in affectedLegTypes)
+                {
+                    var existing = await _dbContext.FlightDisruptionDecisions
+                        .FirstOrDefaultAsync(d =>
+                            !d.IsDeleted &&
+                            d.BookingId == booking.Id &&
+                            d.AffectedFlightId == flightId &&
+                            d.LegType == legType);
+                    if (existing != null)
+                    {
+                        continue;
+                    }
 
-                booking.Status = (int)BookingStatus.Cancelled;
+                    _dbContext.FlightDisruptionDecisions.Add(new FlightDisruptionDecision
+                    {
+                        BookingId = booking.Id,
+                        UserId = booking.UserId,
+                        AffectedFlightId = flightId,
+                        LegType = legType,
+                        Status = 0,
+                        DecisionType = 0,
+                        DecisionDeadline = decisionDeadline,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow,
+                        Reason = reason
+                    });
+                }
+
+                booking.Status = (int)BookingStatus.PendingDisruptionDecision;
                 booking.UpdatedAt = DateTime.UtcNow;
                 await _unitOfWork.Bookings.UpdateAsync(booking);
-                cancelledBookings++;
+                affectedBookings++;
+                pendingDecisionBookings++;
 
-                if (hasCompletedPayment)
-                {
-                    _backgroundJobService.EnqueueVnpayRefund(
-                        booking.Id,
-                        $"Admin cancelled flight {flight.FlightNumber}. Reason: {reason}");
-                    refundQueuedBookings++;
-                }
-
-                if (!string.IsNullOrWhiteSpace(booking.ContactEmail))
-                {
-                    emailJobs.Add(_emailService.SendNotificationAsync(
-                        booking.ContactEmail,
-                        $"Flight {flight.FlightNumber} cancellation notice",
-                        $"<p>Your booking <strong>{booking.BookingCode}</strong> has been cancelled because flight <strong>{flight.FlightNumber}</strong> was cancelled by admin.</p><p>Reason: {reason}</p><p>If your payment was completed, refund processing has been queued.</p>"));
-                    notificationSentBookings++;
-                }
+                cancellationNotifications.Add((
+                    booking.UserId,
+                    booking.ContactEmail,
+                    booking.Id,
+                    $"Flight {flight.FlightNumber} cancellation notice",
+                    $"Your booking {booking.BookingCode} is affected because flight {flight.FlightNumber} was cancelled. Please choose rebook or cancel before {decisionDeadline:yyyy-MM-dd HH:mm} UTC. Rebooking and cancellation are free of charge."));
             }
 
+            await _dbContext.SaveChangesAsync();
             flight.Cancel();
             await _unitOfWork.Flights.UpdateAsync(flight);
         });
 
-        if (emailJobs.Count > 0)
+        foreach (var notification in cancellationNotifications)
         {
-            await Task.WhenAll(emailJobs);
+            var sent = false;
+            if (_notificationService != null)
+            {
+                sent = await _notificationService.SendNotificationAsync(
+                    notification.UserId,
+                    notification.Title,
+                    notification.Content,
+                    type: "IN_APP",
+                    category: "FLIGHT_CANCELLATION",
+                    relatedEntityType: "Booking",
+                    relatedEntityId: notification.BookingId,
+                    sendEmail: true);
+            }
+            else if (!string.IsNullOrWhiteSpace(notification.Email))
+            {
+                await _emailService.SendNotificationAsync(notification.Email, notification.Title, notification.Content);
+                sent = true;
+            }
+
+            if (sent)
+            {
+                notificationSentBookings++;
+            }
         }
 
         _logger.LogInformation(
             "Admin cancelled flight {FlightId} ({FlightNumber}). CancelledBookings={CancelledBookings}, RefundQueued={RefundQueuedBookings}, Notifications={NotificationSentBookings}",
             flight.Id,
             flight.FlightNumber,
-            cancelledBookings,
-            refundQueuedBookings,
+            affectedBookings,
+            pendingDecisionBookings,
             notificationSentBookings);
 
         return new CancelFlightAdminResponse
         {
             FlightId = flight.Id,
             FlightNumber = flight.FlightNumber,
-            CancelledBookings = cancelledBookings,
-            RefundQueuedBookings = refundQueuedBookings,
+            CancelledBookings = affectedBookings,
+            RefundQueuedBookings = pendingDecisionBookings,
             NotificationSentBookings = notificationSentBookings
         };
     }
@@ -523,5 +631,20 @@ public class FlightAdminService : IFlightAdminService
 
             await _unitOfWork.FlightSeatInventories.CreateAsync(inventory);
         }
+    }
+
+    private static DateTime CalculateArrivalTime(DateTime departureTimeUtc, FlightDefinition definition)
+    {
+        var departureClock = definition.DepartureTime.ToTimeSpan();
+        var arrivalClock = definition.ArrivalTime.ToTimeSpan();
+        var arrivalOffset = definition.ArrivalOffsetDays;
+        if (arrivalOffset == 0 && arrivalClock <= departureClock)
+        {
+            arrivalOffset = 1;
+        }
+
+        var departureDate = DateOnly.FromDateTime(departureTimeUtc);
+        var arrivalDate = departureDate.AddDays(arrivalOffset);
+        return arrivalDate.ToDateTime(definition.ArrivalTime, DateTimeKind.Utc);
     }
 }

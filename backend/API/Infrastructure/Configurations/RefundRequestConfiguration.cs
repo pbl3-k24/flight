@@ -13,6 +13,8 @@ public class RefundRequestConfiguration : IEntityTypeConfiguration<RefundRequest
         builder.Property(r => r.RefundAmount)
             .HasPrecision(10, 2)
             .IsRequired();
+        builder.Property(r => r.SourceAmountSnapshot)
+            .HasPrecision(10, 2);
 
         builder.Property(r => r.Reason)
             .HasMaxLength(500);
@@ -37,6 +39,9 @@ public class RefundRequestConfiguration : IEntityTypeConfiguration<RefundRequest
             .HasDefaultValue(0);
 
         builder.HasIndex(r => r.Status);
+        builder.HasIndex(r => r.TicketId)
+            .IsUnique()
+            .HasFilter("\"TicketId\" IS NOT NULL");
 
         builder.HasOne(r => r.Booking)
             .WithMany()
@@ -44,9 +49,14 @@ public class RefundRequestConfiguration : IEntityTypeConfiguration<RefundRequest
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasOne(r => r.Payment)
-            .WithOne(p => p.RefundRequest)
-            .HasForeignKey<RefundRequest>(r => r.PaymentId)
+            .WithMany(p => p.RefundRequests)
+            .HasForeignKey(r => r.PaymentId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasOne<Ticket>()
+            .WithMany()
+            .HasForeignKey(r => r.TicketId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // Add CHECK constraints
         builder.HasCheckConstraint(

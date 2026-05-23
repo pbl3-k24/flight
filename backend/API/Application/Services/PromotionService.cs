@@ -1,5 +1,6 @@
 namespace API.Application.Services;
 
+using API.Application.Dtos.Promotion;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
 using API.Domain.Entities;
@@ -34,7 +35,7 @@ public class PromotionService : IPromotionService
             }
 
             var promotion = await _promotionRepository.GetByIdAsync(promotionId.Value);
-            if (promotion == null || !promotion.IsActive || promotion.ValidTo < DateTime.UtcNow)
+            if (promotion == null || !promotion.IsValid(DateTime.UtcNow))
             {
                 return basePrice;
             }
@@ -62,7 +63,8 @@ public class PromotionService : IPromotionService
     {
         try
         {
-            var promotion = await _promotionRepository.GetByCodeAsync(code);
+            var normalizedCode = NormalizeCode(code);
+            var promotion = await _promotionRepository.GetByCodeAsync(normalizedCode);
             if (promotion == null)
             {
                 return null;
@@ -91,10 +93,21 @@ public class PromotionService : IPromotionService
     {
         try
         {
-            var promotion = await _promotionRepository.GetByIdAsync(promotionId);
+            var promotion = await _dbContext.Promotions.FirstOrDefaultAsync(p => !p.IsDeleted && p.Id == promotionId);
             if (promotion == null)
             {
                 return false;
+            }
+
+            if (!promotion.IsValid(DateTime.UtcNow) || !promotion.IsAvailable())
+            {
+                return false;
+            }
+
+            var bookingAlreadyUsed = await _dbContext.PromotionUsages.AnyAsync(pu => pu.BookingId == bookingId);
+            if (bookingAlreadyUsed)
+            {
+                return true;
             }
 
             var alreadyUsed = await _dbContext.PromotionUsages.AnyAsync(pu =>
@@ -115,7 +128,8 @@ public class PromotionService : IPromotionService
 
             await _dbContext.PromotionUsages.AddAsync(usage);
             promotion.IncrementUsage();
-            await _promotionRepository.UpdateAsync(promotion);
+            promotion.UpdatedAt = DateTime.UtcNow;
+            await _dbContext.SaveChangesAsync();
 
             _logger.LogInformation(
                 "Recorded promotion usage for promotion {PromotionId}, booking {BookingId}, user {UserId}",
@@ -136,5 +150,35 @@ public class PromotionService : IPromotionService
             _logger.LogError(ex, "Error recording promotion usage");
             return false;
         }
+    }
+
+    public async Task<List<AvailablePromotionResponse>> GetAvailablePromotionsAsync()
+    {
+        var now = DateTime.UtcNow;
+        var promotions = await _promotionRepository.GetActiveAsync(now);
+
+        return promotions
+            .Where(p => !p.IsDeleted && p.IsValid(now) && p.IsAvailable())
+            .OrderBy(p => p.ValidTo)
+            .Select(p => new AvailablePromotionResponse
+            {
+                PromotionId = p.Id,
+                Code = p.Code,
+                Description = p.Description,
+                DiscountType = p.DiscountType,
+                DiscountValue = p.DiscountValue,
+                MaxDiscountAmount = p.MaxDiscountAmount,
+                MinimumAmount = p.MinimumAmount,
+                ValidFrom = p.ValidFrom,
+                ValidTo = p.ValidTo
+            })
+            .ToList();
+    }
+
+    private static string NormalizeCode(string code)
+    {
+        return string.IsNullOrWhiteSpace(code)
+            ? string.Empty
+            : code.Trim().ToUpperInvariant();
     }
 }

@@ -25,12 +25,12 @@ public interface IRefundService
     /// </summary>
     /// <param name="refundId">Refund ID</param>
     /// <returns>Refund details</returns>
-    Task<RefundResponse> GetRefundStatusAsync(int refundId);
+    Task<RefundResponse> GetRefundStatusAsync(int refundId, int userId, bool isAdmin = false);
 
     /// <summary>
     /// Gets refund history for a booking.
     /// </summary>
     /// <param name="bookingId">Booking ID</param>
     /// <returns>List of refunds</returns>
-    Task<List<RefundResponse>> GetRefundHistoryAsync(int bookingId);
+    Task<List<RefundResponse>> GetRefundHistoryAsync(int bookingId, int userId, bool isAdmin = false);
 }
