@@ -59,9 +59,10 @@ public class VnpayPaymentProvider : IPaymentProvider
             var createDate = GetVietnamNow().ToString("yyyyMMddHHmmss");
             var amount = (long)(request.Amount * 100m);
             
-            // TxnRef phải là số hoặc chữ, không quá 100 ký tự
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var transactionRef = $"{request.BookingId}{timestamp}";
+            // TxnRef must be unique per payment attempt to avoid callback-matching conflicts.
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var randomSuffix = RandomNumberGenerator.GetInt32(100, 1000);
+            var transactionRef = $"{request.BookingId}{timestamp}{randomSuffix}";
             
             // VNPAY chỉ chấp nhận chữ, số, khoảng trắng, dấu gạch ngang trong OrderInfo
             var orderInfo = string.IsNullOrWhiteSpace(request.OrderDescription)

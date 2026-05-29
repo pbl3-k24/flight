@@ -250,7 +250,7 @@ public class TicketUpgradeService : ITicketUpgradeService
             }
 
             var isSuccess = string.Equals(paymentStatus, "success", StringComparison.OrdinalIgnoreCase);
-            if (!isSuccess || request.ExpiresAt <= DateTime.UtcNow)
+            if (!isSuccess)
             {
                 request.Status = request.ExpiresAt <= DateTime.UtcNow
                     ? (int)TicketUpgradeStatus.Expired
@@ -270,9 +270,27 @@ public class TicketUpgradeService : ITicketUpgradeService
                     throw new NotFoundException("Ticket not found");
                 }
 
+                var booking = await _bookingRepository.GetByIdAsync(request.BookingId);
+                if (booking == null || booking.IsDeleted)
+                {
+                    throw new NotFoundException("Booking not found");
+                }
+
                 if (ticket.Status != 0)
                 {
                     throw new ValidationException("Only issued tickets can be upgraded");
+                }
+
+                if (ticket.SeatClassId == request.ToSeatClassId)
+                {
+                    request.Status = (int)TicketUpgradeStatus.Paid;
+                    request.UpdatedAt = DateTime.UtcNow;
+                    await _dbContext.SaveChangesAsync();
+                    _logger.LogInformation(
+                        "Upgrade already applied before callback completion. RequestId={RequestId}, TicketId={TicketId}",
+                        request.Id,
+                        ticket.Id);
+                    return true;
                 }
 
                 var confirmed = await _seatInventoryRepository.TryConfirmHeldSeatsAtomicAsync(request.ToInventoryId, 1);
@@ -288,15 +306,27 @@ public class TicketUpgradeService : ITicketUpgradeService
                 }
 
                 var fareDelta = request.PriceDifference - GetUpgradeFee();
-                if (fareDelta <= 0)
+                if (fareDelta < 0)
                 {
-                    throw new ValidationException("Computed fare delta for ticket upgrade is invalid");
+                    _logger.LogWarning(
+                        "Computed fare delta is negative for upgrade request {RequestId}. PriceDifference={PriceDifference}",
+                        request.Id,
+                        request.PriceDifference);
+                    fareDelta = 0;
                 }
 
                 ticket.SeatClassId = request.ToSeatClassId;
                 ticket.Price += fareDelta;
                 ticket.UpdatedAt = DateTime.UtcNow;
                 await _unitOfWork.Tickets.UpdateAsync(ticket);
+
+                booking.TotalAmount += request.PriceDifference;
+                booking.FinalAmount = booking.TotalAmount - booking.DiscountAmount;
+                if (booking.FinalAmount < 0)
+                {
+                    throw new ValidationException("Booking final amount cannot be negative after ticket upgrade");
+                }
+                booking.UpdatedAt = DateTime.UtcNow;
 
                 request.Status = (int)TicketUpgradeStatus.Paid;
                 request.UpdatedAt = DateTime.UtcNow;

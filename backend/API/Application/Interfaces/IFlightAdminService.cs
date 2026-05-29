@@ -41,6 +41,11 @@ public interface IFlightAdminService
     Task<List<FlightManagementResponse>> GetFlightsAsync(int page = 1, int pageSize = 20);
 
     /// <summary>
+    /// Gets all flights for a specific Vietnam date.
+    /// </summary>
+    Task<List<FlightManagementResponse>> GetFlightsByDateAsync(DateOnly date);
+
+    /// <summary>
     /// Creates a new route.
     /// </summary>
     Task<RouteManagementResponse> CreateRouteAsync(CreateRouteDto dto);

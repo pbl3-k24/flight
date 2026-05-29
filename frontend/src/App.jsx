@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import FlightTemplateManagement from './components/flight-templates/FlightTemplateManagement'
 import {
   searchFlights,
   createBooking,
@@ -162,7 +163,7 @@ const getSeatInventorySummary = (seatInventory) => {
   return Object.values(seatInventory)
     .filter(Boolean)
     .map((seat) => ({
-      label: seat.className || (seat.seatClassId ? `Hạng ${seat.seatClassId}` : 'Hạng vé'),
+      label: seat.seatClassName || seat.className || (seat.seatClassId ? (Number(seat.seatClassId) === 2 ? 'Business' : 'Economy') : 'Hạng vé'),
       price: seat.currentPrice ?? seat.basePrice,
     }))
 }
@@ -505,6 +506,7 @@ function App() {
   const [historyNotice, setHistoryNotice] = useState('')
   const [historyError, setHistoryError] = useState('')
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [paymentReturnBookingId, setPaymentReturnBookingId] = useState(null)
   const [isCancellingBookingId, setIsCancellingBookingId] = useState(null)
   const [bookingTicketsMap, setBookingTicketsMap] = useState({})
   const [loadingTicketsMap, setLoadingTicketsMap] = useState({})
@@ -595,6 +597,7 @@ function App() {
     isActive: true,
   })
   const [templateSlots, setTemplateSlots] = useState([])
+  const [selectedTemplateDays, setSelectedTemplateDays] = useState({})
   const [generateFormData, setGenerateFormData] = useState({
     templateId: null,
     weekStartDate: toLocalDateInputValue(addDays(new Date(), 1)),
@@ -619,7 +622,7 @@ function App() {
   const [editingFlightId, setEditingFlightId] = useState(null)
   const [isCancellingAdminFlightId, setIsCancellingAdminFlightId] = useState(null)
   const [adminFlightFilters, setAdminFlightFilters] = useState({
-    date: '',
+    date: toLocalDateInputValue(),
     from: '',
     to: '',
     code: '',
@@ -642,6 +645,10 @@ function App() {
   const [promotionAdminNotice, setPromotionAdminNotice] = useState('')
   const [promotionFormData, setPromotionFormData] = useState(emptyPromotionForm)
   const [editingPromotionId, setEditingPromotionId] = useState(null)
+  const [editingTemplateId, setEditingTemplateId] = useState(null)
+  const [isPromotionModalOpen, setIsPromotionModalOpen] = useState(false)
+  const [isFlightModalOpen, setIsFlightModalOpen] = useState(false)
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
   const totalPassengers = passengerCounts.adult + passengerCounts.child + passengerCounts.infant
   const passengerDivisor = Math.max(1, totalPassengers)
   const sortedNotifications = useMemo(
@@ -809,6 +816,25 @@ function App() {
       }
     } catch (e) {
       console.error('❌ Lỗi khi khôi phục token:', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      const pathname = (window.location?.pathname || '').toLowerCase()
+      if (!pathname.includes('/payment-result')) return
+
+      const params = new URLSearchParams(window.location.search || '')
+      const bookingIdParam = Number(params.get('bookingId'))
+      const resolvedBookingId = Number.isFinite(bookingIdParam) && bookingIdParam > 0 ? bookingIdParam : null
+
+      setPaymentReturnBookingId(resolvedBookingId)
+      setScreen('history')
+      if (resolvedBookingId) {
+        setHistoryNotice('Thanh toán hoàn tất. Đang tải lại lịch sử vé...')
+      }
+    } catch (error) {
+      // ignore URL parsing errors
     }
   }, [])
 
@@ -1241,11 +1267,12 @@ function App() {
     isActive: Boolean(form.isActive),
   })
 
-  const loadAdminFlights = async () => {
+  const loadAdminFlights = async (dateOverride) => {
     setIsLoadingFlightsAdmin(true)
     setFlightAdminError('')
     try {
-      const data = await getAdminFlights(1, 100)
+      const dateToLoad = dateOverride !== undefined ? dateOverride : adminFlightFilters.date
+      const data = await getAdminFlights(dateToLoad, 1, 100)
       setAdminFlights(Array.isArray(data) ? data : [])
     } catch (error) {
       setFlightAdminError(error.message || 'Không thể tải danh sách chuyến bay.')
@@ -1268,6 +1295,7 @@ function App() {
     setFlightFormData(emptyFlightForm)
     setFlightAdminError('')
     setFlightAdminNotice('')
+    setIsFlightModalOpen(true)
   }
 
   const startEditFlight = (flight) => {
@@ -1276,6 +1304,7 @@ function App() {
     setFlightFormData(mapFlightToForm(flight))
     setFlightAdminError('')
     setFlightAdminNotice('')
+    setIsFlightModalOpen(true)
   }
 
   const handleFlightSubmit = async (event) => {
@@ -1303,6 +1332,7 @@ function App() {
       }
       setFlightFormData(emptyFlightForm)
       setEditingFlightId(null)
+      setIsFlightModalOpen(false)
       await loadAdminFlights()
     } catch (error) {
       setFlightAdminError(error.message || 'Không thể lưu chuyến bay.')
@@ -1420,6 +1450,7 @@ function App() {
     setPromotionFormData(emptyPromotionForm)
     setPromotionAdminError('')
     setPromotionAdminNotice('')
+    setIsPromotionModalOpen(true)
   }
 
   const startEditPromotion = (promotion) => {
@@ -1428,6 +1459,7 @@ function App() {
     setPromotionFormData(mapPromotionToForm(promotion))
     setPromotionAdminError('')
     setPromotionAdminNotice('')
+    setIsPromotionModalOpen(true)
   }
 
   const handlePromotionSubmit = async (event) => {
@@ -1447,6 +1479,7 @@ function App() {
       }
       setPromotionFormData(emptyPromotionForm)
       setEditingPromotionId(null)
+      setIsPromotionModalOpen(false)
       await loadAdminPromotions()
     } catch (error) {
       setPromotionAdminError(error.message || 'Không thể lưu mã khuyến mãi.')
@@ -1470,6 +1503,66 @@ function App() {
       await loadAdminPromotions()
     } catch (error) {
       setPromotionAdminError(error.message || 'Không thể xóa mã khuyến mãi.')
+    }
+  }
+
+  const loadTemplateForEditing = async (template) => {
+    try {
+      setApiError('')
+      setAdminNotice('')
+      const templateId = template.templateId || template.id || template.Id
+      
+      if (!templateId) {
+        setApiError('Không tìm thấy ID của template')
+        return
+      }
+      
+      const templateDetail = await getFlightScheduleTemplate(templateId)
+      console.log('📋 Template Detail loaded for editing:', templateDetail)
+      
+      setEditingTemplateId(templateId)
+      setTemplateFormData({
+        name: templateDetail.name || '',
+        description: templateDetail.description || '',
+        isActive: templateDetail.isActive !== false,
+      })
+      
+      // Reconstruct templateSlots from details
+      const slots = (templateDetail.details || []).map((detail, index) => {
+        // Look for matching definition
+        let def = flightDefinitions.find(
+          (d) => String(d.routeId) === String(detail.routeId) &&
+                 d.departureTime.substring(0, 5) === detail.departureTime.substring(0, 5)
+        )
+        
+        if (!def) {
+          // If no exact definition match, fallback to structured definition
+          def = {
+            id: `fallback-def-${index}-${Date.now()}`,
+            flightNumber: `${detail.flightNumberPrefix || 'FL'}${detail.flightNumberSuffix || ''}`,
+            routeId: detail.routeId,
+            departureAirportCode: `Route #${detail.routeId}`,
+            arrivalAirportCode: '',
+            departureTime: detail.departureTime,
+            arrivalTime: detail.arrivalTime,
+          }
+        }
+        
+        return {
+          id: `slot-edit-${index}-${Date.now()}`,
+          flightDefinition: {
+            ...def,
+            selectedAircraftId: detail.aircraftId,
+          },
+          dayOfWeek: detail.dayOfWeek,
+        }
+      })
+      
+      setTemplateSlots(slots)
+      setSelectedTemplateDays({})
+      setIsTemplateModalOpen(true)
+    } catch (error) {
+      setApiError(error.message || 'Lỗi khi tải chi tiết template để chỉnh sửa')
     }
   }
 
@@ -2247,6 +2340,11 @@ function App() {
     loadBookingHistory()
   }, [screen, authUser])
 
+  useEffect(() => {
+    if (screen !== 'history' || !paymentReturnBookingId || !authUser) return
+    loadTicketsForBooking(paymentReturnBookingId)
+  }, [screen, paymentReturnBookingId, authUser])
+
   // Load flight definitions khi vào màn hình templates
   useEffect(() => {
     let cancelled = false
@@ -2286,12 +2384,17 @@ function App() {
 
   useEffect(() => {
     if (screen !== 'flights' || !isAdmin) return
-    loadAdminFlights()
     loadAdminRoutes()
     getAircrafts()
       .then((data) => setAircrafts(Array.isArray(data) ? data : []))
       .catch(() => setFlightAdminError('Không thể tải danh sách máy bay.'))
   }, [screen, isAdmin])
+
+
+  useEffect(() => {
+    if (screen !== 'flights' || !isAdmin) return
+    loadAdminFlights(adminFlightFilters.date)
+  }, [screen, isAdmin, adminFlightFilters.date])
 
   // Load aircrafts khi vào màn hình templates
   useEffect(() => {
@@ -4792,11 +4895,12 @@ function App() {
                                 })()
                               )}
                             </div>
-                            <div className="text-[11px] text-slate-500 space-y-0.5 font-medium">
+                            <div className="text-[11px] text-slate-500 space-y-1 font-medium">
                               <p>Hành khách: <span className="font-bold text-slate-700">{ticket.passengerName || '---'}</span></p>
                               <p>Số hiệu bay: <span className="font-bold text-slate-700">{ticket.flightNumber || '---'}</span></p>
-                              <p>Hành trình: {ticket.departureAirport || '---'} ➔ {ticket.arrivalAirport || '---'}</p>
-                              <p>Giờ khởi hành: {formatDateTime(ticket.departureTime)}</p>
+                              <p>Hành trình: <span className="font-semibold text-slate-700">{ticket.departureAirport || '---'} ➔ {ticket.arrivalAirport || '---'}</span></p>
+                              <p>Giờ khởi hành: <span className="font-semibold text-slate-700">{formatDateTime(ticket.departureTime)}</span></p>
+                              <p>Hạng vé: <span className="font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded px-2 py-0.5 text-[10px] inline-block mt-0.5">{ticket.seatClassName || ticket.seatClassCode || ticket.seatClass || (Number(ticket.seatClassId) === 2 ? 'Business' : 'Economy')}</span></p>
                             </div>
 
                             {/* Ticket additional services */}
@@ -5193,53 +5297,49 @@ function App() {
                                 <p className="text-xs font-bold text-blue-600">
                                   {flight.flightNumber || `Chuyến #${flight.flightId}`}
                                 </p>
-                                <p className="mt-0.5 text-base font-extrabold text-slate-800">
+                                <p className="mt-1 text-sm font-bold text-slate-800">
                                   {formatTime(flight.departureTime)} - {formatTime(flight.arrivalTime)}
                                 </p>
-                                <p className="text-[10px] text-slate-400 font-semibold">
-                                  Ngày khởi hành: {formatDateTime(flight.departureTime)}
-                                </p>
-                                <p className="text-[10px] text-slate-400 font-semibold">
-                                  Ghế trống khả dụng: {Number.isFinite(Number(flight.availableSeats)) ? flight.availableSeats : '---'}
+                                <p className="text-[10px] font-bold text-emerald-650">
+                                  Còn trống: {flight.availableSeats} ghế
                                 </p>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setRebookModalState((prev) => ({
-                                    ...prev,
-                                    selectedFlightId: String(flight.flightId),
-                                  }))
-                                }
-                                className={`rounded-xl px-4 py-2 text-xs font-bold transition active:scale-95 ${
-                                  isSelected
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                                }`}
-                              >
-                                {isSelected ? '✓ Đang chọn' : 'Chọn chuyến'}
-                              </button>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setRebookModalState((prev) => ({
+                                  ...prev,
+                                  selectedFlightId: String(flight.flightId),
+                                }))
+                              }
+                              className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
+                                isSelected
+                                  ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-md shadow-emerald-150'
+                                  : 'bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-150'
+                              }`}
+                            >
+                              {isSelected ? 'Đang chọn' : 'Đổi chuyến này'}
+                            </button>
                           </div>
                         </article>
                       )
                     })}
+
                     {filteredOptions.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs text-slate-450 font-medium">
-                        Không tìm thấy chuyến bay thay thế khả dụng cho ngày khởi hành bạn đã chọn.
+                      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 p-8 text-center text-xs font-bold text-slate-400">
+                        Không có chuyến bay thay thế nào trong ngày đã chọn.
                       </div>
                     )}
                   </div>
 
-                  <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
+                  <div className="flex gap-3 border-t border-slate-100 pt-4">
                     <button
                       type="button"
                       onClick={closeRebookModal}
-                      className="rounded-xl border border-slate-200 px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 transition"
+                      className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
                     >
-                      Hủy bỏ
+                      Hủy
                     </button>
                     <button
                       type="button"
@@ -5248,13 +5348,13 @@ function App() {
                         await handleDisruptionRebook(
                           rebookModalState.bookingId,
                           rebookModalState.decisionId,
-                          rebookModalState.selectedFlightId,
+                          rebookModalState.selectedFlightId
                         )
                         closeRebookModal()
                       }}
-                      className="rounded-xl bg-blue-600 px-5 py-2 text-xs font-bold text-white shadow hover:bg-blue-700 active:scale-95 disabled:opacity-50 transition"
+                      className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 transition shadow-md shadow-emerald-250 disabled:opacity-50"
                     >
-                      ✓ Xác nhận đổi chuyến
+                      Xác nhận đổi chuyến bay miễn phí
                     </button>
                   </div>
                 </div>
@@ -5266,10 +5366,9 @@ function App() {
     </div>
   )
 
-
   const renderPromotionManagement = () => (
-    <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-      {/* Left panel: list of promotions */}
+    <div className="space-y-6">
+      {/* List section of promotions */}
       <section className="rounded-3xl bg-white p-6 shadow-xl border border-slate-100 shadow-slate-100/50 md:p-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-5">
           <div>
@@ -5340,23 +5439,24 @@ function App() {
         )}
 
         {!isLoadingPromotionsAdmin && adminPromotions.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-1">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {adminPromotions.map((promo) => (
               <article
                 key={promo.promotionId}
-                className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-fast"
+                onClick={() => startEditPromotion(promo)}
+                className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm hover:shadow-md hover:border-indigo-400 transition-all duration-fast cursor-pointer select-none"
               >
                 {/* Visual side-strip */}
-                <div className={`absolute top-0 bottom-0 left-0 w-1.5 ${promo.isActive ? 'bg-gradient-to-b from-emerald-400 to-emerald-600' : 'bg-slate-300'}`} />
+                <div className={`absolute top-0 bottom-0 left-0 w-1.5 ${promo.isActive ? 'bg-gradient-to-b from-indigo-500 to-blue-600' : 'bg-slate-350'}`} />
 
-                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between pl-2">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center flex-wrap gap-2">
-                      <span className="font-mono text-base font-extrabold uppercase tracking-wide text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-0.5">
+                <div className="flex flex-col h-full justify-between gap-3 pl-2">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="font-mono text-xs font-extrabold uppercase tracking-wide text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-0.5">
                         🎫 {promo.code || '---'}
                       </span>
                       <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
                           promo.isActive
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                             : 'bg-slate-100 text-slate-600'
@@ -5367,49 +5467,57 @@ function App() {
                       </span>
                     </div>
 
-                    <h4 className="text-sm font-bold text-slate-800">{promo.description || 'Không có mô tả'}</h4>
+                    <h4 className="text-sm font-bold text-slate-800 line-clamp-2 min-h-[40px] group-hover:text-indigo-700 transition-colors">
+                      {promo.description || 'Không có mô tả'}
+                    </h4>
                     
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-600 pt-1">
-                      <span className="flex items-center gap-1 text-blue-700">
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold pt-1 border-t border-slate-100/60">
+                      <span className="text-blue-700">
                         🛡️ Hạng: {getPromotionTypeLabel(promo.discountType)}
                       </span>
-                      <span className="flex items-center gap-1 text-emerald-600">
+                      <span className="text-emerald-600">
                         💰 Trị giá: {formatCurrency(promo.discountValue)}
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] font-medium text-slate-500 pt-1.5 border-t border-slate-100/60">
-                      <div>Tối đa: <span className="font-semibold text-slate-700">{promo.maxDiscountAmount ? formatCurrency(promo.maxDiscountAmount) : 'Không giới hạn'}</span></div>
-                      <div>Tối thiểu: <span className="font-semibold text-slate-700">{formatCurrency(promo.minimumAmount || 0)}</span></div>
-                      <div className="col-span-2 mt-0.5 flex items-center gap-1 text-slate-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="h-3 w-3">
+                    <div className="grid grid-cols-1 gap-y-0.5 text-[10px] font-medium text-slate-500 pt-1.5">
+                      <div>Tối đa: <span className="font-bold text-slate-700">{promo.maxDiscountAmount ? formatCurrency(promo.maxDiscountAmount) : 'Không giới hạn'}</span></div>
+                      <div>Tối thiểu: <span className="font-bold text-slate-700">{formatCurrency(promo.minimumAmount || 0)}</span></div>
+                      <div className="mt-1 flex items-center gap-1 text-slate-400 border-t border-slate-50 pt-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="h-3 w-3 shrink-0">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
                         </svg>
-                        <span>{formatDateTime(promo.validFrom)} → {formatDateTime(promo.validTo)}</span>
+                        <span className="truncate">{formatDateTime(promo.validFrom).split(',')[0]} → {formatDateTime(promo.validTo).split(',')[0]}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex flex-row items-center justify-between border-t border-slate-100 pt-3 md:flex-col md:items-end md:justify-start md:border-t-0 md:pt-0 shrink-0">
-                    <div className="text-left md:text-right">
-                      <div className="text-xs font-bold text-slate-700">{promo.usageCount} lượt dùng</div>
-                      <div className="text-[11px] font-medium text-slate-400">
+                  <div className="flex items-center justify-between border-t border-slate-100 pt-2 shrink-0">
+                    <div className="text-left">
+                      <div className="text-[11px] font-bold text-slate-700">{promo.usageCount} lượt dùng</div>
+                      <div className="text-[10px] font-medium text-slate-400">
                         Giới hạn: {promo.usageLimit ?? 'Không giới hạn'}
                       </div>
                     </div>
 
-                    <div className="mt-3 flex gap-1.5">
+                    <div className="flex gap-1">
                       <button
                         type="button"
-                        onClick={() => startEditPromotion(promo)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          startEditPromotion(promo)
+                        }}
+                        className="rounded-lg border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 px-2.5 py-1 text-xs font-bold text-indigo-700 transition"
                       >
-                        Sửa
+                        Xem/Sửa
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleDeletePromotion(promo)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeletePromotion(promo)
+                        }}
+                        className="rounded-lg bg-red-50 hover:bg-red-150 px-2.5 py-1 text-xs font-bold text-red-650 transition"
                       >
                         Xóa
                       </button>
@@ -5422,155 +5530,172 @@ function App() {
         )}
       </section>
 
-      {/* Right panel: promotion management form */}
-      <aside className="sticky top-24 h-fit rounded-3xl bg-gradient-to-b from-white to-slate-50/50 p-6 shadow-xl border border-slate-100 shadow-slate-100/50">
-        <div className="mb-4 flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="h-4 w-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-            </svg>
-          </div>
-          <h3 className="title-font text-base font-black text-slate-800">
-            {editingPromotionId ? 'Cập nhật khuyến mãi' : 'Tạo khuyến mãi mới'}
-          </h3>
-        </div>
-
-        <form onSubmit={handlePromotionSubmit} className="space-y-3.5">
-          <div>
-            <Label className="text-xs font-bold text-slate-600">Mã khuyến mãi</Label>
-            <Input
-              value={promotionFormData.code}
-              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, code: e.target.value }))}
-              placeholder="VD: SUMMER2026"
-              disabled={!!editingPromotionId}
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-xs font-bold text-slate-600">Mô tả chương trình</Label>
-            <Input
-              value={promotionFormData.description}
-              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, description: e.target.value }))}
-              placeholder="VD: Giảm giá mùa hè rực rỡ"
-              className="mt-1"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs font-bold text-slate-600">Loại giảm</Label>
-              <Select
-                value={promotionFormData.discountType}
-                onChange={(e) =>
-                  setPromotionFormData((prev) => ({ ...prev, discountType: Number(e.target.value) }))
-                }
-                disabled={!!editingPromotionId}
-                className="mt-1"
-              >
-                <option value={0}>Giảm theo %</option>
-                <option value={1}>Giảm tiền mặt</option>
-              </Select>
-            </div>
-            <div>
-              <Label className="text-xs font-bold text-slate-600">Giá trị giảm</Label>
-              <Input
-                type="number"
-                value={promotionFormData.discountValue}
-                onChange={(e) => setPromotionFormData((prev) => ({ ...prev, discountValue: e.target.value }))}
-                placeholder="VD: 10 hoặc 100000"
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs font-bold text-slate-600">Giảm tối đa</Label>
-              <Input
-                type="number"
-                value={promotionFormData.maxDiscountAmount}
-                onChange={(e) => setPromotionFormData((prev) => ({ ...prev, maxDiscountAmount: e.target.value }))}
-                placeholder="VD: 500000"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-bold text-slate-600">Hóa đơn tối thiểu</Label>
-              <Input
-                type="number"
-                value={promotionFormData.minimumAmount}
-                onChange={(e) => setPromotionFormData((prev) => ({ ...prev, minimumAmount: e.target.value }))}
-                placeholder="VD: 1000000"
-                disabled={!!editingPromotionId}
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <div>
-            <Label className="text-xs font-bold text-slate-600">Giới hạn lượt sử dụng</Label>
-            <Input
-              type="number"
-              value={promotionFormData.usageLimit}
-              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, usageLimit: e.target.value }))}
-              placeholder="VD: 100"
-              className="mt-1"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label className="text-xs font-bold text-slate-600">Có hiệu lực từ</Label>
-              <Input
-                type="date"
-                value={promotionFormData.validFrom}
-                onChange={(e) => setPromotionFormData((prev) => ({ ...prev, validFrom: e.target.value }))}
-                disabled={!!editingPromotionId}
-                className="mt-1 text-xs"
-              />
-            </div>
-            <div>
-              <Label className="text-xs font-bold text-slate-600">Hiệu lực đến</Label>
-              <Input
-                type="date"
-                value={promotionFormData.validTo}
-                onChange={(e) => setPromotionFormData((prev) => ({ ...prev, validTo: e.target.value }))}
-                className="mt-1 text-xs"
-              />
-            </div>
-          </div>
-          
-          <label className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={promotionFormData.isActive}
-              onChange={(e) => setPromotionFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
-            />
-            <span>Kích hoạt mã khuyến mãi</span>
-          </label>
-
-          <div className="flex gap-2 pt-2 border-t border-slate-100">
-            <button
-              type="submit"
-              className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 transition-all duration-instant shadow-md shadow-indigo-200"
-            >
-              {editingPromotionId ? 'Lưu cập nhật' : 'Tạo khuyến mãi'}
-            </button>
-            {editingPromotionId && (
+      {/* Pop-up glassmorphic form modal */}
+      {isPromotionModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm overflow-y-auto animate-fadeIn"
+          onClick={() => setIsPromotionModalOpen(false)}
+        >
+          <div 
+            className="w-full max-w-lg rounded-3xl bg-white p-6 md:p-8 shadow-2xl border border-slate-100 animate-slideUp max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-5 flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-650">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="h-4.5 w-4.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                  </svg>
+                </div>
+                <h3 className="title-font text-lg font-black text-slate-800">
+                  {editingPromotionId ? 'Chi tiết & Cập nhật' : 'Tạo khuyến mãi mới'}
+                </h3>
+              </div>
               <button
                 type="button"
-                onClick={startCreatePromotion}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all"
+                onClick={() => setIsPromotionModalOpen(false)}
+                className="rounded-lg bg-slate-100 hover:bg-slate-200 p-1.5 text-slate-500 font-bold text-xs transition"
               >
-                Hủy
+                ✕ Đóng
               </button>
-            )}
+            </div>
+
+            <form onSubmit={handlePromotionSubmit} className="space-y-4">
+              <div>
+                <Label className="text-xs font-bold text-slate-600">Mã khuyến mãi</Label>
+                <Input
+                  value={promotionFormData.code}
+                  onChange={(e) => setPromotionFormData((prev) => ({ ...prev, code: e.target.value }))}
+                  placeholder="VD: SUMMER2026"
+                  disabled={!!editingPromotionId}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-bold text-slate-600">Mô tả chương trình</Label>
+                <Input
+                  value={promotionFormData.description}
+                  onChange={(e) => setPromotionFormData((prev) => ({ ...prev, description: e.target.value }))}
+                  placeholder="VD: Giảm giá mùa hè rực rỡ"
+                  className="mt-1"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-bold text-slate-600">Loại giảm</Label>
+                  <Select
+                    value={promotionFormData.discountType}
+                    onChange={(e) =>
+                      setPromotionFormData((prev) => ({ ...prev, discountType: Number(e.target.value) }))
+                    }
+                    disabled={!!editingPromotionId}
+                    className="mt-1"
+                  >
+                    <option value={0}>Giảm theo %</option>
+                    <option value={1}>Giảm tiền mặt</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-xs font-bold text-slate-600">Giá trị giảm</Label>
+                  <Input
+                    type="number"
+                    value={promotionFormData.discountValue}
+                    onChange={(e) => setPromotionFormData((prev) => ({ ...prev, discountValue: e.target.value }))}
+                    placeholder="VD: 10 hoặc 100000"
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-bold text-slate-600">Giảm tối đa</Label>
+                  <Input
+                    type="number"
+                    value={promotionFormData.maxDiscountAmount}
+                    onChange={(e) => setPromotionFormData((prev) => ({ ...prev, maxDiscountAmount: e.target.value }))}
+                    placeholder="VD: 500000"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-bold text-slate-600">Hóa đơn tối thiểu</Label>
+                  <Input
+                    type="number"
+                    value={promotionFormData.minimumAmount}
+                    onChange={(e) => setPromotionFormData((prev) => ({ ...prev, minimumAmount: e.target.value }))}
+                    placeholder="VD: 1000000"
+                    disabled={!!editingPromotionId}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs font-bold text-slate-600">Giới hạn lượt sử dụng</Label>
+                <Input
+                  type="number"
+                  value={promotionFormData.usageLimit}
+                  onChange={(e) => setPromotionFormData((prev) => ({ ...prev, usageLimit: e.target.value }))}
+                  placeholder="VD: 100"
+                  className="mt-1"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-bold text-slate-600">Có hiệu lực từ</Label>
+                  <Input
+                    type="date"
+                    value={promotionFormData.validFrom}
+                    onChange={(e) => setPromotionFormData((prev) => ({ ...prev, validFrom: e.target.value }))}
+                    disabled={!!editingPromotionId}
+                    className="mt-1 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-bold text-slate-600">Hiệu lực đến</Label>
+                  <Input
+                    type="date"
+                    value={promotionFormData.validTo}
+                    onChange={(e) => setPromotionFormData((prev) => ({ ...prev, validTo: e.target.value }))}
+                    className="mt-1 text-xs"
+                  />
+                </div>
+              </div>
+              
+              <label className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={promotionFormData.isActive}
+                  onChange={(e) => setPromotionFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
+                  className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+                />
+                <span>Kích hoạt mã khuyến mãi</span>
+              </label>
+
+              <div className="flex gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="submit"
+                  className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 transition shadow-md shadow-indigo-200"
+                >
+                  {editingPromotionId ? 'Lưu cập nhật' : 'Tạo khuyến mãi'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPromotionModalOpen(false)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
+                >
+                  Hủy
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
-      </aside>
+        </div>
+      )}
     </div>
   )
 
   const renderFlightManagement = () => (
-    <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
-      {/* Left panel: list of active flights & filtration */}
+    <div className="space-y-6">
+      {/* List panel of flights & filtration */}
       <section className="rounded-3xl bg-white p-6 shadow-xl border border-slate-100 shadow-slate-100/50 md:p-8">
         <div className="mb-6 border-b border-slate-100 pb-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -5592,16 +5717,6 @@ function App() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
                 </svg>
                 Làm mới
-              </button>
-              <button
-                type="button"
-                onClick={startCreateFlight}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-xs font-bold text-white hover:from-blue-700 hover:to-indigo-700 transition-all shadow-md shadow-blue-200"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="3" stroke="currentColor" className="h-3.5 w-3.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                Tạo chuyến bay
               </button>
             </div>
           </div>
@@ -5710,12 +5825,16 @@ function App() {
           <div className="space-y-4">
             {filteredAdminFlights.map((flight) => {
               const seatSummary = getSeatInventorySummary(flight.seatInventory)
+              const totalSeatsRemaining = flight.availableSeats !== undefined 
+                ? flight.availableSeats 
+                : Object.values(flight.seatInventory || {}).reduce((sum, s) => sum + (s?.availableSeats ?? s?.available ?? 0), 0)
+
               return (
                 <article
                   key={flight.flightId}
                   className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-fast"
                 >
-                  <div className={`absolute top-0 bottom-0 left-0 w-1.5 ${flight.isActive ? 'bg-gradient-to-b from-blue-400 to-blue-600' : 'bg-slate-300'}`} />
+                  <div className={`absolute top-0 bottom-0 left-0 w-1.5 ${flight.isActive ? 'bg-gradient-to-b from-blue-450 to-blue-650' : 'bg-slate-300'}`} />
 
                   <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between pl-2">
                     <div className="space-y-1.5 flex-1">
@@ -5732,6 +5851,17 @@ function App() {
                         >
                           <span className={`h-1.5 w-1.5 rounded-full ${flight.isActive ? 'bg-emerald-600' : 'bg-slate-400'}`}></span>
                           {flight.isActive ? 'Hoạt động' : 'Tạm dừng'}
+                        </span>
+
+                        {/* HIGH-CONTRAST EMPTY SEATS BADGE */}
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold border ${
+                          totalSeatsRemaining === 0 
+                            ? 'bg-red-50 text-red-700 border-red-100' 
+                            : totalSeatsRemaining < 10 
+                            ? 'bg-amber-50 text-amber-700 border-amber-100' 
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                        }`}>
+                          💺 Số ghế trống: {totalSeatsRemaining}
                         </span>
                       </div>
 
@@ -5760,7 +5890,7 @@ function App() {
                               className="inline-flex items-center gap-1 rounded-lg bg-slate-50 border border-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600"
                             >
                               <span className="h-1.5 w-1.5 rounded-full bg-indigo-500"></span>
-                              {seat.label}: <span className="text-indigo-600">{Number.isFinite(Number(seat.price)) ? formatCurrency(seat.price) : '--'}</span>
+                              {seat.label}: <span className="text-indigo-650">{Number.isFinite(Number(seat.price)) ? formatCurrency(seat.price) : '--'}</span>
                             </span>
                           ))}
                         </div>
@@ -5787,7 +5917,7 @@ function App() {
                         <button
                           type="button"
                           onClick={() => handleDeleteFlight(flight)}
-                          className="inline-flex items-center rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-600 hover:bg-red-100 transition-all"
+                          className="inline-flex items-center rounded-lg bg-red-50 px-2.5 py-1.5 text-xs font-bold text-red-650 hover:bg-red-100 transition-all"
                         >
                           Xóa
                         </button>
@@ -5801,132 +5931,170 @@ function App() {
         )}
       </section>
 
-      {/* Right panel: flight management form */}
-      <aside className="sticky top-24 h-fit rounded-3xl bg-gradient-to-b from-white to-slate-50/50 p-6 shadow-xl border border-slate-100 shadow-slate-100/50">
-        <div className="mb-4 flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="h-4 w-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
-            </svg>
-          </div>
-          <h3 className="title-font text-base font-black text-slate-800 font-sans">
-            {editingFlightId ? 'Cập nhật chuyến bay' : 'Tạo chuyến bay mới'}
-          </h3>
-        </div>
-
-        <form onSubmit={handleFlightSubmit} className="space-y-3.5">
-          <div>
-            <Label className="text-xs font-bold text-slate-600">Số hiệu chuyến bay</Label>
-            <Input
-              value={flightFormData.flightNumber}
-              onChange={(e) => setFlightFormData((prev) => ({ ...prev, flightNumber: e.target.value }))}
-              placeholder="VD: VN211"
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-xs font-bold text-slate-600">Tuyến bay</Label>
-            <Select
-              value={flightFormData.routeId}
-              onChange={(e) => setFlightFormData((prev) => ({ ...prev, routeId: e.target.value }))}
-              disabled={!!editingFlightId}
-              className="mt-1"
-            >
-              <option value="">Chọn tuyến bay khả dụng</option>
-              {adminRoutes.map((route) => (
-                <option key={route.routeId} value={route.routeId}>
-                  ✈️ {route.departureAirport} ({route.departureAirportCode}) → {route.arrivalAirport} ({route.arrivalAirportCode})
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs font-bold text-slate-600">Máy bay vận hành</Label>
-            <Select
-              value={flightFormData.aircraftId}
-              onChange={(e) => setFlightFormData((prev) => ({ ...prev, aircraftId: e.target.value }))}
-              className="mt-1"
-            >
-              <option value="">Chọn máy bay hoạt động</option>
-              {aircrafts.map((aircraft) => (
-                <option key={aircraft.aircraftId} value={aircraft.aircraftId}>
-                  ⚡ {aircraft.model} · Số đăng ký: {aircraft.registrationNumber}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs font-bold text-slate-600">Giờ cất cánh</Label>
-            <Input
-              type="datetime-local"
-              value={flightFormData.departureTime}
-              onChange={(e) => setFlightFormData((prev) => ({ ...prev, departureTime: e.target.value }))}
-              className="mt-1 text-xs"
-            />
-          </div>
-          <div>
-            <Label className="text-xs font-bold text-slate-600">Giờ hạ cánh dự kiến</Label>
-            <Input
-              type="datetime-local"
-              value={flightFormData.arrivalTime}
-              onChange={(e) => setFlightFormData((prev) => ({ ...prev, arrivalTime: e.target.value }))}
-              className="mt-1 text-xs"
-            />
-          </div>
-
-          <label className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={flightFormData.isActive}
-              onChange={(e) => setFlightFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
-              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-100 cursor-pointer"
-            />
-            <span>Kích hoạt chuyến bay hoạt động</span>
-          </label>
-
-          <p className="rounded-xl bg-amber-50/50 border border-amber-100/50 p-3 text-[11px] font-medium text-amber-700 leading-relaxed">
-            ℹ️ Lưu ý: Giá vé hiển thị được định nghĩa đồng nhất theo hạng ghế từ cấu hình máy bay; backend chưa hỗ trợ ghi đè giá vé theo từng chuyến.
-          </p>
-
-          <div className="flex gap-2 pt-2 border-t border-slate-100">
-            <button
-              type="submit"
-              className="flex-1 rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition-all duration-instant shadow-md shadow-blue-200"
-            >
-              {editingFlightId ? 'Lưu cập nhật' : 'Tạo chuyến bay'}
-            </button>
-            {editingFlightId && (
+      {/* Pop-up glassmorphic flight modal */}
+      {isFlightModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm overflow-y-auto animate-fadeIn"
+          onClick={() => setIsFlightModalOpen(false)}
+        >
+          <div 
+            className="w-full max-w-lg rounded-3xl bg-white p-6 md:p-8 shadow-2xl border border-slate-100 animate-slideUp max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-5 flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-650">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="h-4.5 w-4.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5" />
+                  </svg>
+                </div>
+                <h3 className="title-font text-lg font-black text-slate-800">
+                  {editingFlightId ? 'Cập nhật chuyến bay' : 'Tạo chuyến bay mới'}
+                </h3>
+              </div>
               <button
                 type="button"
-                onClick={startCreateFlight}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition-all"
+                onClick={() => setIsFlightModalOpen(false)}
+                className="rounded-lg bg-slate-100 hover:bg-slate-200 p-1.5 text-slate-500 font-bold text-xs transition"
               >
-                Hủy
+                ✕ Đóng
               </button>
-            )}
+            </div>
+
+            <form onSubmit={handleFlightSubmit} className="space-y-4">
+              <div>
+                <Label className="text-xs font-bold text-slate-600">Số hiệu chuyến bay</Label>
+                <Input
+                  value={flightFormData.flightNumber}
+                  onChange={(e) => setFlightFormData((prev) => ({ ...prev, flightNumber: e.target.value }))}
+                  placeholder="VD: VN211"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-bold text-slate-600">Tuyến bay</Label>
+                <Select
+                  value={flightFormData.routeId}
+                  onChange={(e) => setFlightFormData((prev) => ({ ...prev, routeId: e.target.value }))}
+                  disabled={!!editingFlightId}
+                  className="mt-1"
+                >
+                  <option value="">Chọn tuyến bay khả dụng</option>
+                  {adminRoutes.map((route) => (
+                    <option key={route.routeId} value={route.routeId}>
+                      {route.departureAirportCode || route.departureAirport || route.departureAirport} → {route.arrivalAirportCode || route.arrivalAirport || route.arrivalAirport}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div>
+                <Label className="text-xs font-bold text-slate-600">Chọn máy bay</Label>
+                <Select
+                  value={flightFormData.aircraftId}
+                  onChange={(e) => setFlightFormData((prev) => ({ ...prev, aircraftId: e.target.value }))}
+                  className="mt-1"
+                >
+                  <option value="">Chọn máy bay khả dụng</option>
+                  {aircrafts.map((aircraft) => (
+                    <option key={aircraft.aircraftId || aircraft.id} value={aircraft.aircraftId || aircraft.id}>
+                      {aircraft.model} ({aircraft.registrationNumber})
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs font-bold text-slate-600">Thời gian cất cánh</Label>
+                  <Input
+                    type="datetime-local"
+                    value={flightFormData.departureTime}
+                    onChange={(e) => setFlightFormData((prev) => ({ ...prev, departureTime: e.target.value }))}
+                    className="mt-1 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-bold text-slate-600">Thời gian hạ cánh</Label>
+                  <Input
+                    type="datetime-local"
+                    value={flightFormData.arrivalTime}
+                    onChange={(e) => setFlightFormData((prev) => ({ ...prev, arrivalTime: e.target.value }))}
+                    className="mt-1 text-xs"
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={flightFormData.isActive}
+                  onChange={(e) => setFlightFormData((prev) => ({ ...prev, isActive: e.target.checked }))}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-100 cursor-pointer"
+                />
+                <span>Kích hoạt chuyến bay này</span>
+              </label>
+
+              <div className="flex gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="submit"
+                  className="flex-1 rounded-xl bg-blue-600 py-2.5 text-xs font-bold text-white hover:bg-blue-700 transition shadow-md shadow-blue-200"
+                >
+                  {editingFlightId ? 'Lưu cập nhật' : 'Tạo chuyến bay'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsFlightModalOpen(false)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
+                >
+                  Hủy
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
-      </aside>
+        </div>
+      )}
     </div>
   )
 
   const renderTemplateManagement = () => (
     <div className="space-y-6">
-      {/* Premium Header */}
-      <section className="rounded-3xl bg-gradient-to-r from-slate-900 to-indigo-950 p-6 shadow-xl text-white md:p-8">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-500/20 text-indigo-400">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="h-5 w-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z" />
+      {/* Bright White Header Panel matching Flight & Promotion Dashboards */}
+      <section className="rounded-3xl bg-white p-6 shadow-xl border border-slate-100 shadow-slate-100/50 md:p-8">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 pb-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-650">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="h-5 w-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5m-9-6h.008v.008H12v-.008ZM12 15h.008v.008H12V15Zm0 2.25h.008v.008H12v-.008ZM9.75 15h.008v.008H9.75V15Zm0 2.25h.008v.008H9.75v-.008ZM7.5 15h.008v.008H7.5V15Zm0 2.25h.008v.008H7.5v-.008Zm6.75-4.5h.008v.008h-.008v-.008Zm0 2.25h.008v.008h-.008V15Zm0 2.25h.008v.008h-.008v-.008Zm2.25-4.5h.008v.008H16.5v-.008Zm0 2.25h.008v.008H16.5V15Z" />
+              </svg>
+            </div>
+            <div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-indigo-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
+                Quản trị hệ thống
+              </span>
+              <h2 className="title-font mt-1 text-2xl font-black text-white">Quản lý Flight Templates</h2>
+              <p className="mt-1 text-xs text-indigo-200/80 font-medium">Lập kế hoạch bay định kỳ theo thứ trong tuần và tự động hóa việc sinh lịch bay hàng tuần.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setEditingTemplateId(null)
+              setTemplateFormData({ name: '', description: '', isActive: true })
+              setTemplateSlots([])
+              setSelectedTemplateDays({})
+              setApiError('')
+              setAdminNotice('')
+              setIsTemplateModalOpen(true)
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-650 px-4 py-2.5 text-xs font-bold text-white hover:from-blue-700 hover:to-indigo-700 transition shadow-md shadow-blue-200 shrink-0"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="3" stroke="currentColor" className="h-4 w-4">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-          </div>
-          <div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-500/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-indigo-300">
-              Quản trị hệ thống
-            </span>
-            <h2 className="title-font mt-1 text-2xl font-black text-white">Quản lý Flight Templates</h2>
-            <p className="mt-1 text-xs text-indigo-200/80 font-medium">Lập kế hoạch bay định kỳ theo thứ trong tuần và tự động hóa việc sinh lịch bay hàng tuần.</p>
-          </div>
+            Tạo template mới
+          </button>
         </div>
 
         {adminNotice && (
@@ -5939,7 +6107,7 @@ function App() {
         )}
 
         {apiError && (
-          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs font-semibold text-red-200 flex items-start gap-2.5 animate-fadeIn">
+          <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-50/10 px-4 py-3 text-xs font-semibold text-red-200 flex items-start gap-2.5 animate-fadeIn">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 shrink-0 mt-0.5 text-red-400">
               <path fillRule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.753-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clipRule="evenodd" />
             </svg>
@@ -5948,122 +6116,7 @@ function App() {
         )}
       </section>
 
-      {/* Main workspace: form creator */}
-      <section className="rounded-3xl bg-white p-6 shadow-xl border border-slate-100 shadow-slate-100/50 md:p-8">
-        <div className="mb-5 flex items-center justify-between border-b border-slate-100 pb-4">
-          <h3 className="title-font text-lg font-black text-slate-800 flex items-center gap-2">
-            <span>📋 Thiết lập Template Mới</span>
-          </h3>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <Label className="text-xs font-bold text-slate-600">Tên Template</Label>
-            <Input
-              placeholder="VD: Lịch bay mùa hè 2026 - Tần suất cao"
-              value={templateFormData.name}
-              onChange={(e) =>
-                setTemplateFormData((prev) => ({ ...prev, name: e.target.value }))
-              }
-              className="mt-1"
-            />
-          </div>
-          <div>
-            <Label className="text-xs font-bold text-slate-600">Mô tả lịch trình</Label>
-            <Input
-              placeholder="VD: Áp dụng lịch bay định kỳ tăng tần suất trục vàng Hà Nội - Sài Gòn"
-              value={templateFormData.description}
-              onChange={(e) =>
-                setTemplateFormData((prev) => ({ ...prev, description: e.target.value }))
-              }
-              className="mt-1"
-            />
-          </div>
-        </div>
-
-        <div className="mt-4 flex items-center justify-between flex-wrap gap-4">
-          <label className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={templateFormData.isActive}
-              onChange={(e) =>
-                setTemplateFormData((prev) => ({ ...prev, isActive: e.target.checked }))
-              }
-              className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
-            />
-            <span>Kích hoạt template này để sinh chuyến bay</span>
-          </label>
-
-          <button
-            type="button"
-            onClick={async () => {
-              if (!templateFormData.name) {
-                setApiError('Vui lòng nhập tên template')
-                return
-              }
-
-              if (templateSlots.length === 0) {
-                setApiError('Vui lòng thêm ít nhất 1 chuyến bay vào template')
-                return
-              }
-
-              try {
-                const templateData = {
-                  name: templateFormData.name,
-                  description: templateFormData.description,
-                  isActive: templateFormData.isActive,
-                  details: templateSlots.map((slot) => {
-                    let prefix = 'FL'
-                    if (slot.flightDefinition.flightNumber) {
-                      const match = slot.flightDefinition.flightNumber.match(/^([A-Z]+)/)
-                      if (match) {
-                        prefix = match[1]
-                      }
-                    }
-
-                    // Đảm bảo time format là HH:mm:ss
-                    const formatTime = (time) => {
-                      if (!time) return '08:00:00'
-                      return time.substring(0, 8)
-                    }
-
-                    return {
-                      routeId: slot.flightDefinition.routeId,
-                      aircraftId: slot.flightDefinition.selectedAircraftId || slot.flightDefinition.defaultAircraftId || 1,
-                      dayOfWeek: slot.dayOfWeek,
-                      departureTime: formatTime(slot.flightDefinition.departureTime),
-                      arrivalTime: formatTime(slot.flightDefinition.arrivalTime),
-                      flightNumberPrefix: prefix,
-                      flightNumberSuffix: '',
-                    }
-                  }),
-                }
-
-                console.log('📤 Creating template:', templateData)
-
-                await createFlightTemplate(templateData)
-                setAdminNotice(`✅ Đã lưu thành công template "${templateFormData.name}" với quy mô ${templateSlots.length} chuyến bay/tuần!`)
-                setTemplateFormData({ name: '', description: '', isActive: true })
-                setTemplateSlots([])
-
-                // Reload templates
-                const templates = await getFlightTemplates()
-                setFlightTemplates(Array.isArray(templates) ? templates : [])
-              } catch (error) {
-                setApiError(error.message || 'Lỗi khi tạo template')
-              }
-            }}
-            className="rounded-xl bg-indigo-600 hover:bg-indigo-700 px-5 py-2.5 text-xs font-bold text-white transition-all shadow-md shadow-indigo-200 flex items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="h-4 w-4">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-            </svg>
-            Lưu Lịch Trình Template ({templateSlots.length} chuyến bay/tuần)
-          </button>
-        </div>
-      </section>
-
-      {/* Section: List of saved templates */}
+      {/* Section: List of saved templates (Normal View) */}
       <section className="rounded-3xl bg-white p-6 shadow-xl border border-slate-100 shadow-slate-100/50">
         <div className="mb-6">
           <h3 className="text-lg font-black text-slate-800">📚 Danh Sách Flight Templates Đã Lưu</h3>
@@ -6084,7 +6137,7 @@ function App() {
           {flightTemplates.map((template) => (
             <div
               key={template.templateId || template.id || template.Id}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md hover:border-slate-300 transition-all duration-fast flex flex-col justify-between"
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md hover:border-indigo-400 transition-all duration-fast flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
@@ -6105,7 +6158,7 @@ function App() {
                 </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-3 gap-1.5">
+              <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-4 gap-1">
                 <button
                   type="button"
                   onClick={async () => {
@@ -6125,9 +6178,17 @@ function App() {
                       setApiError(error.message || 'Lỗi khi tải chi tiết template')
                     }
                   }}
-                  className="rounded-xl border border-slate-200 hover:border-slate-300 bg-white py-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 transition text-center"
+                  className="rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 py-2 text-[10px] font-bold text-slate-700 transition text-center"
                 >
                   Chi tiết
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => loadTemplateForEditing(template)}
+                  className="rounded-xl border border-blue-200 hover:border-blue-300 bg-blue-50/30 py-2 text-[10px] font-bold text-blue-700 transition text-center"
+                >
+                  Sửa
                 </button>
                 
                 <button
@@ -6139,7 +6200,7 @@ function App() {
                       templateId: template.templateId || template.id || template.Id,
                     }))
                   }}
-                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 py-2 text-[11px] font-bold text-white transition text-center"
+                  className="rounded-xl bg-indigo-600 hover:bg-indigo-750 py-2 text-[10px] font-bold text-white transition text-center shadow shadow-indigo-100"
                 >
                   Sinh lịch
                 </button>
@@ -6159,7 +6220,7 @@ function App() {
                       }
                     }
                   }}
-                  className="rounded-xl bg-red-50 hover:bg-red-100 py-2 text-[11px] font-bold text-red-600 transition text-center"
+                  className="rounded-xl bg-red-50 hover:bg-red-150 py-2 text-[10px] font-bold text-red-650 transition text-center"
                 >
                   Xóa
                 </button>
@@ -6169,319 +6230,571 @@ function App() {
         </div>
       </section>
 
-      {/* Generator panel (overlay card when a template is selected) */}
-      {selectedTemplate && (
-        <div className="rounded-3xl border-2 border-emerald-500 bg-emerald-50/40 p-6 shadow-xl animate-fadeIn">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xs">🚀</span>
-              <span>Khởi tạo chuyến bay tự động từ Template</span>
-            </h3>
-            <button
-              type="button"
-              onClick={() => setSelectedTemplate(null)}
-              className="text-slate-400 hover:text-slate-600 text-xs font-bold underline"
-            >
-              Hủy bỏ
-            </button>
-          </div>
-          
-          <p className="mb-4 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/50 rounded-xl p-3 leading-relaxed">
-            Template kích hoạt: <strong className="underline">{selectedTemplate.name}</strong> ({selectedTemplate.details?.length || 0} chuyến bay/tuần).
-            Hệ thống sẽ tự động đối chiếu lịch trình, tạo mới các chuyến bay thực tế theo thời gian tương ứng.
-          </p>
+      {/* Editor Modal Overlay (Tạo & Sửa template) */}
+      {isTemplateModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm overflow-y-auto animate-fadeIn"
+          onClick={() => setIsTemplateModalOpen(false)}
+        >
+          <div 
+            className="w-full max-w-7xl rounded-3xl bg-white p-6 md:p-8 shadow-2xl border border-slate-100 animate-slideUp max-h-[92vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-5 flex items-center justify-between pb-3 border-b border-slate-150">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📋</span>
+                <h3 className="title-font text-lg font-black text-slate-800">
+                  {editingTemplateId ? `Cập nhật Template: ${templateFormData.name}` : 'Thiết lập Template Mới'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsTemplateModalOpen(false)}
+                className="rounded-lg bg-slate-100 hover:bg-slate-200 p-1.5 text-slate-500 font-bold text-xs transition"
+              >
+                ✕ Đóng lại
+              </button>
+            </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <div>
-              <Label className="text-xs font-bold text-slate-600">Ngày bắt đầu tuần mới (Thứ 2)</Label>
-              <Input
-                type="date"
-                value={generateFormData.weekStartDate}
-                onChange={(e) =>
-                  setGenerateFormData((prev) => ({ ...prev, weekStartDate: e.target.value }))
-                }
-                className="mt-1 text-xs"
-              />
-              <p className="mt-1 text-[10px] font-medium text-slate-400 leading-tight">Yêu cầu chọn đúng ngày Thứ 2 làm mốc đầu tuần.</p>
+            {/* Error & Notice inside Modal */}
+            {apiError && (
+              <div className="mb-5 rounded-2xl border border-red-100 bg-red-50/50 p-4 text-xs font-semibold text-red-700 flex items-start gap-2.5 animate-fadeIn">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 shrink-0 mt-0.5 text-red-500">
+                  <path fillRule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.753-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clipRule="evenodd" />
+                </svg>
+                <span className="whitespace-pre-wrap">{apiError}</span>
+              </div>
+            )}
+
+            {adminNotice && (
+              <div className="mb-5 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 text-xs font-semibold text-emerald-700 flex items-start gap-2.5 animate-fadeIn">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4 shrink-0 mt-0.5 text-emerald-500">
+                  <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12Zm13.36-1.814a.75.75 0 1 0-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.14-.094l3.74-5.24Z" clipRule="evenodd" />
+                </svg>
+                <span>{adminNotice}</span>
+              </div>
+            )}
+
+            {/* Template Header Fields */}
+            <div className="grid gap-4 md:grid-cols-2 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+              <div>
+                <Label className="text-xs font-bold text-slate-600">Tên Template</Label>
+                <Input
+                  placeholder="VD: Lịch bay mùa hè 2026 - Tần suất cao"
+                  value={templateFormData.name}
+                  onChange={(e) =>
+                    setTemplateFormData((prev) => ({ ...prev, name: e.target.value }))
+                  }
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-bold text-slate-600">Mô tả lịch trình</Label>
+                <Input
+                  placeholder="VD: Áp dụng lịch bay định kỳ tăng tần suất trục vàng Hà Nội - Sài Gòn"
+                  value={templateFormData.description}
+                  onChange={(e) =>
+                    setTemplateFormData((prev) => ({ ...prev, description: e.target.value }))
+                  }
+                  className="mt-1"
+                />
+              </div>
+              <div className="md:col-span-2 flex items-center justify-between mt-2 pt-2 border-t border-slate-200/50">
+                <label className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={templateFormData.isActive}
+                    onChange={(e) =>
+                      setTemplateFormData((prev) => ({ ...prev, isActive: e.target.checked }))
+                    }
+                    className="h-4 w-4 rounded border-slate-300 text-indigo-650 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+                  />
+                  <span>Kích hoạt template này để sinh chuyến bay</span>
+                </label>
+              </div>
             </div>
-            <div>
-              <Label className="text-xs font-bold text-slate-600">Số tuần muốn sinh lịch</Label>
-              <Input
-                type="number"
-                min="1"
-                max="52"
-                value={generateFormData.numberOfWeeks}
-                onChange={(e) =>
-                  setGenerateFormData((prev) => ({
-                    ...prev,
-                    numberOfWeeks: parseInt(e.target.value, 10),
-                  }))
-                }
-                className="mt-1"
-              />
-              <p className="mt-1 text-[10px] font-bold text-slate-500">
-                Quy mô: {(selectedTemplate.details?.length || 0) * generateFormData.numberOfWeeks} chuyến bay mới sẽ được lập.
-              </p>
+
+            {/* Layout split scheduling system */}
+            <div className="grid gap-6 lg:grid-cols-[290px_1fr] mt-5">
+              {/* Predefined flight definitions */}
+              <aside className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shrink-0 max-h-[60vh] flex flex-col">
+                <h4 className="mb-3 text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider pb-2 border-b border-slate-200">
+                  <span>📋 Định nghĩa sẵn có</span>
+                </h4>
+                
+                <div className="space-y-3 overflow-y-auto pr-1 flex-1">
+                  {isLoadingFlightDefinitions && (
+                    <div className="text-xs text-center font-bold text-slate-400 py-6">Đang tải định nghĩa...</div>
+                  )}
+                  {!isLoadingFlightDefinitions && flightDefinitions.length === 0 && (
+                    <div className="text-xs text-center text-slate-400 py-6 font-bold">Chưa có dữ liệu định nghĩa.</div>
+                  )}
+                  {flightDefinitions.map((def) => (
+                    <div
+                      key={def.id}
+                      className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm space-y-2 hover:border-blue-400 hover:shadow transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-extrabold text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2 py-0.5">
+                          {def.flightNumber}
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-bold text-slate-700 leading-tight">
+                        📍 {def.departureAirportCode} → {def.arrivalAirportCode}
+                      </div>
+                      <div className="text-[10px] font-semibold text-slate-500">
+                        🕒 Giờ bay: {def.departureTime} - {def.arrivalTime}
+                      </div>
+                      
+                      {/* Select aircraft */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Chọn máy bay</label>
+                        <select
+                          id={`aircraft-${def.id}`}
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                          defaultValue=""
+                        >
+                          <option value="">
+                            {isLoadingAircrafts ? 'Đang tải...' : `Chọn máy bay... (${aircrafts.length})`}
+                          </option>
+                          {aircrafts.map((aircraft) => (
+                            <option key={aircraft.id || aircraft.aircraftId} value={aircraft.id || aircraft.aircraftId}>
+                              ✈️ {aircraft.registrationNumber || aircraft.model}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      {/* Select day of week */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Thêm vào thứ</label>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[
+                            { value: 0, label: 'T2' },
+                            { value: 1, label: 'T3' },
+                            { value: 2, label: 'T4' },
+                            { value: 3, label: 'T5' },
+                            { value: 4, label: 'T6' },
+                            { value: 5, label: 'T7' },
+                            { value: 6, label: 'CN' },
+                          ].map((day) => {
+                            const checked = (selectedTemplateDays[def.id] || []).includes(day.value)
+                            return (
+                              <label
+                                key={`${def.id}-day-${day.value}`}
+                                className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[10px] font-semibold text-slate-700"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => {
+                                    const nextChecked = e.target.checked
+                                    setSelectedTemplateDays((prev) => {
+                                      const current = Array.isArray(prev[def.id]) ? prev[def.id] : []
+                                      const next = nextChecked
+                                        ? [...current, day.value]
+                                        : current.filter((d) => d !== day.value)
+                                      return { ...prev, [def.id]: next }
+                                    })
+                                  }}
+                                  className="h-3 w-3 rounded border-slate-300 text-indigo-600"
+                                />
+                                <span>{day.label}</span>
+                              </label>
+                            )
+                          })}
+                        </div>
+                        <button
+                          type="button"
+                          className="w-full rounded-lg border border-slate-200 bg-blue-50 px-2 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 transition"
+                          onClick={() => {
+                            const aircraftSelect = document.getElementById(`aircraft-${def.id}`)
+                            const selectedAircraftId = aircraftSelect ? parseInt(aircraftSelect.value, 10) : null
+                            const selectedDays = (selectedTemplateDays[def.id] || []).slice().sort((a, b) => a - b)
+
+                            if (!selectedAircraftId) {
+                              setApiError('Vui lòng chọn máy bay trước khi thêm vào lịch trình!')
+                              setTimeout(() => setApiError(''), 3500)
+                              return
+                            }
+
+                            if (selectedDays.length === 0) {
+                              setApiError('Vui lòng chọn ít nhất 1 thứ để thêm vào lịch trình!')
+                              setTimeout(() => setApiError(''), 3500)
+                              return
+                            }
+
+                            const duplicateDays = selectedDays.filter((dayOfWeek) =>
+                              templateSlots.some(
+                                (slot) => slot.flightDefinition.id === def.id && slot.dayOfWeek === dayOfWeek,
+                              ),
+                            )
+
+                            if (duplicateDays.length > 0) {
+                              setApiError(`Flight ${def.flightNumber} đã được gán vào ${getWeekdayName(duplicateDays[0])}!`)
+                              setTimeout(() => setApiError(''), 3500)
+                              return
+                            }
+
+                            setTemplateSlots((prev) => [
+                              ...prev,
+                              ...selectedDays.map((dayOfWeek) => ({
+                                id: `${def.id}-${dayOfWeek}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+                                flightDefinition: { ...def, selectedAircraftId },
+                                dayOfWeek,
+                              })),
+                            ])
+                            setAdminNotice(`✅ Đã thêm thành công ${def.flightNumber} vào ${selectedDays.length} thứ đã chọn`)
+                            setTimeout(() => setAdminNotice(''), 2000)
+                            setSelectedTemplateDays((prev) => ({ ...prev, [def.id]: [] }))
+                            if (aircraftSelect) aircraftSelect.value = ''
+                          }}
+                        >
+                          Thêm
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </aside>
+
+              {/* 7-column Calendar Board */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 overflow-x-auto min-h-[40vh]">
+                {[0, 1, 2, 3, 4, 5, 6].map((dayIndex) => {
+                  const slotsForDay = templateSlots.filter((slot) => slot.dayOfWeek === dayIndex)
+                  return (
+                    <div
+                      key={dayIndex}
+                      className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 flex flex-col min-w-[125px] h-full"
+                    >
+                      <div className="mb-2 text-center pb-2 border-b border-slate-200">
+                        <p className="text-xs font-bold text-slate-800">{getWeekdayName(dayIndex)}</p>
+                        <p className="text-[10px] font-semibold text-slate-400">({slotsForDay.length} chuyến)</p>
+                      </div>
+                      <div className="space-y-2 flex-1 overflow-y-auto max-h-[45vh] pr-0.5">
+                        {slotsForDay.map((slot) => (
+                          <div
+                            key={slot.id}
+                            className="relative rounded-xl border border-blue-200 bg-blue-50/50 p-2 hover:border-blue-400 transition"
+                          >
+                            <p className="font-mono text-[11px] font-extrabold text-blue-700">
+                              ✈️ {slot.flightDefinition.flightNumber}
+                            </p>
+                            <p className="text-[10px] font-bold text-slate-700 mt-0.5">
+                              {slot.flightDefinition.departureAirportCode} ➔ {slot.flightDefinition.arrivalAirportCode}
+                            </p>
+                            <p className="text-[9px] font-medium text-slate-500">
+                              🕒 {slot.flightDefinition.departureTime?.substring(0, 5)}
+                            </p>
+                            {slot.flightDefinition.selectedAircraftId && (
+                              <p className="text-[8px] text-emerald-700 font-extrabold bg-emerald-50 border border-emerald-100 rounded px-1 mt-1 inline-block">
+                                Aircraft: #{slot.flightDefinition.selectedAircraftId}
+                              </p>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTemplateSlots((prev) => prev.filter((s) => s.id !== slot.id))
+                                setAdminNotice('Đã loại bỏ chuyến bay khỏi template nháp')
+                                setTimeout(() => setAdminNotice(''), 2000)
+                              }}
+                              className="mt-2 w-full rounded-lg bg-red-50 hover:bg-red-100 py-0.5 text-[9px] font-bold text-red-600 transition"
+                            >
+                              Xóa bỏ
+                            </button>
+                          </div>
+                        ))}
+                        {slotsForDay.length === 0 && (
+                          <div className="rounded-xl border border-dashed border-slate-350 p-4 text-center text-[10px] font-medium text-slate-400/80">
+                            Trống
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-            <div className="flex items-end">
+
+            {/* Modal Bottom Actions */}
+            <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-4">
+              <button
+                type="button"
+                onClick={() => setIsTemplateModalOpen(false)}
+                className="rounded-xl border border-slate-200 hover:bg-slate-100 px-5 py-2.5 text-xs font-bold text-slate-600 transition"
+              >
+                Hủy bỏ
+              </button>
+
               <button
                 type="button"
                 onClick={async () => {
+                  if (!templateFormData.name) {
+                    setApiError('Vui lòng nhập tên template')
+                    return
+                  }
+
+                  if (templateSlots.length === 0) {
+                    setApiError('Vui lòng thêm ít nhất 1 chuyến bay vào template')
+                    return
+                  }
+
                   try {
-                    setApiError('')
-                    setAdminNotice('')
-                    
-                    const templateId = Number(generateFormData.templateId)
-                    const numberOfWeeks = Number(generateFormData.numberOfWeeks)
-                    
-                    if (!templateId || templateId <= 0) {
-                      setApiError('Template ID không hợp lệ')
-                      return
+                    const details = templateSlots.map((slot) => {
+                      let prefix = 'FL'
+                      if (slot.flightDefinition.flightNumber) {
+                        const match = slot.flightDefinition.flightNumber.match(/^([A-Z]+)/)
+                        if (match) {
+                          prefix = match[1]
+                        }
+                      }
+
+                      const formatTimeValue = (time) => {
+                        if (!time) return '08:00:00'
+                        const timeStr = String(time).trim()
+                        if (timeStr.includes('T')) {
+                          const parts = timeStr.split('T')
+                          if (parts[1]) return parts[1].substring(0, 8)
+                        }
+                        if (timeStr.length === 5) return `${timeStr}:00`
+                        return timeStr.substring(0, 8)
+                      }
+
+                      const flightDefinitionId = Number(
+                        slot?.flightDefinition?.id ?? slot?.flightDefinition?.flightDefinitionId ?? 0
+                      )
+                      return {
+                        flightDefinitionId,
+                        aircraftOverrideId: Number(
+                          slot?.flightDefinition?.selectedAircraftId ?? slot?.flightDefinition?.defaultAircraftId ?? 0
+                        ) || null,
+                        dayOfWeek: parseInt(slot.dayOfWeek, 10),
+                        departureTimeOverride: formatTimeValue(slot.flightDefinition.departureTime),
+                        arrivalTimeOverride: formatTimeValue(slot.flightDefinition.arrivalTime),
+                        arrivalOffsetDaysOverride: 0,
+                        isActive: true,
+                        flightNumberPrefix: prefix,
+                        flightNumberSuffix: '',
+                      }
+                    })
+
+                    const templateData = {
+                      code: (templateFormData.name || 'TPL').trim().toUpperCase(),
+                      name: templateFormData.name,
+                      description: templateFormData.description,
+                      isActive: templateFormData.isActive,
+                      details,
                     }
-                    
-                    if (!numberOfWeeks || numberOfWeeks <= 0) {
-                      setApiError('Số tuần phải lớn hơn 0')
-                      return
-                    }
-                    
-                    if (!generateFormData.weekStartDate) {
-                      setApiError('Vui lòng chọn ngày bắt đầu')
+
+                    if (details.some((d) => !Number.isInteger(d.flightDefinitionId) || d.flightDefinitionId <= 0)) {
+                      setApiError('Khong the luu template: co detail chua map duoc FlightDefinitionId hop le.')
                       return
                     }
 
-                    const weekStartDateTime = new Date(generateFormData.weekStartDate + 'T00:00:00Z').toISOString()
-                    setAdminNotice('⏳ Đang sinh chuyến bay từ template...')
-                    
-                    const result = await generateFlightsFromTemplate({
-                      templateId: templateId,
-                      weekStartDate: weekStartDateTime,
-                      numberOfWeeks: numberOfWeeks,
-                    })
-                    
-                    console.log('📊 Result from API:', result)
-                    
-                    if (result.error || result.message?.includes('trùng') || result.message?.includes('đã tồn tại')) {
-                      const errorMsg = result.error || result.message || 'Có lỗi xảy ra khi sinh chuyến bay'
-                      setApiError(`❌ ${errorMsg}`)
-                      setAdminNotice('')
-                      return
+                    console.log('📤 Sending template payload to save:', templateData)
+
+                    if (editingTemplateId) {
+                      // Simulating updating by deleting then creating
+                      setAdminNotice(`⏳ Đang cập nhật template "${templateFormData.name}"...`)
+                      await deleteFlightTemplate(editingTemplateId)
                     }
+
+                    await createFlightTemplate(templateData)
+                    setAdminNotice(`✅ Đã lưu thành công template "${templateFormData.name}" với quy mô ${templateSlots.length} chuyến bay/tuần!`)
                     
-                    setAdminNotice(
-                      `✅ Thành công! Đã sinh thành công ${result.totalFlightsGenerated || 0} chuyến bay thực tế! ` +
-                      (result.totalFlightsSkipped > 0 ? `(Bỏ qua ${result.totalFlightsSkipped} chuyến trùng lặp)` : '')
-                    )
-                    setSelectedTemplate(null)
+                    setTemplateFormData({ name: '', description: '', isActive: true })
+                    setTemplateSlots([])
+                    setSelectedTemplateDays({})
+                    setEditingTemplateId(null)
+                    setIsTemplateModalOpen(false)
+
+                    // Reload templates
+                    const templates = await getFlightTemplates()
+                    setFlightTemplates(Array.isArray(templates) ? templates : [])
                   } catch (error) {
-                    console.error('❌ Lỗi khi sinh chuyến bay:', error)
-                    let errorMessage = 'Lỗi khi sinh chuyến bay'
-                    
-                    if (error.message) {
-                      if (error.message.includes('trùng') || error.message.includes('đã tồn tại')) {
-                        errorMessage = `❌ ${error.message}`
-                      } else if (error.message.includes('ValidationException')) {
-                        errorMessage = `⚠️ Dữ liệu không hợp lệ: ${error.message}`
-                      } else {
-                        errorMessage = `❌ ${error.message}`
-                      }
-                    }
-                    
-                    if (error.responseBody) {
-                      if (error.responseBody.detail) {
-                        errorMessage = `❌ ${error.responseBody.detail}`
-                      } else if (error.responseBody.title) {
-                        errorMessage = `❌ ${error.responseBody.title}`
-                      }
-                    }
-                    
-                    setApiError(errorMessage)
-                    setAdminNotice('')
+                    setApiError(error.message || 'Lỗi khi lưu template')
                   }
                 }}
-                className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-xs font-bold text-white transition-all shadow-md shadow-emerald-200"
+                className="rounded-xl bg-indigo-600 hover:bg-indigo-700 px-6 py-2.5 text-xs font-bold text-white transition-all shadow-md shadow-indigo-200 flex items-center gap-2"
               >
-                Sinh Hàng Loạt {(selectedTemplate.details?.length || 0) * generateFormData.numberOfWeeks} Chuyến Bay
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="h-4 w-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                </svg>
+                {editingTemplateId ? 'Lưu thay đổi cập nhật' : `Lưu Lịch Trình Template (${templateSlots.length} chuyến bay/tuần)`}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Grid: Weekly template board & definitions shelf */}
-      <section className="rounded-3xl bg-white p-6 shadow-xl border border-slate-100 shadow-slate-100/50">
-        <div className="mb-5">
-          <h3 className="text-lg font-black text-slate-800">📅 Khung Lập Lịch Tuần (Weekly Schedule)</h3>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">Kéo hoặc chọn định nghĩa chuyến bay ở bên trái và gán vào thứ tương ứng bên phải.</p>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
-          {/* Flight Definitions scrollbox */}
-          <aside className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shrink-0 max-h-[700px] flex flex-col">
-            <h4 className="mb-3 text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider pb-2 border-b border-slate-200">
-              <span>📋 Định nghĩa sẵn có</span>
-            </h4>
-            
-            <div className="space-y-3 overflow-y-auto pr-1 flex-1">
-              {isLoadingFlightDefinitions && (
-                <div className="text-xs text-center font-bold text-slate-400 py-6">Đang tải định nghĩa...</div>
-              )}
-              {!isLoadingFlightDefinitions && flightDefinitions.length === 0 && (
-                <div className="text-xs text-center text-slate-400 py-6 font-bold">Chưa có dữ liệu định nghĩa.</div>
-              )}
-              {flightDefinitions.map((def) => (
-                <div
-                  key={def.id}
-                  className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm space-y-2 hover:border-blue-400 hover:shadow transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs font-extrabold text-blue-700 bg-blue-50 border border-blue-100 rounded-lg px-2 py-0.5">
-                      {def.flightNumber}
-                    </span>
-                  </div>
-                  <div className="text-[11px] font-bold text-slate-700 leading-tight">
-                    📍 {def.departureAirportCode} → {def.arrivalAirportCode}
-                  </div>
-                  <div className="text-[10px] font-semibold text-slate-500">
-                    🕒 Giờ bay: {def.departureTime} - {def.arrivalTime}
-                  </div>
-                  
-                  {/* Select aircraft */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Chọn máy bay</label>
-                    <select
-                      id={`aircraft-${def.id}`}
-                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] font-medium text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
-                      defaultValue=""
-                    >
-                      <option value="">
-                        {isLoadingAircrafts ? 'Đang tải...' : `Chọn máy bay... (${aircrafts.length})`}
-                      </option>
-                      {aircrafts.map((aircraft) => (
-                        <option key={aircraft.id || aircraft.aircraftId} value={aircraft.id || aircraft.aircraftId}>
-                          ✈️ {aircraft.registrationNumber || aircraft.model}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  {/* Select day of week */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Thêm vào thứ</label>
-                    <select
-                      className="w-full rounded-lg border border-slate-200 bg-blue-50 px-2 py-1.5 text-[11px] font-bold text-blue-700 focus:outline-none"
-                      onChange={(e) => {
-                        const dayOfWeek = parseInt(e.target.value, 10)
-                        if (dayOfWeek >= 0) {
-                          // Lấy aircraft được chọn
-                          const aircraftSelect = document.getElementById(`aircraft-${def.id}`)
-                          const selectedAircraftId = aircraftSelect ? parseInt(aircraftSelect.value, 10) : null
-                          
-                          if (!selectedAircraftId) {
-                            setApiError('Vui lòng chọn máy bay trước khi thêm vào lịch trình!')
-                            setTimeout(() => setApiError(''), 3500)
-                            e.target.value = ''
-                            return
-                          }
-                          
-                          // Kiểm tra trùng
-                          const isDuplicate = templateSlots.some(
-                            (slot) => slot.flightDefinition.id === def.id && slot.dayOfWeek === dayOfWeek
-                          )
-                          if (isDuplicate) {
-                            setApiError(`Flight ${def.flightNumber} đã được gán vào ${getWeekdayName(dayOfWeek)}!`)
-                            setTimeout(() => setApiError(''), 3500)
-                            e.target.value = ''
-                            return
-                          }
-
-                          setTemplateSlots((prev) => [
-                            ...prev,
-                            {
-                              id: `${def.id}-${dayOfWeek}-${Date.now()}`,
-                              flightDefinition: { ...def, selectedAircraftId },
-                              dayOfWeek,
-                            },
-                          ])
-                          setAdminNotice(`✅ Đã thêm thành công ${def.flightNumber} vào ${getWeekdayName(dayOfWeek)}`)
-                          setTimeout(() => setAdminNotice(''), 2000)
-                          e.target.value = ''
-                          if (aircraftSelect) aircraftSelect.value = ''
-                        }
-                      }}
-                    >
-                      <option value="">Chọn thứ cần thêm...</option>
-                      <option value="0">Thứ 2</option>
-                      <option value="1">Thứ 3</option>
-                      <option value="2">Thứ 4</option>
-                      <option value="3">Thứ 5</option>
-                      <option value="4">Thứ 6</option>
-                      <option value="5">Thứ 7</option>
-                      <option value="6">Chủ nhật</option>
-                    </select>
-                  </div>
-                </div>
-              ))}
+      {/* Generator panel (glassmorphic popup modal overlay) */}
+      {selectedTemplate && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm overflow-y-auto animate-fadeIn"
+          onClick={() => setSelectedTemplate(null)}
+        >
+          <div 
+            className="w-full max-w-xl rounded-3xl bg-white p-6 md:p-8 shadow-2xl border border-slate-100 animate-slideUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-black text-slate-800 flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xs">🚀</span>
+                <span>Khởi tạo chuyến bay tự động từ Template</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSelectedTemplate(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+              >
+                ✕
+              </button>
             </div>
-          </aside>
+            
+            <p className="mb-4 text-xs font-bold text-indigo-900 bg-indigo-50 border border-indigo-100 rounded-xl p-3 leading-relaxed">
+              Template kích hoạt: <strong className="underline">{selectedTemplate.name}</strong> ({selectedTemplate.details?.length || 0} chuyến bay/tuần).
+              Hệ thống sẽ tự động đối chiếu lịch trình, tạo mới các chuyến bay thực tế theo thời gian tương ứng.
+            </p>
 
-          {/* 7-column Calendar Board */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2 overflow-x-auto min-h-[500px]">
-            {[0, 1, 2, 3, 4, 5, 6].map((dayIndex) => {
-              const slotsForDay = templateSlots.filter((slot) => slot.dayOfWeek === dayIndex)
-              return (
-                <div
-                  key={dayIndex}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 p-2.5 flex flex-col min-w-[125px] h-full"
-                >
-                  <div className="mb-2 text-center pb-2 border-b border-slate-200">
-                    <p className="text-xs font-bold text-slate-800">{getWeekdayName(dayIndex)}</p>
-                    <p className="text-[10px] font-semibold text-slate-400">({slotsForDay.length} chuyến)</p>
-                  </div>
-                  <div className="space-y-2 flex-1 overflow-y-auto max-h-[500px] pr-0.5">
-                    {slotsForDay.map((slot) => (
-                      <div
-                        key={slot.id}
-                        className="relative rounded-xl border border-blue-200 bg-blue-50/50 p-2.5 hover:border-blue-400 transition"
-                      >
-                        <p className="font-mono text-xs font-extrabold text-blue-700">
-                          ✈️ {slot.flightDefinition.flightNumber}
-                        </p>
-                        <p className="text-[10px] font-bold text-slate-700 mt-1">
-                          {slot.flightDefinition.departureAirportCode} ➔ {slot.flightDefinition.arrivalAirportCode}
-                        </p>
-                        <p className="text-[10px] font-medium text-slate-500">
-                          🕒 {slot.flightDefinition.departureTime?.substring(0, 5)}
-                        </p>
-                        {slot.flightDefinition.selectedAircraftId && (
-                          <p className="text-[9px] text-emerald-700 font-bold bg-emerald-50 border border-emerald-100 rounded px-1 py-0.5 mt-1 inline-block">
-                            Aircraft ID: {slot.flightDefinition.selectedAircraftId}
-                          </p>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTemplateSlots((prev) => prev.filter((s) => s.id !== slot.id))
-                            setAdminNotice('Đã loại bỏ chuyến bay khỏi template nháp')
-                            setTimeout(() => setAdminNotice(''), 2000)
-                          }}
-                          className="mt-2 w-full rounded-lg bg-red-50 hover:bg-red-100 py-1 text-[10px] font-bold text-red-600 transition"
-                        >
-                          Xóa bỏ
-                        </button>
-                      </div>
-                    ))}
-                    {slotsForDay.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-[10px] font-medium text-slate-400/80">
-                        Trống
-                      </div>
-                    )}
-                  </div>
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs font-bold text-slate-600">Ngày bắt đầu tuần mới (Thứ 2) <span className="text-rose-500">*</span></Label>
+                <Input
+                  type="date"
+                  value={generateFormData.weekStartDate}
+                  onChange={(e) =>
+                    setGenerateFormData((prev) => ({ ...prev, weekStartDate: e.target.value }))
+                  }
+                  className="mt-1 text-xs"
+                />
+                <p className="mt-1.5 text-[10px] font-bold text-amber-700 bg-amber-50 rounded px-2.5 py-1 border border-amber-100">⚠️ Yêu cầu chọn đúng ngày Thứ 2 làm mốc đầu tuần (Chỉ được chọn Thứ 2).</p>
+              </div>
+              
+              <div>
+                <Label className="text-xs font-bold text-slate-600">Số tuần muốn sinh lịch</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="52"
+                  value={generateFormData.numberOfWeeks}
+                  onChange={(e) =>
+                    setGenerateFormData((prev) => ({
+                      ...prev,
+                      numberOfWeeks: parseInt(e.target.value, 10),
+                    }))
+                  }
+                  className="mt-1"
+                />
+                <p className="mt-1 text-[10px] font-bold text-slate-500">
+                  Quy mô: {(selectedTemplate.details?.length || 0) * generateFormData.numberOfWeeks} chuyến bay mới sẽ được lập.
+                </p>
+              </div>
+
+              {apiError && (
+                <div className="rounded-xl bg-red-50 border border-red-100 p-3 text-xs text-red-700 font-semibold leading-relaxed">
+                  {apiError}
                 </div>
-              )
-            })}
+              )}
+
+              <div className="flex gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      setApiError('')
+                      setAdminNotice('')
+                      
+                      const templateId = Number(generateFormData.templateId)
+                      const numberOfWeeks = Number(generateFormData.numberOfWeeks)
+                      
+                      if (!templateId || templateId <= 0) {
+                        setApiError('Template ID không hợp lệ')
+                        return
+                      }
+                      
+                      if (!numberOfWeeks || numberOfWeeks <= 0) {
+                        setApiError('Số tuần phải lớn hơn 0')
+                        return
+                      }
+                      
+                      if (!generateFormData.weekStartDate) {
+                        setApiError('Vui lòng chọn ngày bắt đầu')
+                        return
+                      }
+
+                      // STRICT MONDAY-ONLY VALIDATION
+                      const dateParts = generateFormData.weekStartDate.split('-')
+                      const startDObj = new Date(dateParts[0], dateParts[1] - 1, dateParts[2])
+                      if (startDObj.getDay() !== 1) { // 1 = Monday
+                        setApiError('⚠️ Ngày bắt đầu phải là Thứ 2 (Monday)! Vui lòng chọn lại.')
+                        return
+                      }
+
+                      const weekStartDateTime = new Date(generateFormData.weekStartDate + 'T00:00:00Z').toISOString()
+                      setAdminNotice('⏳ Đang sinh chuyến bay từ template...')
+                      
+                      const result = await generateFlightsFromTemplate({
+                        templateId: templateId,
+                        weekStartDate: weekStartDateTime,
+                        numberOfWeeks: numberOfWeeks,
+                      })
+                      
+                      console.log('📊 Result from API:', result)
+                      
+                      if (result.error || result.message?.includes('trùng') || result.message?.includes('đã tồn tại')) {
+                        const errorMsg = result.error || result.message || 'Có lỗi xảy ra khi sinh chuyến bay'
+                        setApiError(`❌ ${errorMsg}`)
+                        setAdminNotice('')
+                        return
+                      }
+                      
+                      setAdminNotice(
+                        `✅ Thành công! Đã sinh thành công ${result.totalFlightsGenerated || 0} chuyến bay thực tế! ` +
+                        (result.totalFlightsSkipped > 0 ? `(Bỏ qua ${result.totalFlightsSkipped} chuyến trùng lặp)` : '')
+                      )
+                      setSelectedTemplate(null)
+                    } catch (error) {
+                      console.error('❌ Lỗi khi sinh chuyến bay:', error)
+                      let errorMessage = 'Lỗi khi sinh chuyến bay'
+                      
+                      if (error.message) {
+                        if (error.message.includes('trùng') || error.message.includes('đã tồn tại')) {
+                          errorMessage = `❌ ${error.message}`
+                        } else if (error.message.includes('ValidationException')) {
+                          errorMessage = `⚠️ Dữ liệu không hợp lệ: ${error.message}`
+                        } else {
+                          errorMessage = `❌ ${error.message}`
+                        }
+                      }
+                      
+                      if (error.responseBody) {
+                        if (error.responseBody.detail) {
+                          errorMessage = `❌ ${error.responseBody.detail}`
+                        } else if (error.responseBody.title) {
+                          errorMessage = `❌ ${error.responseBody.title}`
+                        }
+                      }
+                      
+                      setApiError(errorMessage)
+                      setAdminNotice('')
+                    }
+                  }}
+                  className="flex-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 text-xs font-bold text-white transition-all shadow-md shadow-emerald-200"
+                >
+                  Sinh Hàng Loạt {(selectedTemplate.details?.length || 0) * generateFormData.numberOfWeeks} Chuyến Bay
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedTemplate(null)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
+                >
+                  Hủy bỏ
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-      </section>
+      )}
 
       {/* Viewing template detail overlay modal */}
       {viewingTemplateDetail && (
@@ -7021,4 +7334,8 @@ function App() {
 }
 
 export default App
+
+
+
+
 

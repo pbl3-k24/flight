@@ -3,6 +3,7 @@ namespace API.Application.Services;
 using API.Application.Dtos.Admin;
 using API.Application.Exceptions;
 using API.Application.Interfaces;
+using API.Application.Common;
 using API.Domain.Entities;
 using API.Infrastructure.Data;
 using Microsoft.Extensions.Logging;
@@ -434,6 +435,27 @@ public class FlightAdminService : IFlightAdminService
             .OrderByDescending(f => f.DepartureTime)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .ToList();
+
+        var response = new List<FlightManagementResponse>();
+        foreach (var flight in flights)
+        {
+            response.Add(await MapFlightResponseAsync(flight));
+        }
+
+        return response;
+    }
+
+    public async Task<List<FlightManagementResponse>> GetFlightsByDateAsync(DateOnly date)
+    {
+        var dayStartUtc = VietnamTime.VietnamDayStartToUtc(date.ToDateTime(TimeOnly.MinValue));
+        var dayEndUtcExclusive = VietnamTime.VietnamDayEndExclusiveToUtc(date.ToDateTime(TimeOnly.MinValue));
+
+        var flights = (await _unitOfWork.Flights.GetAllAsync())
+            .Where(f => !f.IsDeleted
+                        && f.DepartureTime >= dayStartUtc
+                        && f.DepartureTime < dayEndUtcExclusive)
+            .OrderBy(f => f.DepartureTime)
             .ToList();
 
         var response = new List<FlightManagementResponse>();

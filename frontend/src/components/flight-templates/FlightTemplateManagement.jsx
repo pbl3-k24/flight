@@ -17,7 +17,7 @@ const emptyTemplate = {
 }
 
 const normalizeTemplate = (template) => ({
-  id: template.id ?? template.templateId ?? template.Id ?? null,
+  id: template?.id ?? template?.templateId ?? template?.Id ?? null,
   code: template.code || '',
   name: template.name || '',
   description: template.description || '',
@@ -28,15 +28,15 @@ const normalizeTemplate = (template) => ({
 })
 
 const mapDetailFromApi = (detail) => ({
-  id: detail.id ?? null,
+  id: detail?.id ?? null,
   tempId: detail.id ? null : `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`,
   flightDefinitionId: detail.flightDefinitionId,
   dayOfWeek: detail.dayOfWeek,
-  aircraftOverrideId: detail.aircraftOverrideId ?? null,
-  departureTimeOverride: detail.departureTimeOverride ?? null,
-  arrivalTimeOverride: detail.arrivalTimeOverride ?? null,
-  arrivalOffsetDaysOverride: detail.arrivalOffsetDaysOverride ?? null,
-  isActive: detail.isActive ?? true,
+  aircraftOverrideId: detail?.aircraftOverrideId ?? null,
+  departureTimeOverride: detail?.departureTimeOverride ?? null,
+  arrivalTimeOverride: detail?.arrivalTimeOverride ?? null,
+  arrivalOffsetDaysOverride: detail?.arrivalOffsetDaysOverride ?? null,
+  isActive: detail?.isActive ?? true,
   flightNumber: detail.flightNumber,
   routeName: detail.routeName,
   departureTime: detail.departureTime,
@@ -44,25 +44,53 @@ const mapDetailFromApi = (detail) => ({
   arrivalOffsetDays: detail.arrivalOffsetDays,
 })
 
+const toNullableNumber = (value) => {
+  if (value === '' || value === null || value === undefined) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const toTimeOrNull = (value) => {
+  const normalized = flightTemplateApi.normalizeTimeValue(value)
+  if (!normalized || typeof normalized !== 'string') return null
+  return /^\d{2}:\d{2}:\d{2}$/.test(normalized) ? normalized : null
+}
+
 const mapDetailToPayload = (detail) => ({
-  flightDefinitionId: detail.flightDefinitionId,
-  dayOfWeek: detail.dayOfWeek,
-  aircraftOverrideId: detail.aircraftOverrideId ?? null,
-  departureTimeOverride: flightTemplateApi.normalizeTimeValue(detail.departureTimeOverride),
-  arrivalTimeOverride: flightTemplateApi.normalizeTimeValue(detail.arrivalTimeOverride),
-  arrivalOffsetDaysOverride: detail.arrivalOffsetDaysOverride ?? null,
-  isActive: Boolean(detail.isActive),
+  FlightDefinitionId: Number(detail.flightDefinitionId),
+  DayOfWeek: Number(detail.dayOfWeek),
+  AircraftOverrideId: toNullableNumber(detail.aircraftOverrideId),
+  DepartureTimeOverride: toTimeOrNull(detail.departureTimeOverride),
+  ArrivalTimeOverride: toTimeOrNull(detail.arrivalTimeOverride),
+  ArrivalOffsetDaysOverride: toNullableNumber(detail.arrivalOffsetDaysOverride),
+  IsActive: Boolean(detail.isActive),
 })
 
 const mapTemplatePayload = (template, details) => ({
-  code: template.code?.trim(),
-  name: template.name?.trim(),
-  description: template.description || null,
-  effectiveFrom: template.effectiveFrom || null,
-  effectiveTo: template.effectiveTo || null,
-  isActive: Boolean(template.isActive),
-  details: details.map(mapDetailToPayload),
+  Code: String(template.code ?? '').trim().toUpperCase(),
+  Name: String(template.name ?? '').trim(),
+  Description: template.description || null,
+  EffectiveFrom: template.effectiveFrom || null,
+  EffectiveTo: template.effectiveTo || null,
+  IsActive: Boolean(template.isActive),
+  Details: details.map(mapDetailToPayload),
 })
+
+const validateDetailPayload = (detail) => {
+  if (!Number.isInteger(detail.FlightDefinitionId) || detail.FlightDefinitionId <= 0) {
+    return 'flightDefinitionId phai la ID FlightDefinition hop le (> 0).'
+  }
+  if (!Number.isInteger(detail.DayOfWeek) || detail.DayOfWeek < 0 || detail.DayOfWeek > 6) {
+    return 'dayOfWeek phai nam trong khoang 0..6.'
+  }
+  if (detail.AircraftOverrideId !== null && (!Number.isInteger(detail.AircraftOverrideId) || detail.AircraftOverrideId <= 0)) {
+    return 'aircraftOverrideId neu co phai > 0.'
+  }
+  if (detail.ArrivalOffsetDaysOverride !== null && (!Number.isInteger(detail.ArrivalOffsetDaysOverride) || detail.ArrivalOffsetDaysOverride < 0 || detail.ArrivalOffsetDaysOverride > 2)) {
+    return 'arrivalOffsetDaysOverride phai trong khoang 0..2.'
+  }
+  return ''
+}
 
 const validateTemplate = (template) => {
   const errors = {}
@@ -121,7 +149,7 @@ export default function FlightTemplateManagement() {
       const data = await flightTemplateApi.getFlightTemplates()
       setTemplates(data.map(normalizeTemplate))
     } catch (error) {
-      setTemplatesError(error.message || 'Không thể tải danh sách templates.')
+      setTemplatesError(error.message || 'Khï¿½ng th? t?i danh sï¿½ch templates.')
     } finally {
       setLoadingTemplates(false)
     }
@@ -138,7 +166,7 @@ export default function FlightTemplateManagement() {
       setFlightDefinitions(definitions)
       setAircrafts(aircraftList)
     } catch (error) {
-      setActionError(error.message || 'Không thể tải dữ liệu flight definition / aircraft.')
+      setActionError(error.message || 'Khï¿½ng th? t?i d? li?u flight definition / aircraft.')
     } finally {
       setLoadingDefinitions(false)
       setLoadingAircrafts(false)
@@ -194,7 +222,7 @@ export default function FlightTemplateManagement() {
       setMode('detail')
       setDetailMode(modeType)
     } catch (error) {
-      setActionError(error.message || 'Không thể tải chi tiết template.')
+      setActionError(error.message || 'Khï¿½ng th? t?i chi ti?t template.')
     }
   }
 
@@ -219,17 +247,32 @@ export default function FlightTemplateManagement() {
 
     try {
       const payload = mapTemplatePayload(templateForm, detailItems)
+      if (!payload.Code) {
+        setActionError('Code la bat buoc.')
+        return
+      }
+      if (!Array.isArray(payload.Details) || payload.Details.length === 0) {
+        setActionError('Template phai co it nhat 1 detail.')
+        return
+      }
+      for (let i = 0; i < payload.Details.length; i += 1) {
+        const err = validateDetailPayload(payload.Details[i])
+        if (err) {
+          setActionError(`Detail #${i + 1}: ${err}`)
+          return
+        }
+      }
       if (detailMode === 'create') {
         await flightTemplateApi.createFlightTemplate(payload)
-        setNotice('Đã tạo template thành công.')
+        setNotice('Dï¿½ t?o template thï¿½nh cï¿½ng.')
       } else {
         await flightTemplateApi.updateFlightTemplate(templateForm.id, payload)
-        setNotice('Đã cập nhật template thành công.')
+        setNotice('Dï¿½ cập nhật template thï¿½nh cï¿½ng.')
       }
       await loadTemplates()
       setMode('list')
     } catch (error) {
-      setActionError(error.message || 'Không thể lưu template.')
+      setActionError(error.message || 'Khï¿½ng th? luu template.')
     } finally {
       setSaving(false)
     }
@@ -237,16 +280,16 @@ export default function FlightTemplateManagement() {
 
   const handleDeleteTemplate = async (template) => {
     if (!template?.id) return
-    if (!window.confirm(`Xóa template "${template.name}"?`)) return
+    if (!window.confirm(`Xï¿½a template "${template.name}"?`)) return
 
     setDeletingId(template.id)
     setActionError('')
     try {
       await flightTemplateApi.deleteFlightTemplate(template.id)
-      setNotice(`Đã xóa template "${template.name}".`)
+      setNotice(`Dï¿½ xï¿½a template "${template.name}".`)
       await loadTemplates()
     } catch (error) {
-      setActionError(error.message || 'Không thể xóa template.')
+      setActionError(error.message || 'Khï¿½ng th? xï¿½a template.')
     } finally {
       setDeletingId(null)
     }
@@ -301,7 +344,7 @@ export default function FlightTemplateManagement() {
       const result = await flightTemplateApi.generateFlightsFromTemplate(payload)
       setGenerateModal((prev) => ({ ...prev, result }))
     } catch (error) {
-      setGenerateModal((prev) => ({ ...prev, error: error.message || 'Không thể generate flights.' }))
+      setGenerateModal((prev) => ({ ...prev, error: error.message || 'Khï¿½ng th? generate flights.' }))
     } finally {
       setGenerating(false)
     }
@@ -312,12 +355,17 @@ export default function FlightTemplateManagement() {
       <div className="space-y-4">
         {(notice || actionError) && (
           <div
-            className={`rounded-2xl px-4 py-3 text-sm ${
+            className={`flex items-center gap-2.5 rounded-2xl px-4 py-3 text-sm ${
               actionError
                 ? 'border border-red-200 bg-red-50 text-red-700'
                 : 'border border-emerald-200 bg-emerald-50 text-emerald-700'
             }`}
           >
+            <svg className="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              {actionError
+                ? <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                : <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />}
+            </svg>
             {actionError || notice}
           </div>
         )}
@@ -348,68 +396,128 @@ export default function FlightTemplateManagement() {
     )
   }
 
+  const isModeCreate = detailMode === 'create'
+  const isModeEdit = detailMode === 'edit'
+  const isModeView = detailMode === 'view'
+
   return (
     <div className="space-y-4">
+      {/* Notice / Error banner */}
       {(notice || actionError) && (
         <div
-          className={`rounded-2xl px-4 py-3 text-sm ${
+          className={`flex items-center gap-2.5 rounded-2xl px-4 py-3 text-sm ${
             actionError
               ? 'border border-red-200 bg-red-50 text-red-700'
               : 'border border-emerald-200 bg-emerald-50 text-emerald-700'
           }`}
         >
+          <svg className="h-4 w-4 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            {actionError
+              ? <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              : <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />}
+          </svg>
           {actionError || notice}
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      {/* Action bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-5 py-3.5 shadow-lg shadow-slate-100">
+        {/* Back button */}
         <button
           type="button"
           onClick={() => {
             setMode('list')
             setDetailMode('view')
           }}
-          className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+          className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm transition hover:bg-slate-50"
         >
-          ← Quay lại danh sách
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Quay lại danh sách
         </button>
 
+        {/* Mode badge */}
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${
+          isModeCreate ? 'bg-blue-100 text-blue-700'
+          : isModeEdit ? 'bg-amber-100 text-amber-700'
+          : 'bg-slate-100 text-slate-600'
+        }`}>
+          {isModeCreate ? '✦ Tạo mới' : isModeEdit ? '✎ Đang chỉnh sửa' : '◎ Chế độ xem'}
+        </span>
+
+        {/* Right actions */}
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => openGenerateModal(templateForm)}
-            disabled={!templateForm.id}
-            className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-          >
-            Generate flights
-          </button>
-          {detailMode === 'view' && (
+          {templateForm.id && (
+            <button
+              type="button"
+              onClick={() => openGenerateModal(templateForm)}
+              className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+            >
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Generate Flights
+            </button>
+          )}
+
+          {isModeView && (
             <button
               type="button"
               onClick={() => setDetailMode('edit')}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+              className="flex items-center gap-1.5 rounded-xl bg-[#1E40AF] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800"
             >
-              Chuyển sang sửa
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Chỉnh sửa
             </button>
           )}
-          {detailMode !== 'view' && (
+
+          {!isModeView && (
             <button
               type="button"
               onClick={handleSaveTemplate}
               disabled={saving}
-              className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {saving ? 'Đang lưu...' : 'Lưu template'}
+              {saving ? (
+                <>
+                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                  </svg>
+                  Đang lưu...
+                </>
+              ) : (
+                <>
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Lưu template
+                </>
+              )}
             </button>
           )}
         </div>
       </div>
 
+      {/* Loading definitions */}
+      {(loadingDefinitions || loadingAircrafts) && (
+        <div className="flex items-center justify-center gap-2.5 rounded-2xl border border-dashed border-slate-300 bg-white py-4 text-sm text-slate-500">
+          <svg className="h-4 w-4 animate-spin text-blue-400" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+          </svg>
+          Đang tải dữ liệu flight definition / aircraft...
+        </div>
+      )}
+
       <FlightTemplateForm
         value={templateForm}
         errors={templateErrors}
         onChange={setTemplateForm}
-        readOnly={detailMode === 'view'}
+        readOnly={isModeView}
       />
 
       <FlightTemplateDetailTable
@@ -420,19 +528,17 @@ export default function FlightTemplateManagement() {
           setEditingDetail(null)
           setDetailModalOpen(true)
         }}
-        onEdit={(detail) => {
+        onEdit={(detail, fromInline) => {
+          if (fromInline) {
+            handleDetailSave(detail)
+            return
+          }
           setEditingDetail(detail)
           setDetailModalOpen(true)
         }}
         onDelete={handleDetailDelete}
-        readOnly={detailMode === 'view'}
+        readOnly={isModeView}
       />
-
-      {(loadingDefinitions || loadingAircrafts) && (
-        <div className="rounded-xl border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500">
-          Đang tải danh sách flight definition / aircraft...
-        </div>
-      )}
 
       <FlightTemplateDetailForm
         open={detailModalOpen}

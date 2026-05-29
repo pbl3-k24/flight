@@ -7,6 +7,7 @@ using API.Application.Services;
 using API.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using System.Security.Claims;
 
 [ApiController]
@@ -15,14 +16,20 @@ using System.Security.Claims;
 public class PaymentsController : ControllerBase
 {
     private readonly IPaymentService _paymentService;
+    private readonly IPaymentRepository _paymentRepository;
     private readonly ILogger<PaymentsController> _logger;
+    private readonly IConfiguration _configuration;
 
     public PaymentsController(
         IPaymentService paymentService,
-        ILogger<PaymentsController> logger)
+        IPaymentRepository paymentRepository,
+        ILogger<PaymentsController> logger,
+        IConfiguration configuration)
     {
         _paymentService = paymentService;
+        _paymentRepository = paymentRepository;
         _logger = logger;
+        _configuration = configuration;
     }
 
     /// <summary>
@@ -183,6 +190,7 @@ public class PaymentsController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> VnpayReturnAsync()
     {
+        API.Domain.Entities.Payment? matchedPayment = null;
         try
         {
             var queryParams = Request.Query
@@ -204,6 +212,13 @@ public class PaymentsController : ControllerBase
             var payDate = queryParams.GetValueOrDefault("vnp_PayDate", "N/A");
             var transactionNo = queryParams.GetValueOrDefault("vnp_TransactionNo", "N/A");
             var secureHash = queryParams.GetValueOrDefault("vnp_SecureHash", "");
+
+            matchedPayment = (await _paymentRepository.GetAllAsync())
+                .Where(p => !string.IsNullOrWhiteSpace(p.TransactionRef)
+                    && string.Equals(p.TransactionRef.Trim(), txnRef, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(p => p.Status == 0)
+                .ThenByDescending(p => p.CreatedAt)
+                .FirstOrDefault();
 
             // vnp_ResponseCode = "00" là thành công
             var isSuccess = responseCode == "00";
@@ -255,48 +270,42 @@ public class PaymentsController : ControllerBase
             }
 
             // Trả về HTML đơn giản để xem kết quả ngay trên browser
-            var cssClass = isSuccess ? "success" : "fail";
-            var statusText = isSuccess ? "✅ Thanh toán thành công" : "❌ Thanh toán thất bại / bị hủy";
-            var amountDisplay = long.TryParse(amount, out var amt) ? (amt / 100).ToString("N0") + " VND" : amount;
-            var allParams = string.Join("\n", queryParams.OrderBy(x => x.Key).Select(x => $"{x.Key} = {x.Value}"));
+            var frontendReturnBaseUrl = _configuration["AppSettings:FrontendPaymentReturnUrl"]
+                ?? "http://localhost:5173/payment-result";
+            var redirectUrl = QueryHelpers.AddQueryString(frontendReturnBaseUrl, new Dictionary<string, string?>
+            {
+                ["provider"] = "vnpay",
+                ["success"] = isSuccess ? "1" : "0",
+                ["bookingId"] = matchedPayment?.BookingId.ToString(),
+                ["paymentId"] = matchedPayment?.Id.ToString(),
+                ["responseCode"] = responseCode,
+                ["transactionStatus"] = transactionStatus,
+                ["txnRef"] = txnRef,
+                ["transactionNo"] = transactionNo,
+                ["amount"] = amount,
+                ["bankCode"] = bankCode,
+                ["orderInfo"] = orderInfo
+            });
 
-            var html = $$"""
-                <!DOCTYPE html>
-                <html lang="vi">
-                <head><meta charset="utf-8"><title>VNPAY Ket qua</title>
-                <style>
-                  body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; }
-                  .success { color: green; } .fail { color: red; }
-                  table { width: 100%; border-collapse: collapse; }
-                  td, th { border: 1px solid #ccc; padding: 8px; text-align: left; }
-                  th { background: #f0f0f0; }
-                </style></head>
-                <body>
-                  <h2 class="{{cssClass}}">{{statusText}}</h2>
-                  <table>
-                    <tr><th>Thong tin</th><th>Gia tri</th></tr>
-                    <tr><td>Ma giao dich (TxnRef)</td><td>{{txnRef}}</td></tr>
-                    <tr><td>So GD VNPAY</td><td>{{transactionNo}}</td></tr>
-                    <tr><td>So tien</td><td>{{amountDisplay}}</td></tr>
-                    <tr><td>Ngan hang</td><td>{{bankCode}}</td></tr>
-                    <tr><td>Noi dung</td><td>{{orderInfo}}</td></tr>
-                    <tr><td>Ngay thanh toan</td><td>{{payDate}}</td></tr>
-                    <tr><td>Response Code</td><td>{{responseCode}}</td></tr>
-                    <tr><td>Transaction Status</td><td>{{transactionStatus}}</td></tr>
-                  </table>
-                  <br/>
-                  <details><summary>Toan bo params nhan duoc</summary>
-                  <pre>{{allParams}}</pre>
-                  </details>
-                </body></html>
-                """;
-
-            return Content(html, "text/html");
+            _logger.LogInformation("[VNPAY RESPONSE] Redirecting user to frontend: {RedirectUrl}", redirectUrl);
+            return Redirect(redirectUrl);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling VNPAY return");
-            return Content("<html><body><h2>Error processing payment result</h2></body></html>", "text/html");
+            var frontendReturnBaseUrl = _configuration["AppSettings:FrontendPaymentReturnUrl"]
+                ?? "http://localhost:5173/payment-result";
+            var fallbackUrl = QueryHelpers.AddQueryString(frontendReturnBaseUrl, new Dictionary<string, string?>
+            {
+                ["provider"] = "vnpay",
+                ["success"] = "0",
+                ["bookingId"] = matchedPayment?.BookingId.ToString(),
+                ["paymentId"] = matchedPayment?.Id.ToString(),
+                ["error"] = "callback_processing_failed"
+            });
+            return Redirect(fallbackUrl);
         }
     }
 }
+
+

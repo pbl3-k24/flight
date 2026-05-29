@@ -643,12 +643,16 @@ public class PaymentService : IPaymentService
             // Tìm payment bằng TransactionRef
             var payments = await _paymentRepository.GetAllAsync();
             var callbackTransactionId = callback.TransactionId?.Trim();
-            var payment = payments.FirstOrDefault(p =>
-                !string.IsNullOrWhiteSpace(p.TransactionRef)
-                && string.Equals(
-                    p.TransactionRef.Trim(),
-                    callbackTransactionId,
-                    StringComparison.OrdinalIgnoreCase));
+            var payment = payments
+                .Where(p =>
+                    !string.IsNullOrWhiteSpace(p.TransactionRef)
+                    && string.Equals(
+                        p.TransactionRef.Trim(),
+                        callbackTransactionId,
+                        StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(p => p.Status == (int)PaymentStatus.Pending)
+                .ThenByDescending(p => p.CreatedAt)
+                .FirstOrDefault();
 
             if (payment == null)
             {

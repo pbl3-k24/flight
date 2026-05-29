@@ -231,6 +231,9 @@ public class TicketService : ITicketService
                 _ => "Unknown"
             };
 
+            var seatClassForGet = await _dbContext.SeatClasses
+                .FirstOrDefaultAsync(sc => sc.Id == ticket.SeatClassId && !sc.IsDeleted);
+
             return new TicketResponse
             {
                 TicketId = ticket.Id,
@@ -246,6 +249,9 @@ public class TicketService : ITicketService
                 DepartureTime = VietnamTime.ToVietnamTime(flight.DepartureTime),
                 DepartureAirport = flight.Route.DepartureAirport.Code,
                 ArrivalAirport = flight.Route.ArrivalAirport.Code,
+                SeatClassId = ticket.SeatClassId,
+                SeatClassName = seatClassForGet?.Name ?? string.Empty,
+                SeatClassCode = seatClassForGet?.Code ?? string.Empty,
                 Services = passengerServiceMap.GetValueOrDefault(passenger.Id, new List<TicketPassengerServiceDto>())
             };
         }
@@ -349,6 +355,9 @@ public class TicketService : ITicketService
                         _ => "Unknown"
                     };
 
+                    var seatClass = await _dbContext.SeatClasses
+                        .FirstOrDefaultAsync(sc => sc.Id == ticket.SeatClassId && !sc.IsDeleted);
+
                     tickets.Add(new TicketResponse
                     {
                         TicketId = ticket.Id,
@@ -364,6 +373,9 @@ public class TicketService : ITicketService
                         DepartureTime = VietnamTime.ToVietnamTime(flight.DepartureTime),
                         DepartureAirport = flight.Route.DepartureAirport.Code,
                         ArrivalAirport = flight.Route.ArrivalAirport.Code,
+                        SeatClassId = ticket.SeatClassId,
+                        SeatClassName = seatClass?.Name ?? string.Empty,
+                        SeatClassCode = seatClass?.Code ?? string.Empty,
                         Services = passengerServiceMap.GetValueOrDefault(passenger.Id, new List<TicketPassengerServiceDto>())
                     });
                 }

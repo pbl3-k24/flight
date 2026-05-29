@@ -35,6 +35,36 @@ const normalizeTimeValue = (value) => {
   return value
 }
 
+const toNullableNumber = (value) => {
+  if (value === '' || value === null || value === undefined) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const toBoolean = (value) => Boolean(value)
+
+const normalizeTemplateDetailPayload = (detail = {}) => ({
+  FlightDefinitionId: Number(detail.FlightDefinitionId ?? detail.flightDefinitionId ?? 0),
+  DayOfWeek: Number(detail.DayOfWeek ?? detail.dayOfWeek ?? 0),
+  AircraftOverrideId: toNullableNumber(detail.AircraftOverrideId ?? detail.aircraftOverrideId),
+  DepartureTimeOverride: normalizeTimeValue(detail.DepartureTimeOverride ?? detail.departureTimeOverride),
+  ArrivalTimeOverride: normalizeTimeValue(detail.ArrivalTimeOverride ?? detail.arrivalTimeOverride),
+  ArrivalOffsetDaysOverride: toNullableNumber(detail.ArrivalOffsetDaysOverride ?? detail.arrivalOffsetDaysOverride),
+  IsActive: toBoolean(detail.IsActive ?? detail.isActive ?? true),
+})
+
+const normalizeTemplatePayload = (payload = {}) => ({
+  Code: String(payload.Code ?? payload.code ?? '').trim().toUpperCase(),
+  Name: String(payload.Name ?? payload.name ?? '').trim(),
+  Description: payload.Description ?? payload.description ?? null,
+  EffectiveFrom: payload.EffectiveFrom ?? payload.effectiveFrom ?? null,
+  EffectiveTo: payload.EffectiveTo ?? payload.effectiveTo ?? null,
+  IsActive: toBoolean(payload.IsActive ?? payload.isActive ?? true),
+  Details: Array.isArray(payload.Details ?? payload.details)
+    ? (payload.Details ?? payload.details).map(normalizeTemplateDetailPayload)
+    : [],
+})
+
 const makeRequest = async (endpoint, options = {}) => {
   const url = `${API_BASE_URL}${endpoint}`
   const headers = {
@@ -53,7 +83,15 @@ const makeRequest = async (endpoint, options = {}) => {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}))
-    const apiError = new Error(error.detail || error.message || `API Error: ${response.statusText}`)
+    const modelErrors = error?.errors && typeof error.errors === 'object'
+      ? Object.values(error.errors).flat().filter(Boolean)
+      : []
+    const apiError = new Error(
+      modelErrors[0]
+        || error.detail
+        || error.message
+        || `API Error: ${response.statusText}`
+    )
     apiError.status = response.status
     apiError.responseBody = error
     throw apiError
@@ -90,13 +128,13 @@ const getFlightTemplateById = (id) => makeRequest(endpoints.templateById(id))
 const createFlightTemplate = (payload) =>
   makeRequest(endpoints.templates, {
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(normalizeTemplatePayload(payload)),
   })
 
 const updateFlightTemplate = (id, payload) =>
   makeRequest(endpoints.templateById(id), {
     method: 'PUT',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(normalizeTemplatePayload(payload)),
   })
 
 const deleteFlightTemplate = (id) =>
@@ -124,6 +162,7 @@ export const flightTemplateApi = {
   endpoints,
   supportsOverwrite,
   normalizeTimeValue,
+  normalizeTemplatePayload,
   normalizeList,
   getFlightTemplates,
   getFlightTemplateById,

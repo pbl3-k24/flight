@@ -30,6 +30,10 @@ public class TicketResponse
 
     public string ArrivalAirport { get; set; } = null!;
 
+    public int SeatClassId { get; set; }
+    public string SeatClassName { get; set; } = string.Empty;
+    public string SeatClassCode { get; set; } = string.Empty;
+
     public List<TicketPassengerServiceDto> Services { get; set; } = [];
 }
 

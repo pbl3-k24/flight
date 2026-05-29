@@ -222,6 +222,30 @@ public class FlightsAdminController : ControllerBase
     }
 
     /// <summary>
+    /// Gets all flights in a specific date (Admin only).
+    /// </summary>
+    [HttpGet("by-date")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<List<FlightManagementResponse>>> GetFlightsByDateAsync([FromQuery] DateOnly date)
+    {
+        try
+        {
+            var response = await _flightService.GetFlightsByDateAsync(date);
+            return Ok(response);
+        }
+        catch (ValidationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting flights by date");
+            return StatusCode(500, new { message = "Error getting flights by date" });
+        }
+    }
+
+    /// <summary>
     /// Creates a new route (Admin only).
     /// </summary>
     [HttpPost("routes")]
