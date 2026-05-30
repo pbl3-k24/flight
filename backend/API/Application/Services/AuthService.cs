@@ -303,19 +303,19 @@ public class AuthService : IAuthService
             return true;
         }
 
-        // 2. Create password reset token
-        var resetCode = GenerateVerificationCode();
+        // 2. Create password reset OTP
+        var resetCode = GenerateOtpCode();
         var resetToken = new PasswordResetToken
         {
             UserId = user.Id,
             Code = resetCode,
-            ExpiresAt = DateTime.UtcNow.AddHours(1) // 1 hour expiration
+            ExpiresAt = DateTime.UtcNow.AddMinutes(10)
         };
 
         await _passwordTokenRepository.CreateAsync(resetToken);
 
-        // 3. Send reset email
-        await _emailService.SendPasswordResetEmailAsync(user.Email, resetCode);
+        // 3. Send OTP email
+        await _emailService.SendPasswordChangeOtpEmailAsync(user.Email, resetCode);
 
         // 4. Log request
         _logger.LogInformation("Password reset requested for user {Email}", user.Email);

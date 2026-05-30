@@ -574,15 +574,7 @@ export default function BookingHistory({
 
                                     {/* Ticket actions */}
                                     {isTicketActionable(ticket.status) && (
-                                      <div className="flex gap-2 pt-2 border-t border-slate-50">
-                                        <button
-                                          type="button"
-                                          onClick={() => openUpgradeModal(item, ticket)}
-                                          className="btn-secondary border-indigo-200 bg-indigo-50/50 text-indigo-700 hover:bg-indigo-50 px-3 py-1.5 text-[10px] font-bold rounded-lg flex-1"
-                                        >
-                                           Nï¿½ng h?ng
-                                        </button>
-                                        <button
+                                      <div className="flex gap-2 pt-2 border-t border-slate-50">                                        <button
                                           type="button"
                                           disabled={isCancellingTicketId === ticket.ticketId}
                                           onClick={() => cancelTicketFromHistory(item.bookingId, ticket)}
@@ -1350,3 +1342,4 @@ export default function BookingHistory({
     </div>
   )
 }
+

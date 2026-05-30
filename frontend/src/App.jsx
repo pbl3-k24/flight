@@ -88,6 +88,40 @@ const formatDuration = (durationMinutes = 0) => {
   return `${durationHours}h${durationMins}m`
 }
 
+const sanitizePassengerName = (value) => {
+  try {
+    const raw = String(value ?? '')
+    const normalized = typeof raw.normalize === 'function' ? raw.normalize('NFD') : raw
+    return normalized
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .toUpperCase()
+      .replace(/[^A-Z\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trimStart()
+  } catch {
+    return String(value ?? '')
+      .toUpperCase()
+      .replace(/[^A-Z\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trimStart()
+  }
+}
+
+const sanitizePassengerPhone = (value) =>
+  String(value ?? '')
+    .replace(/\D/g, '')
+    .slice(0, 8)
+
+const normalizeSavedPassengerForm = (form = {}) => ({
+  ...form,
+  firstName: sanitizePassengerName(form.firstName || ''),
+  lastName: sanitizePassengerName(form.lastName || ''),
+  email: String(form.email || '').trim(),
+  phone: sanitizePassengerPhone(form.phone || ''),
+})
+
 const formatDateTime = (value) => {
   if (!value) return ''
   const date = new Date(value)
@@ -525,6 +559,17 @@ function App() {
     decisionId: null,
     date: '',
     selectedFlightId: '',
+  })
+  const [cancelTicketModal, setCancelTicketModal] = useState({
+    isOpen: false,
+    bookingId: null,
+    ticket: null,
+    reason: '',
+  })
+  const [cancelBookingModal, setCancelBookingModal] = useState({
+    isOpen: false,
+    booking: null,
+    reason: '',
   })
   const emptySavedPassengerForm = {
     firstName: '',
@@ -1581,16 +1626,19 @@ function App() {
     setSavedPassengerNotice('')
   }
 
-  const buildSavedPassengerPayload = (form) => ({
-    firstName: form.firstName?.trim() || null,
-    lastName: form.lastName?.trim() || null,
+  const buildSavedPassengerPayload = (form) => {
+    const normalized = normalizeSavedPassengerForm(form)
+    return ({
+    firstName: normalized.firstName?.trim() || null,
+    lastName: normalized.lastName?.trim() || null,
     dateOfBirth: toApiDateTimeValue(form.dateOfBirth),
     gender: form.gender?.trim() || null,
     nationality: form.nationality?.trim() || null,
     documentNumber: form.documentNumber?.trim() || null,
-    email: form.email?.trim() || null,
-    phone: form.phone?.trim() || null,
-  })
+    email: normalized.email || null,
+    phone: normalized.phone || null,
+    })
+  }
 
   const handleSavedPassengerSubmit = async (event) => {
     event.preventDefault()
@@ -1598,7 +1646,9 @@ function App() {
     setSavedPassengerNotice('')
 
     try {
-      const payload = buildSavedPassengerPayload(savedPassengerForm)
+      const normalizedForm = normalizeSavedPassengerForm(savedPassengerForm)
+      setSavedPassengerForm(normalizedForm)
+      const payload = buildSavedPassengerPayload(normalizedForm)
       if (editingSavedPassengerId) {
         await updateSavedPassenger(editingSavedPassengerId, payload)
         setSavedPassengerNotice('Đã cập nhật hành khách đã lưu.')
@@ -1851,21 +1901,28 @@ function App() {
     }
   }
 
-  const cancelTicketFromHistory = async (bookingId, ticket) => {
+  const cancelTicketFromHistory = (bookingId, ticket) => {
     if (!bookingId || !ticket?.ticketId) return
     if (!isTicketActionable(ticket.status)) return
 
-    const confirmed = window.confirm('Bạn chắc chắn muốn hủy vé này?')
-    if (!confirmed) return
+    setCancelTicketModal({
+      isOpen: true,
+      bookingId,
+      ticket,
+      reason: '',
+    })
+  }
 
-    const reason = window.prompt('Lý do hủy vé (không bắt buộc):', '')
-    if (reason === null) return
+  const handleConfirmCancelTicket = async () => {
+    const { bookingId, ticket, reason } = cancelTicketModal
+    if (!bookingId || !ticket?.ticketId) return
 
     setIsCancellingTicketId(ticket.ticketId)
     setTicketErrorMap((prev) => ({ ...prev, [bookingId]: '' }))
     try {
       await cancelTicket(bookingId, ticket.ticketId, reason.trim())
       await loadTicketsForBooking(bookingId)
+      setCancelTicketModal({ isOpen: false, bookingId: null, ticket: null, reason: '' })
     } catch (error) {
       setTicketErrorMap((prev) => ({
         ...prev,
@@ -1884,12 +1941,12 @@ function App() {
         idx === index
           ? {
               ...item,
-              fullName: fullName || item.fullName,
+              fullName: sanitizePassengerName(fullName || item.fullName),
               dob: toDateInputValueFromApi(passenger.dateOfBirth),
               gender: passenger.gender || item.gender,
               document: passenger.documentNumber || item.document,
-              email: passenger.email || item.email,
-              phone: passenger.phone || item.phone,
+              email: String(passenger.email || item.email || '').trim(),
+              phone: sanitizePassengerPhone(passenger.phone || item.phone),
               savedPassengerId: String(passenger.id || ''),
             }
           : item
@@ -1976,7 +2033,7 @@ function App() {
     return code === 0
   }
 
-  const cancelBookingFromHistory = async (item) => {
+  const cancelBookingFromHistory = (item) => {
     if (!item) return
 
     const bookingIdValue = Number(item.bookingId)
@@ -1990,24 +2047,31 @@ function App() {
       return
     }
 
-    const confirmed = window.confirm('Bạn chắc chắn muốn hủy vé này?')
-    if (!confirmed) return
+    setCancelBookingModal({
+      isOpen: true,
+      booking: item,
+      reason: '',
+    })
+  }
 
-    const reason = window.prompt('Lý do hủy vé (không bắt buộc):', '')
-    if (reason === null) return
+  const handleConfirmCancelBooking = async () => {
+    const { booking, reason } = cancelBookingModal
+    if (!booking) return
 
-    setIsCancellingBookingId(item.bookingId)
+    const bookingIdValue = Number(booking.bookingId)
+    setIsCancellingBookingId(booking.bookingId)
     setHistoryError('')
     setHistoryNotice('')
     try {
       await cancelBooking(bookingIdValue, reason.trim())
       const next = bookingHistory.map((entry) =>
-        entry.bookingId === item.bookingId
+        entry.bookingId === booking.bookingId
           ? { ...entry, status: getBookingStatusLabel(5) }
           : entry
       )
       persistBookingHistory(next)
       setHistoryNotice('Đã hủy vé thành công.')
+      setCancelBookingModal({ isOpen: false, booking: null, reason: '' })
     } catch (error) {
       setHistoryError(error.message || 'Hủy vé thất bại. Vui lòng thử lại.')
     } finally {
@@ -2787,7 +2851,7 @@ function App() {
           <label className="mb-1.5 block text-xs font-bold text-slate-700">Họ và tên</label>
           <input
             type="text"
-            placeholder="Nguyễn Văn A"
+            placeholder="NGUYEN VAN A"
             value={registerData.fullName}
             onChange={(e) => setRegisterData((prev) => ({ ...prev, fullName: e.target.value }))}
             className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition duration-instant focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
@@ -2807,6 +2871,8 @@ function App() {
           <label className="mb-1.5 block text-xs font-bold text-slate-700">Số điện thoại</label>
           <input
             type="tel"
+                          inputMode="numeric"
+                          maxLength={8}
             placeholder="0900000000"
             value={registerData.phone}
             onChange={(e) => setRegisterData((prev) => ({ ...prev, phone: e.target.value }))}
@@ -3694,12 +3760,12 @@ function App() {
                     <label className="mb-1.5 block text-xs font-bold text-slate-600">Họ và tên hành khách</label>
                     <input
                       type="text"
-                      placeholder="Nguyễn Văn A"
+                      placeholder="NGUYEN VAN A"
                       value={passenger.fullName}
                       onChange={(e) =>
                         setPassengerForms((prev) =>
                           prev.map((item, idx) =>
-                            idx === index ? { ...item, fullName: e.target.value } : item
+                            idx === index ? { ...item, fullName: sanitizePassengerName(e.target.value) } : item
                           )
                         )
                       }
@@ -3783,7 +3849,7 @@ function App() {
                           onChange={(e) =>
                             setPassengerForms((prev) =>
                               prev.map((item, idx) =>
-                                idx === index ? { ...item, email: e.target.value } : item
+                                idx === index ? { ...item, email: e.target.value.trim() } : item
                               )
                             )
                           }
@@ -3794,12 +3860,14 @@ function App() {
                         <label className="mb-1.5 block text-xs font-bold text-slate-600">Số điện thoại liên hệ</label>
                         <input
                           type="tel"
-                          placeholder="0901234567"
+                          inputMode="numeric"
+                          maxLength={8}
+                          placeholder="12345678"
                           value={passenger.phone}
                           onChange={(e) =>
                             setPassengerForms((prev) =>
                               prev.map((item, idx) =>
-                                idx === index ? { ...item, phone: e.target.value } : item
+                                idx === index ? { ...item, phone: sanitizePassengerPhone(e.target.value) } : item
                               )
                             )
                           }
@@ -3946,6 +4014,26 @@ function App() {
 
               if (validationError) {
                 setApiError('Vui lòng điền đúng thông tin hành khách theo loại')
+                return
+              }
+              const invalidAdultEmail = passengerForms.find(
+                (passenger) =>
+                  passenger.type === 'adult'
+                  && passenger.email
+                  && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(passenger.email).trim()),
+              )
+              if (invalidAdultEmail) {
+                setApiError('Email hanh khach khong dung cu phap.')
+                return
+              }
+
+              const invalidAdultPhone = passengerForms.find(
+                (passenger) =>
+                  passenger.type === 'adult'
+                  && !/^\d{8}$/.test(String(passenger.phone || '').trim()),
+              )
+              if (invalidAdultPhone) {
+                setApiError('So dien thoai hanh khach phai dung 8 chu so.')
                 return
               }
 
@@ -4157,41 +4245,6 @@ function App() {
                 {historyNotice}
               </div>
             )}
-          </div>
-
-          {/* NCB Simulated Credit Card */}
-          <div className="rounded-2xl border border-slate-200 p-5 bg-slate-50/50">
-            <h4 className="text-xs font-bold text-slate-800 mb-2">Thẻ ATM Test Sandbox (Ngân hàng NCB)</h4>
-            <p className="text-[10px] text-slate-400 mb-3">Bạn có thể sử dụng thông tin thẻ dưới đây khi trang thanh toán VNPAY yêu cầu:</p>
-
-            <div className="relative mx-auto my-4 w-72 h-44 rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-black p-5 text-white shadow-xl flex flex-col justify-between overflow-hidden">
-              <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-white/10 to-transparent rounded-full -mr-8 -mt-8" />
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">NCB Bank (ATM Card)</span>
-                <span className="h-6 w-9 rounded bg-amber-500/20 border border-amber-500/30 flex items-center justify-center font-extrabold text-[10px] text-amber-400">CHIP</span>
-              </div>
-              <div className="my-2">
-                <p className="text-xs font-bold text-slate-500 tracking-widest leading-none mb-1">CARD NUMBER</p>
-                <p className="text-base font-extrabold tracking-widest text-slate-100 font-mono">9704 1985 2619 1432 198</p>
-              </div>
-              <div className="flex items-end justify-between">
-                <div>
-                  <p className="text-[8px] font-bold text-slate-500 uppercase leading-none">Card Holder</p>
-                  <p className="text-xs font-extrabold tracking-wide text-slate-200 mt-1 uppercase font-mono">NGUYEN VAN A</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[8px] font-bold text-slate-500 uppercase leading-none">Expires</p>
-                  <p className="text-xs font-extrabold text-slate-200 mt-1 font-mono">07 / 15</p>
-                </div>
-              </div>
-            </div>
-
-            <ol className="list-decimal space-y-1.5 text-xs text-slate-500 pl-5 mt-4 leading-relaxed">
-              <li>Tại cổng VNPAY, chọn phương thức <strong>"Thẻ nội địa và tài khoản ngân hàng"</strong>.</li>
-              <li>Chọn biểu tượng logo ngân hàng <strong>NCB</strong>.</li>
-              <li>Nhập thông tin số thẻ, tên chủ thẻ và ngày hết hạn như trên mockup.</li>
-              <li>Bấm thanh toán và nhập mã OTP test: <strong>123456</strong> để hoàn tất.</li>
-            </ol>
           </div>
 
           <button
@@ -7346,11 +7399,200 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* ===== MODAL: MODAL: XÁC NHẬN HỦY VÉ & LÝ DO HỦY VÉ ===== */}
+      {cancelTicketModal.isOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)' }}
+          onClick={() => setCancelTicketModal({ isOpen: false, bookingId: null, ticket: null, reason: '' })}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-red-600 to-rose-600 px-6 py-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>💥</span> Xác nhận hủy vé máy bay
+                </h3>
+                <p className="text-[10px] text-red-100 font-semibold mt-0.5">
+                  Mã Booking: #{cancelTicketModal.bookingId} • Số vé: {cancelTicketModal.ticket?.ticketNumber || `#${cancelTicketModal.ticket?.ticketId}`}
+                </p>
+                <p className="text-[9px] text-rose-100 font-medium mt-0.5">
+                  Hành khách: {cancelTicketModal.ticket?.passengerName}
+                  {cancelTicketModal.ticket?.departureAirport ? ` • ${cancelTicketModal.ticket.departureAirport} → ${cancelTicketModal.ticket.arrivalAirport}` : ''}
+                  {cancelTicketModal.ticket?.flightNumber ? ` (${cancelTicketModal.ticket.flightNumber})` : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => setCancelTicketModal({ isOpen: false, bookingId: null, ticket: null, reason: '' })}
+                className="text-red-100 hover:text-white text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleConfirmCancelTicket()
+              }}
+              className="p-6 space-y-4"
+            >
+              <div className="rounded-xl bg-red-50 p-4 border border-red-100 text-xs text-red-750 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <span>🛑</span> Cảnh báo hành động không thể hoàn tác:
+                </p>
+                <p className="leading-relaxed font-semibold">
+                  Sau khi hoàn tất xác nhận, vé máy bay này sẽ bị hủy bỏ vĩnh viễn trên hệ thống và chỗ của hành khách sẽ bị thu hồi.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600">Lý do hủy vé máy bay</label>
+                <textarea
+                  placeholder="Nhập lý do cụ thể (không bắt buộc)..."
+                  value={cancelTicketModal.reason}
+                  onChange={(e) => setCancelTicketModal((prev) => ({ ...prev, reason: e.target.value }))}
+                  className="w-full min-h-[90px] resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 font-medium"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setCancelTicketModal({ isOpen: false, bookingId: null, ticket: null, reason: '' })}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-600 shadow-sm transition hover:bg-slate-50"
+                >
+                  Không hủy nữa
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCancellingTicketId !== null}
+                  className="flex-1 rounded-xl bg-red-600 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-60 flex items-center justify-center gap-1.5"
+                >
+                  {isCancellingTicketId !== null ? (
+                    <>
+                      <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                      Đang xử lý...
+                    </>
+                  ) : (
+                    'Xác nhận hủy vé'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL: XÁC NHẬN HỦY CHUYẾN BAY (BOOKING) & LÝ DO ===== */}
+      {cancelBookingModal.isOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)' }}
+          onClick={() => setCancelBookingModal({ isOpen: false, booking: null, reason: '' })}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white shadow-2xl animate-in fade-in zoom-in duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between rounded-t-2xl bg-gradient-to-r from-red-600 to-rose-600 px-6 py-4">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <span>💥</span> Xác nhận hủy chuyến bay đặt chỗ
+                </h3>
+                <p className="text-[10px] text-red-100 font-semibold mt-0.5">
+                  Mã Booking: #{cancelBookingModal.booking?.bookingId}
+                  {cancelBookingModal.booking?.fromAirport ? ` • Hành trình: ${cancelBookingModal.booking.fromAirport} → ${cancelBookingModal.booking.toAirport}` : ''}
+                </p>
+                <p className="text-[9px] text-rose-100 font-medium mt-0.5">
+                  Hành khách đại diện: {cancelBookingModal.booking?.passengerName || '---'} ({cancelBookingModal.booking?.passengerCount || 1} khách)
+                  {cancelBookingModal.booking?.flightNumber ? ` • Chuyến bay: ${cancelBookingModal.booking.flightNumber}` : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => setCancelBookingModal({ isOpen: false, booking: null, reason: '' })}
+                className="text-red-100 hover:text-white text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                handleConfirmCancelBooking()
+              }}
+              className="p-6 space-y-4"
+            >
+              <div className="rounded-xl bg-red-50 p-4 border border-red-100 text-xs text-red-750 space-y-1">
+                <p className="font-bold flex items-center gap-1.5">
+                  <span>🚨</span> CẢNH BÁO QUAN TRỌNG:
+                </p>
+                <p className="leading-relaxed font-semibold">
+                  Hành động này sẽ hủy toàn bộ các vé máy bay và các dịch vụ đi kèm trong hồ sơ đặt chỗ mang mã #{cancelBookingModal.booking?.bookingId}. Bạn không thể khôi phục lại hồ sơ sau khi xác nhận.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600">Lý do hủy đặt chỗ chuyến bay</label>
+                <textarea
+                  placeholder="Nhập lý do cụ thể (không bắt buộc)..."
+                  value={cancelBookingModal.reason}
+                  onChange={(e) => setCancelBookingModal((prev) => ({ ...prev, reason: e.target.value }))}
+                  className="w-full min-h-[90px] resize-none rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100 font-medium"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2.5 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setCancelBookingModal({ isOpen: false, booking: null, reason: '' })}
+                  className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 text-xs font-bold text-slate-600 shadow-sm transition hover:bg-slate-50"
+                >
+                  Không hủy nữa
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCancellingBookingId !== null}
+                  className="flex-1 rounded-xl bg-red-600 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-700 disabled:opacity-60 flex items-center justify-center gap-1.5"
+                >
+                  {isCancellingBookingId !== null ? (
+                    <>
+                      <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                      Đang xử lý...
+                    </>
+                  ) : (
+                    'Xác nhận hủy chuyến'
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
 
 export default App
+
+
+
 
 
 

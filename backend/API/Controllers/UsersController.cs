@@ -112,7 +112,7 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Requests a password reset for the given email.
+    /// Requests a password reset OTP for the given email.
     /// Returns success regardless of whether account exists (prevents email enumeration).
     /// </summary>
     [HttpPost("forgot-password")]
@@ -122,7 +122,7 @@ public class UsersController : ControllerBase
         _logger.LogInformation("Password reset request");
         await _authService.RequestPasswordResetAsync(dto.Email);
         // Always return success to prevent email enumeration attacks
-        return Ok(new { message = "If an account with that email exists, a password reset link has been sent" });
+        return Ok(new { message = "If an account with that email exists, an OTP has been sent" });
     }
 
     /// <summary>

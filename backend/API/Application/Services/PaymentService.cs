@@ -418,6 +418,10 @@ public class PaymentService : IPaymentService
             booking.Status = (int)BookingStatus.Cancelled;
             booking.UpdatedAt = DateTime.UtcNow;
             await _bookingRepository.UpdateAsync(booking);
+            if (booking.PromotionId.HasValue && booking.DiscountAmount > 0)
+            {
+                await _unitOfWork.Promotions.ReleaseUsageAsync(booking.PromotionId.Value);
+            }
             return;
         }
 
@@ -435,6 +439,10 @@ public class PaymentService : IPaymentService
         booking.Status = (int)BookingStatus.Cancelled;
         booking.UpdatedAt = DateTime.UtcNow;
         await _bookingRepository.UpdateAsync(booking);
+        if (booking.PromotionId.HasValue && booking.DiscountAmount > 0)
+        {
+            await _unitOfWork.Promotions.ReleaseUsageAsync(booking.PromotionId.Value);
+        }
 
         _logger.LogInformation(
             "Cancelled pending booking and released {PassengerCount} held seats after payment failure for booking {BookingId}",

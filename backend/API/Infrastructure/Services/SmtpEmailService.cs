@@ -100,9 +100,6 @@ public class SmtpEmailService : IEmailService
 
     public async Task SendPasswordResetEmailAsync(string email, string resetCode)
     {
-        var baseUrl = _config["AppSettings:BaseUrl"] ?? "https://localhost:7001";
-        var resetLink = $"{baseUrl}/auth/reset-password?code={resetCode}";
-
         var htmlContent = $@"
             <!DOCTYPE html>
             <html>
@@ -110,21 +107,21 @@ public class SmtpEmailService : IEmailService
                 <style>
                     body {{ font-family: Arial, sans-serif; }}
                     .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                    .button {{ background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; }}
+                    .otp {{ font-size: 32px; font-weight: bold; letter-spacing: 4px; }}
                 </style>
             </head>
             <body>
                 <div class='container'>
-                    <h2>Password Reset Request</h2>
-                    <p>We received a request to reset your password. Click the link below to proceed:</p>
-                    <a href='{resetLink}' class='button'>Reset Password</a>
-                    <p>This link will expire in 1 hour.</p>
+                    <h2>Password Reset OTP</h2>
+                    <p>We received a request to reset your password. Use this OTP code:</p>
+                    <p class='otp'>{resetCode}</p>
+                    <p>This code will expire in 10 minutes.</p>
                     <p>If you didn't request a password reset, please ignore this email.</p>
                 </div>
             </body>
             </html>";
 
-        await SendEmailAsync(email, "Password Reset", htmlContent);
+        await SendEmailAsync(email, "Password Reset OTP", htmlContent);
     }
 
     public async Task SendPasswordChangeOtpEmailAsync(string email, string otpCode)
