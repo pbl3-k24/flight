@@ -27,22 +27,25 @@ const normalizeTemplate = (template) => ({
   detailsCount: template.details?.length || 0,
 })
 
-const mapDetailFromApi = (detail) => ({
-  id: detail?.id ?? null,
-  tempId: detail.id ? null : `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-  flightDefinitionId: detail.flightDefinitionId,
-  dayOfWeek: detail.dayOfWeek,
-  aircraftOverrideId: detail?.aircraftOverrideId ?? null,
-  departureTimeOverride: detail?.departureTimeOverride ?? null,
-  arrivalTimeOverride: detail?.arrivalTimeOverride ?? null,
-  arrivalOffsetDaysOverride: detail?.arrivalOffsetDaysOverride ?? null,
-  isActive: detail?.isActive ?? true,
-  flightNumber: detail.flightNumber,
-  routeName: detail.routeName,
-  departureTime: detail.departureTime,
-  arrivalTime: detail.arrivalTime,
-  arrivalOffsetDays: detail.arrivalOffsetDays,
-})
+const mapDetailFromApi = (detail) => {
+  const fdId = detail?.flightDefinitionId ?? detail?.flightDefinition?.id ?? null
+  return {
+    id: detail?.id ?? null,
+    tempId: detail.id ? null : `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    flightDefinitionId: fdId,
+    dayOfWeek: detail.dayOfWeek,
+    aircraftOverrideId: detail?.aircraftOverrideId ?? null,
+    departureTimeOverride: detail?.departureTimeOverride ?? null,
+    arrivalTimeOverride: detail?.arrivalTimeOverride ?? null,
+    arrivalOffsetDaysOverride: detail?.arrivalOffsetDaysOverride ?? null,
+    isActive: detail?.isActive ?? true,
+    flightNumber: detail.flightNumber ?? detail.flightDefinition?.flightNumber,
+    routeName: detail.routeName ?? detail.flightDefinition?.routeName,
+    departureTime: detail.departureTime ?? detail.flightDefinition?.departureTime,
+    arrivalTime: detail.arrivalTime ?? detail.flightDefinition?.arrivalTime,
+    arrivalOffsetDays: detail.arrivalOffsetDays ?? detail.flightDefinition?.arrivalOffsetDays,
+  }
+}
 
 const toNullableNumber = (value) => {
   if (value === '' || value === null || value === undefined) return null
@@ -475,29 +478,48 @@ export default function FlightTemplateManagement() {
           )}
 
           {!isModeView && (
-            <button
-              type="button"
-              onClick={handleSaveTemplate}
-              disabled={saving}
-              className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {saving ? (
-                <>
-                  <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                  </svg>
-                  Đang lưu...
-                </>
-              ) : (
-                <>
+            <>
+              {detailItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Bạn có chắc chắn muốn xóa toàn bộ dòng lịch bay trong bảng hiện tại không?')) {
+                      setDetailItems([])
+                    }
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-750"
+                >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                   </svg>
-                  Lưu template
-                </>
+                  Clear lịch bay
+                </button>
               )}
-            </button>
+
+              <button
+                type="button"
+                onClick={handleSaveTemplate}
+                disabled={saving}
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? (
+                  <>
+                    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                    Đang lưu...
+                  </>
+                ) : (
+                  <>
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Lưu template
+                  </>
+                )}
+              </button>
+            </>
           )}
         </div>
       </div>

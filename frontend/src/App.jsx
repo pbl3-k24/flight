@@ -6069,12 +6069,8 @@ function App() {
               </svg>
             </div>
             <div>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-indigo-600">
-                <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 animate-pulse"></span>
-                Quản trị hệ thống
-              </span>
-              <h2 className="title-font mt-1 text-2xl font-black text-white">Quản lý Flight Templates</h2>
-              <p className="mt-1 text-xs text-indigo-200/80 font-medium">Lập kế hoạch bay định kỳ theo thứ trong tuần và tự động hóa việc sinh lịch bay hàng tuần.</p>
+              <h2 className="title-font mt-1 text-2xl font-black text-slate-800">Quản lý Flight Templates</h2>
+              <p className="mt-1 text-xs text-slate-500 font-medium">Lập kế hoạch bay định kỳ theo thứ trong tuần và tự động hóa việc sinh lịch bay hàng tuần.</p>
             </div>
           </div>
           <button
@@ -6088,7 +6084,7 @@ function App() {
               setAdminNotice('')
               setIsTemplateModalOpen(true)
             }}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-650 px-4 py-2.5 text-xs font-bold text-white hover:from-blue-700 hover:to-indigo-700 transition shadow-md shadow-blue-200 shrink-0"
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 px-5 py-2.5 text-xs font-bold text-white transition shadow-md shadow-blue-200 shrink-0"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="3" stroke="currentColor" className="h-4 w-4">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -6518,13 +6514,36 @@ function App() {
 
             {/* Modal Bottom Actions */}
             <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsTemplateModalOpen(false)}
+                  className="rounded-xl border border-slate-200 hover:bg-slate-100 px-5 py-2.5 text-xs font-bold text-slate-600 transition"
+                >
+                  Hủy bỏ
+                </button>
+
+                {templateSlots.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('Bạn có chắc chắn muốn xóa toàn bộ các chuyến bay đã lên lịch nháp này không?')) {
+                        setTemplateSlots([])
+                        setAdminNotice('Đã dọn sạch toàn bộ lịch nháp')
+                        setTimeout(() => setAdminNotice(''), 2000)
+                      }
+                    }}
+                    className="rounded-xl bg-red-50 hover:bg-red-100 px-5 py-2.5 text-xs font-bold text-red-600 transition border border-red-200"
+                  >
+                    Clear lịch nháp
+                  </button>
+                )}
+              </div>
+
               <button
                 type="button"
-                onClick={() => setIsTemplateModalOpen(false)}
-                className="rounded-xl border border-slate-200 hover:bg-slate-100 px-5 py-2.5 text-xs font-bold text-slate-600 transition"
-              >
-                Hủy bỏ
-              </button>
+                className="hidden"
+              />
 
               <button
                 type="button"
@@ -6560,9 +6579,7 @@ function App() {
                         return timeStr.substring(0, 8)
                       }
 
-                      const flightDefinitionId = Number(
-                        slot?.flightDefinition?.id ?? slot?.flightDefinition?.flightDefinitionId ?? 0
-                      )
+                      const flightDefinitionId = Number(slot.flightDefinition.id)
                       return {
                         flightDefinitionId,
                         aircraftOverrideId: Number(

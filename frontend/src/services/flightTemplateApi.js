@@ -43,15 +43,22 @@ const toNullableNumber = (value) => {
 
 const toBoolean = (value) => Boolean(value)
 
-const normalizeTemplateDetailPayload = (detail = {}) => ({
-  FlightDefinitionId: Number(detail.FlightDefinitionId ?? detail.flightDefinitionId ?? 0),
-  DayOfWeek: Number(detail.DayOfWeek ?? detail.dayOfWeek ?? 0),
-  AircraftOverrideId: toNullableNumber(detail.AircraftOverrideId ?? detail.aircraftOverrideId),
-  DepartureTimeOverride: normalizeTimeValue(detail.DepartureTimeOverride ?? detail.departureTimeOverride),
-  ArrivalTimeOverride: normalizeTimeValue(detail.ArrivalTimeOverride ?? detail.arrivalTimeOverride),
-  ArrivalOffsetDaysOverride: toNullableNumber(detail.ArrivalOffsetDaysOverride ?? detail.arrivalOffsetDaysOverride),
-  IsActive: toBoolean(detail.IsActive ?? detail.isActive ?? true),
-})
+const normalizeTemplateDetailPayload = (detail = {}) => {
+  const fdId = Number(
+    detail.flightDefinitionId ??
+    detail.FlightDefinitionId ??
+    0
+  )
+  return {
+    FlightDefinitionId: fdId,
+    DayOfWeek: Number(detail.DayOfWeek ?? detail.dayOfWeek ?? 0),
+    AircraftOverrideId: toNullableNumber(detail.AircraftOverrideId ?? detail.aircraftOverrideId),
+    DepartureTimeOverride: normalizeTimeValue(detail.DepartureTimeOverride ?? detail.departureTimeOverride ?? detail.departureTime),
+    ArrivalTimeOverride: normalizeTimeValue(detail.ArrivalTimeOverride ?? detail.arrivalTimeOverride ?? detail.arrivalTime),
+    ArrivalOffsetDaysOverride: toNullableNumber(detail.ArrivalOffsetDaysOverride ?? detail.arrivalOffsetDaysOverride),
+    IsActive: toBoolean(detail.IsActive ?? detail.isActive ?? true),
+  }
+}
 
 const normalizeTemplatePayload = (payload = {}) => ({
   Code: String(payload.Code ?? payload.code ?? '').trim().toUpperCase(),
@@ -144,7 +151,11 @@ const deleteFlightTemplate = (id) =>
 
 const getFlightDefinitions = async (activeOnly = true) => {
   const data = await makeRequest(`${endpoints.flightDefinitions}${buildQuery({ activeOnly })}`)
-  return normalizeList(data)
+  const list = normalizeList(data)
+  return list.map((item) => ({
+    ...item,
+    id: item?.id ?? item?.flightDefinitionId ?? null,
+  })).filter(item => item.id !== null)
 }
 
 const getAircrafts = async () => {

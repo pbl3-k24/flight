@@ -55,7 +55,7 @@ export default function FlightTemplateList({
     <div className="space-y-5">
 
       {/* ── Header Section ── */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1E40AF] to-[#3B82F6] p-6 shadow-xl shadow-blue-200 md:p-8">
+      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1E40AF] via-[#1E3A8A] to-[#1E3A8A] p-6 shadow-xl shadow-blue-100 md:p-8">
         {/* decorative circles */}
         <div className="pointer-events-none absolute -right-10 -top-10 h-48 w-48 rounded-full bg-white/10" />
         <div className="pointer-events-none absolute -bottom-8 right-24 h-32 w-32 rounded-full bg-white/10" />
@@ -69,13 +69,13 @@ export default function FlightTemplateList({
               </svg>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-200">
                 • Quản trị hệ thống
               </p>
-              <h2 className="mt-0.5 text-xl font-bold text-white md:text-2xl">
+              <h2 className="mt-0.5 text-xl font-extrabold text-white md:text-2xl">
                 Flight Schedule Templates
               </h2>
-              <p className="mt-0.5 text-sm text-blue-100">
+              <p className="mt-0.5 text-sm font-medium text-white/90">
                 Lập kế hoạch bay định kỳ theo thứ trong tuần và tự động hóa việc sinh lịch bay hằng tuần.
               </p>
             </div>
@@ -84,7 +84,7 @@ export default function FlightTemplateList({
           <button
             type="button"
             onClick={onCreate}
-            className="flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-bold text-[#1E40AF] shadow-lg transition hover:bg-blue-50 active:scale-95"
+            className="flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-extrabold text-[#1E40AF] shadow-md transition hover:bg-slate-100 hover:text-blue-900 active:scale-95 border border-slate-200"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -95,17 +95,17 @@ export default function FlightTemplateList({
 
         {/* stat chips */}
         <div className="relative mt-5 flex flex-wrap gap-3">
-          <div className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+          <div className="flex items-center gap-1.5 rounded-full bg-emerald-950/80 px-3 py-1.5 text-xs font-bold text-emerald-300 border border-emerald-500/30">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
             {activeCount} đang hoạt động
           </div>
-          <div className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+          <div className="flex items-center gap-1.5 rounded-full bg-slate-900/80 px-3 py-1.5 text-xs font-bold text-slate-300 border border-slate-700/30">
+            <span className="h-2 w-2 rounded-full bg-slate-400" />
             {inactiveCount} tạm dừng
           </div>
-          <div className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-200" />
-            {filteredCount} / {templates.length + (templates.length - filteredCount)} hiển thị
+          <div className="flex items-center gap-1.5 rounded-full bg-blue-950/80 px-3 py-1.5 text-xs font-bold text-blue-200 border border-blue-500/30">
+            <span className="h-2 w-2 rounded-full bg-blue-400" />
+            {filteredCount} / {templates.length} hiển thị
           </div>
         </div>
       </section>

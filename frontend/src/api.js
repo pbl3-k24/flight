@@ -237,6 +237,9 @@ export const getBookings = (page = 1, pageSize = 100) => {
   return makeRequest(`/Bookings?page=${page}&pageSize=${pageSize}`)
 }
 
+export const getBookingById = (bookingId) =>
+  makeRequest(`/Bookings/${bookingId}`)
+
 export const cancelBooking = (bookingId, reason = '') => {
   const body = reason ? { reason } : {}
   return makeRequest(`/Bookings/${bookingId}`, {
@@ -347,38 +350,41 @@ export const getAircrafts = () => {
 }
 
 export const getFlightDefinitions = (activeOnly = true) =>
-  makeRequest('/admin/FlightsAdmin?page=1&pageSize=20').then((data) => {
-    const flights = normalizeArrayResponse(data)
-    return flights
-      .filter((flight) => (activeOnly ? flight?.isActive !== false : true))
-      .map((flight) => ({
-        id: flight?.id ?? flight?.flightId,
-        routeId: flight?.routeId ?? flight?.route?.id ?? null,
-        flightNumber: flight?.flightNumber ?? flight?.code ?? `FL-${flight?.id ?? flight?.flightId ?? 'N/A'}`,
+  makeRequest(`/admin/flight-definitions?activeOnly=${activeOnly}`).then((data) => {
+    const definitions = normalizeArrayResponse(data)
+    return definitions
+      .map((definition) => ({
+        ...definition,
+        id: definition?.id ?? definition?.flightDefinitionId ?? null,
+        routeId: definition?.routeId ?? definition?.route?.id ?? null,
+        flightNumber:
+          definition?.flightNumber
+          ?? definition?.code
+          ?? `FD-${definition?.id ?? definition?.flightDefinitionId ?? 'N/A'}`,
         departureAirportCode:
-          flight?.departureAirportCode
-          ?? flight?.departureAirport?.code
-          ?? flight?.route?.departureAirportCode
-          ?? flight?.route?.departureAirport?.code
+          definition?.departureAirportCode
+          ?? definition?.departureAirport?.code
+          ?? definition?.route?.departureAirportCode
+          ?? definition?.route?.departureAirport?.code
           ?? '--',
         arrivalAirportCode:
-          flight?.arrivalAirportCode
-          ?? flight?.arrivalAirport?.code
-          ?? flight?.route?.arrivalAirportCode
-          ?? flight?.route?.arrivalAirport?.code
+          definition?.arrivalAirportCode
+          ?? definition?.arrivalAirport?.code
+          ?? definition?.route?.arrivalAirportCode
+          ?? definition?.route?.arrivalAirport?.code
           ?? '--',
         departureTime:
-          flight?.departureTime
-          ?? flight?.scheduledDepartureTime
-          ?? flight?.departureDateTime
+          definition?.departureTime
+          ?? definition?.scheduledDepartureTime
+          ?? definition?.departureDateTime
           ?? '--:--',
         arrivalTime:
-          flight?.arrivalTime
-          ?? flight?.scheduledArrivalTime
-          ?? flight?.arrivalDateTime
+          definition?.arrivalTime
+          ?? definition?.scheduledArrivalTime
+          ?? definition?.arrivalDateTime
           ?? '--:--',
       }))
-      .filter((flight) => flight.id !== undefined && flight.id !== null)
+      .filter((definition) => definition.id !== undefined && definition.id !== null)
   })
 
 export const getFlightTemplates = () =>
